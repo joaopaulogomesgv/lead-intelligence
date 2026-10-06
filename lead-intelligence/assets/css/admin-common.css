@@ -1,90 +1,120 @@
 /**
- * Lead Intelligence - Futuristic Faveni HUD Design System
+ * Lead Intelligence - Faveni Executive Design System (Deep Forest & Gold)
  * 
- * Brand Color: #10824C (Faveni Official Emerald)
- * Features: Dark Mode HUD + Crisp Light Mode
- * Isolation: Strictly scoped to .li-wrap (Zero WordPress or theme leakage)
+ * Official Identity:
+ * - Brand Deep Forest: #163930 / #10824C (Verde Faveni Institucional)
+ * - Brand Luxury Gold: #C5A059 / #B8860B (Dourado Ouro da Tocha Faveni)
+ * - Style: Organic Curved Tab Cutouts + Executive Relief Cards
+ * - Isolation: Scoped to .li-wrap (Zero WordPress or theme leakage)
  */
 
 /* ==========================================================================
    1. Variáveis CSS Globais com Escopo Restrito (.li-wrap)
    ========================================================================== */
 
-/* Tema Claro (Padrão e data-theme="light") */
+/* Tema Claro Executivo (Padrão e data-theme="light") */
 .li-wrap,
 .li-wrap[data-theme="light"] {
     --li-brand: #10824C;
+    --li-brand-deep: #163930;
     --li-brand-hover: #0c673c;
     --li-brand-neon: #18b368;
     --li-brand-glow: rgba(16, 130, 76, 0.25);
     --li-brand-light: rgba(16, 130, 76, 0.08);
 
-    --li-bg-app: #f8fafc;
+    /* Dourado Oficial Faveni */
+    --li-gold: #C5A059;
+    --li-gold-dark: #A37E36;
+    --li-gold-light: rgba(197, 160, 89, 0.12);
+    --li-gold-glow: rgba(197, 160, 89, 0.35);
+
+    /* Sidebar Floresta Profundo */
+    --li-sidebar-bg: #163930;
+    --li-sidebar-border: rgba(255, 255, 255, 0.08);
+    --li-sidebar-text: #A0B7AF;
+    --li-sidebar-text-active: #163930;
+
+    /* Superfícies e Fundos (Off-White Menta Suave) */
+    --li-bg-app: #EEF3F0;
     --li-bg-card: #ffffff;
-    --li-bg-card-subtle: #f1f5f9;
-    --li-bg-card-hover: #f8fafc;
+    --li-bg-card-subtle: #F5F9F7;
+    --li-bg-card-hover: #F0F6F3;
 
-    --li-border: #e2e8f0;
-    --li-border-light: #edf2f7;
-    --li-border-glow: rgba(16, 130, 76, 0.35);
+    --li-border: #DDE7E3;
+    --li-border-light: #EBF1EF;
+    --li-border-glow: rgba(197, 160, 89, 0.4);
 
-    --li-text-main: #0f172a;
-    --li-text-muted: #64748b;
-    --li-text-dim: #94a3b8;
+    --li-text-main: #142E26;
+    --li-text-muted: #5B786F;
+    --li-text-dim: #8BA59D;
 
     --li-input-bg: #ffffff;
     --li-input-border: #cbd5e1;
-    --li-input-text: #0f172a;
+    --li-input-text: #142E26;
 
-    --li-table-th-bg: #f8fafc;
-    --li-table-th-text: #475569;
-    --li-table-tr-hover: #f8fafc;
-    --li-table-border: #f1f5f9;
+    --li-table-th-bg: #F4F8F6;
+    --li-table-th-text: #2D5247;
+    --li-table-tr-hover: rgba(16, 130, 76, 0.04);
+    --li-table-border: #E6EFEA;
 
-    --li-card-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
-    --li-glow-box: 0 0 15px rgba(16, 130, 76, 0.15);
+    --li-card-shadow: 0 10px 30px rgba(22, 57, 48, 0.05), 0 2px 6px rgba(22, 57, 48, 0.02);
+    --li-glow-box: 0 0 18px rgba(197, 160, 89, 0.2);
 
-    --li-badge-winner-bg: #fef08a;
-    --li-badge-winner-text: #854d0e;
-    --li-badge-winner-border: #fde047;
+    --li-badge-winner-bg: rgba(197, 160, 89, 0.18);
+    --li-badge-winner-text: #8c671b;
+    --li-badge-winner-border: #C5A059;
 }
 
-/* Tema Escuro Futurista HUD (data-theme="dark") - Inspirado em Dashboards de Alta Tecnologia */
+/* Tema Escuro Executivo (data-theme="dark") */
 .li-wrap[data-theme="dark"] {
     --li-brand: #10824C;
-    --li-brand-hover: #14995a;
-    --li-brand-neon: #1dd67c;
-    --li-brand-glow: rgba(24, 179, 104, 0.45);
+    --li-brand-deep: #0D221D;
+    --li-brand-hover: #18A361;
+    --li-brand-neon: #1ED77C;
+    --li-brand-glow: rgba(30, 215, 124, 0.35);
     --li-brand-light: rgba(16, 130, 76, 0.2);
 
-    --li-bg-app: #080c14;
-    --li-bg-card: #0f1523;
-    --li-bg-card-subtle: #141c2e;
-    --li-bg-card-hover: #182238;
+    /* Dourado Ouro Vivo no Escuro */
+    --li-gold: #D4AF37;
+    --li-gold-dark: #C5A059;
+    --li-gold-light: rgba(212, 175, 55, 0.15);
+    --li-gold-glow: rgba(212, 175, 55, 0.45);
 
-    --li-border: #1e293b;
+    /* Sidebar Floresta Escuro */
+    --li-sidebar-bg: #0D221D;
+    --li-sidebar-border: rgba(255, 255, 255, 0.06);
+    --li-sidebar-text: #7E9E94;
+    --li-sidebar-text-active: #D4AF37;
+
+    /* Superfícies e Fundos */
+    --li-bg-app: #081612;
+    --li-bg-card: #0F2A23;
+    --li-bg-card-subtle: #14352C;
+    --li-bg-card-hover: #194036;
+
+    --li-border: #184035;
     --li-border-light: rgba(255, 255, 255, 0.08);
-    --li-border-glow: rgba(24, 179, 104, 0.5);
+    --li-border-glow: rgba(212, 175, 55, 0.4);
 
-    --li-text-main: #f8fafc;
-    --li-text-muted: #94a3b8;
-    --li-text-dim: #64748b;
+    --li-text-main: #F3F8F6;
+    --li-text-muted: #95B3AA;
+    --li-text-dim: #6B8B82;
 
-    --li-input-bg: #0b101b;
-    --li-input-border: #222f46;
-    --li-input-text: #f1f5f9;
+    --li-input-bg: #0B1C17;
+    --li-input-border: #1E4D40;
+    --li-input-text: #F3F8F6;
 
-    --li-table-th-bg: #121927;
-    --li-table-th-text: #94a3b8;
-    --li-table-tr-hover: rgba(24, 179, 104, 0.07);
-    --li-table-border: #1a2334;
+    --li-table-th-bg: #112E26;
+    --li-table-th-text: #95B3AA;
+    --li-table-tr-hover: rgba(30, 215, 124, 0.07);
+    --li-table-border: #1A4438;
 
-    --li-card-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.65), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
-    --li-glow-box: 0 0 20px rgba(16, 130, 76, 0.35);
+    --li-card-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
+    --li-glow-box: 0 0 22px rgba(212, 175, 55, 0.3);
 
-    --li-badge-winner-bg: rgba(234, 179, 8, 0.2);
+    --li-badge-winner-bg: rgba(212, 175, 55, 0.2);
     --li-badge-winner-text: #fde047;
-    --li-badge-winner-border: rgba(234, 179, 8, 0.4);
+    --li-badge-winner-border: rgba(212, 175, 55, 0.5);
 }
 
 /* ==========================================================================
@@ -374,8 +404,8 @@
 .li-wrap .li-card {
     background: var(--li-bg-card);
     border: 1px solid var(--li-border);
-    border-radius: 14px;
-    padding: 24px;
+    border-radius: 20px;
+    padding: 26px;
     margin-bottom: 24px;
     box-shadow: var(--li-card-shadow);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
@@ -415,8 +445,8 @@
 .li-wrap .li-metric-card {
     background: var(--li-bg-card);
     border: 1px solid var(--li-border);
-    border-radius: 14px;
-    padding: 20px 22px;
+    border-radius: 18px;
+    padding: 22px 24px;
     box-shadow: var(--li-card-shadow);
     display: flex;
     flex-direction: column;
@@ -442,9 +472,10 @@
     box-shadow: 0 0 10px var(--li-brand-glow);
 }
 
-.li-wrap .li-metric-card.li-card-success::before {
-    background: linear-gradient(90deg, #10b981, #34d399);
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+.li-wrap .li-metric-card.li-card-success::before,
+.li-wrap .li-metric-card.li-metric-qual::before {
+    background: linear-gradient(90deg, var(--li-gold), #E5C378);
+    box-shadow: 0 0 10px var(--li-gold-glow);
 }
 
 .li-wrap .li-metric-card.li-card-warning::before {
@@ -458,8 +489,8 @@
 }
 
 .li-wrap .li-metric-card.li-card-info::before {
-    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
-    box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
+    background: linear-gradient(90deg, #10b981, #34d399);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
 .li-wrap .li-metric-label {
@@ -490,10 +521,10 @@
    ========================================================================== */
 
 .li-wrap .li-filter-bar {
-    padding: 20px 24px;
+    padding: 22px 26px;
     background: var(--li-bg-card);
     border: 1px solid var(--li-border);
-    border-radius: 14px;
+    border-radius: 20px;
     margin-bottom: 24px;
     box-shadow: var(--li-card-shadow);
 }
@@ -1361,14 +1392,14 @@
 }
 
 /* --------------------------------------------------------------------------
-   SIDEBAR LATERAL HUD (FIXO NA TELA)
+   SIDEBAR LATERAL HUD (FIXO NA TELA - DESIGN EXECUTIVO FAVENI)
    -------------------------------------------------------------------------- */
 .li-wrap .li-sidebar {
     width: 270px;
     min-width: 270px;
     max-width: 270px;
-    background: var(--li-bg-card);
-    border-right: 1px solid var(--li-border);
+    background: var(--li-sidebar-bg);
+    border-right: none;
     display: flex;
     flex-direction: column;
     position: fixed;
@@ -1378,6 +1409,8 @@
     height: 100vh;
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
     z-index: 1000;
     box-sizing: border-box;
     padding: 0;
@@ -1387,22 +1420,19 @@
                 min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
                 max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
                 transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
-                background-color 0.3s ease,
-                border-color 0.3s ease;
+                background-color 0.3s ease;
 }
 
 .li-wrap .li-sidebar::-webkit-scrollbar {
-    width: 5px;
-}
-.li-wrap .li-sidebar::-webkit-scrollbar-thumb {
-    background: var(--li-border);
-    border-radius: 4px;
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
 }
 
 /* Cabeçalho do Sidebar */
 .li-wrap .li-sidebar-header {
-    padding: 20px 18px 16px;
-    border-bottom: 1px solid var(--li-border);
+    padding: 22px 20px 16px;
+    border-bottom: 1px solid var(--li-sidebar-border);
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -1410,7 +1440,7 @@
     width: 100%;
 }
 
-/* Linha 1: Logo + Botão de Recolher (Largura 100%) */
+/* Linha 1: Logo + Botão de Recolher */
 .li-wrap .li-sidebar-header-top {
     display: flex;
     align-items: center;
@@ -1437,10 +1467,10 @@
 }
 
 .li-wrap .li-sidebar-brand-text {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 800;
-    letter-spacing: -0.02em;
-    color: var(--li-brand-neon);
+    letter-spacing: 0.05em;
+    color: #ffffff;
 }
 
 /* Botão de Recolher o Menu Lateral */
@@ -1450,10 +1480,10 @@
     justify-content: center;
     width: 32px;
     height: 32px;
-    background: var(--li-bg-card-subtle);
-    border: 1px solid var(--li-border);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 8px;
-    color: var(--li-text-muted);
+    color: var(--li-sidebar-text);
     font-size: 15px;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1461,13 +1491,13 @@
 }
 
 .li-wrap .li-sidebar-toggle-btn:hover {
-    background: var(--li-brand-light);
-    color: var(--li-brand-neon);
-    border-color: var(--li-border-glow);
+    background: rgba(197, 160, 89, 0.2);
+    color: var(--li-gold);
+    border-color: var(--li-gold);
     transform: scale(1.05);
 }
 
-/* Linha 2: Pílula de Status Live (Exatamente no Mesmo Tamanho / Largura 100%) */
+/* Linha 2: Pílula de Status Live */
 .li-wrap .li-brand-pill {
     width: 100%;
     display: flex;
@@ -1476,8 +1506,8 @@
     gap: 8px;
     padding: 6px 14px;
     border-radius: 999px;
-    background: var(--li-brand-light);
-    border: 1px solid var(--li-border-glow);
+    background: rgba(16, 130, 76, 0.15);
+    border: 1px solid rgba(16, 130, 76, 0.3);
     box-sizing: border-box;
     margin: 0;
 }
@@ -1491,28 +1521,29 @@
     animation: liPulse 1.8s infinite;
 }
 
-/* Card de Perfil / Operação */
+/* Card de Perfil Executivo (Estilo Design 1) */
 .li-wrap .li-sidebar-profile {
     display: flex;
     align-items: center;
     gap: 12px;
     padding: 12px 14px;
-    margin: 14px 14px 6px;
-    background: var(--li-bg-card-subtle);
-    border: 1px solid var(--li-border);
-    border-radius: 10px;
+    margin: 16px 14px 6px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
 }
 
 .li-wrap .li-profile-avatar {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: var(--li-brand-light);
-    border: 1px solid var(--li-border-glow);
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: rgba(197, 160, 89, 0.12);
+    border: 2px solid var(--li-gold);
+    box-shadow: 0 0 12px var(--li-gold-glow);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
+    font-size: 18px;
     flex-shrink: 0;
 }
 
@@ -1523,9 +1554,10 @@
 }
 
 .li-wrap .li-profile-name {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--li-text-main);
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #ffffff;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1533,16 +1565,18 @@
 
 .li-wrap .li-profile-role {
     font-size: 11px;
-    color: var(--li-text-dim);
-    margin-top: 1px;
+    color: var(--li-sidebar-text);
+    margin-top: 2px;
 }
 
-/* Navegação do Sidebar */
+/* Navegação do Sidebar Executivo Faveni - Curva Orgânica Contínua (Design 1) */
 .li-wrap .li-sidebar-nav {
     display: flex;
     flex-direction: column;
-    gap: 3px;
-    padding: 12px 12px;
+    gap: 0;
+    padding: 16px 0 16px 14px;
+    width: 100%;
+    box-sizing: border-box;
     flex: 1;
 }
 
@@ -1551,45 +1585,102 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: var(--li-text-dim);
-    padding: 12px 12px 6px;
+    color: rgba(255, 255, 255, 0.35);
+    padding: 12px 14px 6px;
 }
 
 .li-wrap .li-nav-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 9px 12px;
-    border-radius: 8px;
+    gap: 12px;
+    padding: 12px 18px;
+    border-radius: 26px 0 0 26px;
     text-decoration: none !important;
-    color: var(--li-text-muted);
+    color: var(--li-sidebar-text);
     font-size: 13px;
-    font-weight: 500;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    font-weight: 600;
+    transition: color 0.15s ease, background-color 0.1s ease;
     cursor: pointer;
-    border: 1px solid transparent;
+    border: none;
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+    z-index: 1;
 }
 
-.li-wrap .li-nav-item:hover {
-    background: var(--li-brand-light);
-    color: var(--li-brand-neon);
-    border-color: rgba(16, 130, 76, 0.2);
-    transform: translateX(3px);
+/* Hover refinado em abas inativas: elegante cápsula interna sem projeção horizontal */
+.li-wrap .li-nav-item:hover:not(.is-active) {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff !important;
+    transform: none !important;
+    border-radius: 12px;
+    margin-right: 12px;
+    width: calc(100% - 12px);
+    z-index: 2;
 }
 
-.li-wrap .li-nav-item.is-active {
-    background: var(--li-brand-light);
-    color: var(--li-brand-neon);
+.li-wrap .li-nav-item:hover:not(.is-active) .li-nav-text {
+    color: #ffffff !important;
     font-weight: 700;
-    border-color: var(--li-border-glow);
-    box-shadow: 0 0 12px var(--li-brand-glow);
+}
+
+.li-wrap .li-nav-item:hover:not(.is-active) .li-nav-icon {
+    transform: scale(1.12);
+    color: var(--li-gold) !important;
+}
+
+/* O Destaque Orgânico (Inverted Radius Notch) do Design 1 */
+.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active {
+    background: var(--li-bg-app) !important;
+    color: var(--li-sidebar-text-active) !important;
+    font-weight: 800;
+    border-radius: 26px 0 0 26px;
+    width: 100% !important;
+    margin-right: 0 !important;
+    z-index: 30;
+    position: relative;
+}
+
+.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::before {
+    content: "";
+    position: absolute;
+    top: -24px;
+    right: 0;
+    width: 24px;
+    height: 24px;
+    background: radial-gradient(circle at 0 0, transparent 24px, var(--li-bg-app) 24.5px);
+    pointer-events: none;
+    z-index: 31;
+}
+
+.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::after {
+    content: "";
+    position: absolute;
+    bottom: -24px;
+    right: 0;
+    width: 24px;
+    height: 24px;
+    background: radial-gradient(circle at 0 100%, transparent 24px, var(--li-bg-app) 24.5px);
+    pointer-events: none;
+    z-index: 31;
 }
 
 .li-wrap .li-nav-icon {
-    font-size: 15px;
-    width: 20px;
+    font-size: 16px;
+    width: 22px;
     text-align: center;
     flex-shrink: 0;
+    transition: transform 0.2s ease, color 0.2s ease;
+}
+
+.li-wrap .li-nav-item.is-active .li-nav-icon {
+    color: var(--li-gold);
+    transform: scale(1.15);
+}
+
+.li-wrap .li-nav-item.is-active .li-nav-text {
+    color: var(--li-sidebar-text-active) !important;
+    font-weight: 800;
 }
 
 .li-wrap .li-nav-text {
@@ -1600,32 +1691,80 @@
 }
 
 .li-wrap .li-nav-badge {
-    padding: 2px 7px;
+    padding: 2px 8px;
     border-radius: 999px;
     font-size: 11px;
     font-weight: 700;
-    background: var(--li-brand-glow);
-    color: var(--li-brand-neon);
-    border: 1px solid var(--li-border-glow);
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--li-sidebar-text);
+}
+
+.li-wrap .li-nav-item.is-active .li-nav-badge {
+    background: var(--li-gold);
+    color: #ffffff;
+    box-shadow: 0 0 10px var(--li-gold-glow);
+    font-weight: 800;
 }
 
 .li-wrap .li-nav-ext {
     font-size: 11px;
-    color: var(--li-text-dim);
+    color: rgba(255, 255, 255, 0.35);
+}
+
+/* Compensação do topo para rolagem das seções pelo menu lateral */
+.li-wrap #li-sec-filters,
+.li-wrap #li-sec-compare,
+.li-wrap #li-sec-kpis,
+.li-wrap #li-sec-calc,
+.li-wrap #li-sec-chart,
+.li-wrap #li-sec-campaigns,
+.li-wrap #li-sec-creatives {
+    scroll-margin-top: 85px;
 }
 
 /* Rodapé do Sidebar */
 .li-wrap .li-sidebar-footer {
-    padding: 16px 20px;
-    border-top: 1px solid var(--li-border);
+    padding: 18px 20px;
+    border-top: 1px solid var(--li-sidebar-border);
     text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+}
+
+.li-wrap .li-sidebar-active-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    background: rgba(16, 130, 76, 0.2);
+    border: 1px solid rgba(16, 130, 76, 0.35);
+    border-radius: 999px;
+}
+
+.li-wrap .li-status-pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: liPulse 1.8s infinite;
+}
+
+.li-wrap .li-status-text {
+    font-size: 10px;
+    font-weight: 800;
+    color: #10b981;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
 }
 
 .li-wrap .li-sidebar-ver {
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.04em;
-    color: var(--li-text-dim);
+    color: rgba(255, 255, 255, 0.35);
 }
 
 /* --------------------------------------------------------------------------
@@ -1913,6 +2052,181 @@
     .li-wrap .li-content-scroll {
         padding: 18px 16px;
     }
+
+    .li-wrap .li-sidebar .li-nav-item.is-active::before,
+    .li-wrap .li-sidebar .li-nav-item.is-active::after {
+        display: none !important;
+    }
+
+    .li-wrap .li-sidebar .li-nav-item {
+        border-radius: 12px !important;
+        margin-right: 14px !important;
+    }
+}
+
+/* ==========================================================================
+   18. Hero Highlights Cards (Design Executivo Faveni - Imagem 1)
+   ========================================================================== */
+
+.li-wrap .li-hero-highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 18px;
+    margin-bottom: 22px;
+}
+
+.li-wrap .li-hero-card {
+    border-radius: 22px;
+    padding: 22px 24px;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 145px;
+    box-shadow: var(--li-card-shadow);
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+}
+
+.li-wrap .li-hero-card:hover {
+    transform: translateY(-3px);
+}
+
+/* Card Dourado Faveni (Matrículas / Qualificação Nobre) */
+.li-wrap .li-hero-card-gold {
+    background: linear-gradient(135deg, #C5A059 0%, #B8860B 100%);
+    color: #ffffff;
+    box-shadow: 0 12px 30px rgba(197, 160, 89, 0.32), 0 2px 6px rgba(0, 0, 0, 0.05);
+}
+
+.li-wrap .li-hero-card-gold .li-hero-tag {
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.li-wrap .li-hero-card-gold .li-hero-pill-badge {
+    background: rgba(255, 255, 255, 0.22);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+
+.li-wrap .li-hero-card-gold .li-hero-metric-lbl,
+.li-wrap .li-hero-card-gold .li-hero-stat-sub {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.li-wrap .li-hero-card-gold .li-hero-icon-box {
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+/* Card Verde Floresta Profundo Faveni */
+.li-wrap .li-hero-card-forest {
+    background: linear-gradient(135deg, #163930 0%, #0F2822 100%);
+    color: #ffffff;
+    box-shadow: 0 12px 30px rgba(22, 57, 48, 0.25), 0 2px 6px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.li-wrap .li-hero-card-forest .li-hero-tag {
+    color: #A0B7AF;
+}
+
+.li-wrap .li-hero-card-forest .li-hero-pill-badge {
+    background: rgba(16, 130, 76, 0.35);
+    color: #34d399;
+    border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.li-wrap .li-hero-card-forest .li-hero-pill-badge.li-badge-live {
+    background: rgba(16, 185, 129, 0.2);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.li-wrap .li-hero-card-forest .li-hero-metric-lbl,
+.li-wrap .li-hero-card-forest .li-hero-stat-sub {
+    color: #8BA59D;
+}
+
+.li-wrap .li-hero-card-forest .li-hero-icon-box {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.li-wrap .li-hero-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.li-wrap .li-hero-tag {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+.li-wrap .li-hero-pill-badge {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    text-transform: uppercase;
+}
+
+.li-wrap .li-hero-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.li-wrap .li-hero-metric-wrap {
+    display: flex;
+    flex-direction: column;
+}
+
+.li-wrap .li-hero-metric {
+    font-size: 38px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.03em;
+    color: #ffffff;
+}
+
+.li-wrap .li-hero-metric-lbl {
+    font-size: 13px;
+    font-weight: 600;
+    margin-top: 4px;
+}
+
+.li-wrap .li-hero-icon-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-hero-card-footer {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-size: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.li-wrap .li-hero-stat-highlight {
+    font-weight: 800;
+    color: #ffffff;
 }
 
 

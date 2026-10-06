@@ -281,10 +281,12 @@ class DashboardController {
                     </div>
 
                     <div class="li-sidebar-profile">
-                        <div class="li-profile-avatar">🎓</div>
+                        <div class="li-profile-avatar" title="Grupo Educacional Faveni">
+                            <span class="li-avatar-emblem">🏛️</span>
+                        </div>
                         <div class="li-profile-info">
-                            <span class="li-profile-name">Inteligência de Leads</span>
-                            <span class="li-profile-role">Central Oficial Faveni</span>
+                            <span class="li-profile-name">GRUPO FAVENI</span>
+                            <span class="li-profile-role">Inteligência de Leads</span>
                         </div>
                     </div>
 
@@ -347,7 +349,11 @@ class DashboardController {
                     </nav>
 
                     <div class="li-sidebar-footer">
-                        <span class="li-sidebar-ver">Lead Intelligence v1.5.1</span>
+                        <div class="li-sidebar-active-status">
+                            <span class="li-status-pulse"></span>
+                            <span class="li-status-text">Monitoramento Ativo</span>
+                        </div>
+                        <span class="li-sidebar-ver">Lead Intelligence v1.6.4</span>
                     </div>
                 </aside>
 
@@ -359,10 +365,6 @@ class DashboardController {
                         <!-- MENU SUPERIOR (TOPBAR HUD) -->
                         <header class="li-topbar">
                             <div class="li-topbar-left">
-                                <button type="button" class="li-sidebar-toggle-topbar" onclick="liToggleSidebarCollapse()" title="Menu Lateral (Abrir / Fechar)">
-                                    <span class="li-toggle-icon">☰</span>
-                                    <span class="li-toggle-text">Menu</span>
-                                </button>
                                 <div class="li-topbar-heading">
                                     <h2 class="li-dashboard-title"><?php echo esc_html($custom_title); ?></h2>
                                     <p class="li-subtitle"><?php echo esc_html($custom_subtitle); ?></p>
@@ -408,6 +410,74 @@ class DashboardController {
                     <?php endif; ?>
 
                     <div class="li-content-scroll">
+
+                        <!-- ========================================================
+                             HERO HIGHLIGHTS (DESIGN EXECUTIVO FAVENI)
+                             ======================================================== -->
+                        <div class="li-hero-highlights">
+                            <!-- CARD 1: DOURADO FAVENI (MATRÍCULAS / CONVERSÕES) -->
+                            <div class="li-hero-card li-hero-card-gold">
+                                <div class="li-hero-card-top">
+                                    <span class="li-hero-tag">FAVENI • QUALIFICAÇÃO</span>
+                                    <span class="li-hero-pill-badge">ALTA PERFORMANCE</span>
+                                </div>
+                                <div class="li-hero-card-body">
+                                    <div class="li-hero-metric-wrap">
+                                        <div class="li-hero-metric"><?php echo number_format_i18n($total_qualificados); ?></div>
+                                        <div class="li-hero-metric-lbl">Matrículas Confirmadas</div>
+                                    </div>
+                                    <div class="li-hero-icon-box">
+                                        <span class="li-hero-icon">🎓</span>
+                                    </div>
+                                </div>
+                                <div class="li-hero-card-footer">
+                                    <span class="li-hero-stat-highlight"><?php echo $taxa_qualificacao; ?>%</span>
+                                    <span class="li-hero-stat-sub">de conversão qualificada</span>
+                                </div>
+                            </div>
+
+                            <!-- CARD 2: VERDE FLORESTA PROFUNDO (TOTAL DE LEADS) -->
+                            <div class="li-hero-card li-hero-card-forest">
+                                <div class="li-hero-card-top">
+                                    <span class="li-hero-tag">VOLUME DE CAPTAÇÃO</span>
+                                    <span class="li-hero-pill-badge">MULTI-CANAL</span>
+                                </div>
+                                <div class="li-hero-card-body">
+                                    <div class="li-hero-metric-wrap">
+                                        <div class="li-hero-metric"><?php echo number_format_i18n($total_leads); ?></div>
+                                        <div class="li-hero-metric-lbl">Total Geral de Leads</div>
+                                    </div>
+                                    <div class="li-hero-icon-box">
+                                        <span class="li-hero-icon">📊</span>
+                                    </div>
+                                </div>
+                                <div class="li-hero-card-footer">
+                                    <span class="li-hero-stat-highlight">Elementor • Meta • Google</span>
+                                    <span class="li-hero-stat-sub">Base ativa centralizada</span>
+                                </div>
+                            </div>
+
+                            <!-- CARD 3: VERDE FLORESTA COM STATUS & EFICIÊNCIA -->
+                            <div class="li-hero-card li-hero-card-forest">
+                                <div class="li-hero-card-top">
+                                    <span class="li-hero-tag">STATUS DA OPERAÇÃO</span>
+                                    <span class="li-hero-pill-badge li-badge-live">● AO VIVO</span>
+                                </div>
+                                <div class="li-hero-card-body">
+                                    <div class="li-hero-metric-wrap">
+                                        <div class="li-hero-metric"><?php echo number_format_i18n($total_pendentes); ?></div>
+                                        <div class="li-hero-metric-lbl">Em Qualificação / Fila</div>
+                                    </div>
+                                    <div class="li-hero-icon-box">
+                                        <span class="li-hero-icon">⚡</span>
+                                    </div>
+                                </div>
+                                <div class="li-hero-card-footer">
+                                    <span class="li-hero-stat-highlight"><?php echo number_format_i18n($total_desqualif); ?> não qualificados</span>
+                                    <span class="li-hero-stat-sub">triagem contínua de alunos</span>
+                                </div>
+                            </div>
+                        </div>
 
             <?php if ($show_filters): ?>
                 <!-- BARRA DE FILTROS DO DASHBOARD (HUD TOOLBAR) -->
@@ -838,16 +908,31 @@ class DashboardController {
                 }
             });
 
-            // Rolagem suave com destaque de item ativo
+            // Rolagem suave e alternância imediata de abas ativas (Design 1)
+            var liIsManualScrolling = false;
+            var liScrollTimeout = null;
+
             document.querySelectorAll('.li-nav-item[data-target]').forEach(function(item) {
                 item.addEventListener('click', function(e) {
                     var targetId = this.getAttribute('data-target');
                     var targetEl = document.getElementById(targetId);
                     if (targetEl) {
                         e.preventDefault();
-                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        document.querySelectorAll('.li-nav-item').forEach(function(n) { n.classList.remove('is-active'); });
+
+                        // Alterna imediatamente a classe is-active sem concorrência
+                        document.querySelectorAll('.li-nav-item').forEach(function(n) { 
+                            n.classList.remove('is-active'); 
+                        });
                         this.classList.add('is-active');
+
+                        liIsManualScrolling = true;
+                        clearTimeout(liScrollTimeout);
+                        liScrollTimeout = setTimeout(function() {
+                            liIsManualScrolling = false;
+                        }, 800);
+
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
                         var sidebar = document.getElementById('liSidebar');
                         if (sidebar && window.innerWidth <= 980) {
                             sidebar.classList.remove('is-open');
@@ -855,6 +940,43 @@ class DashboardController {
                     }
                 });
             });
+
+            // ScrollSpy: Sincroniza a aba ativa quando o usuário rolar a página manualmente
+            if ('IntersectionObserver' in window) {
+                var liObserverSections = [];
+                document.querySelectorAll('.li-nav-item[data-target]').forEach(function(item) {
+                    var targetId = item.getAttribute('data-target');
+                    var targetEl = document.getElementById(targetId);
+                    if (targetEl && liObserverSections.indexOf(targetEl) === -1) {
+                        liObserverSections.push(targetEl);
+                    }
+                });
+
+                if (liObserverSections.length > 0) {
+                    var liNavObserver = new IntersectionObserver(function(entries) {
+                        if (liIsManualScrolling) return;
+                        entries.forEach(function(entry) {
+                            if (entry.isIntersecting) {
+                                var id = entry.target.id;
+                                var activeNav = document.querySelector('.li-nav-item[data-target="' + id + '"]');
+                                if (activeNav && !activeNav.classList.contains('is-active')) {
+                                    document.querySelectorAll('.li-nav-item').forEach(function(n) { 
+                                        n.classList.remove('is-active'); 
+                                    });
+                                    activeNav.classList.add('is-active');
+                                }
+                            }
+                        });
+                    }, {
+                        rootMargin: '-15% 0px -70% 0px',
+                        threshold: 0
+                    });
+
+                    liObserverSections.forEach(function(sec) {
+                        liNavObserver.observe(sec);
+                    });
+                }
+            }
 
             function liInitTheme() {
                 var wraps = document.querySelectorAll('.li-wrap');
