@@ -65,57 +65,7 @@
     --li-badge-winner-border: #C5A059;
 }
 
-/* Tema Escuro Executivo (data-theme="dark") */
-.li-wrap[data-theme="dark"] {
-    --li-brand: #10824C;
-    --li-brand-deep: #0D221D;
-    --li-brand-hover: #18A361;
-    --li-brand-neon: #1ED77C;
-    --li-brand-glow: rgba(30, 215, 124, 0.35);
-    --li-brand-light: rgba(16, 130, 76, 0.2);
 
-    /* Dourado Ouro Vivo no Escuro */
-    --li-gold: #D4AF37;
-    --li-gold-dark: #C5A059;
-    --li-gold-light: rgba(212, 175, 55, 0.15);
-    --li-gold-glow: rgba(212, 175, 55, 0.45);
-
-    /* Sidebar Floresta Escuro */
-    --li-sidebar-bg: #0D221D;
-    --li-sidebar-border: rgba(255, 255, 255, 0.06);
-    --li-sidebar-text: #7E9E94;
-    --li-sidebar-text-active: #D4AF37;
-
-    /* Superfícies e Fundos */
-    --li-bg-app: #081612;
-    --li-bg-card: #0F2A23;
-    --li-bg-card-subtle: #14352C;
-    --li-bg-card-hover: #194036;
-
-    --li-border: #184035;
-    --li-border-light: rgba(255, 255, 255, 0.08);
-    --li-border-glow: rgba(212, 175, 55, 0.4);
-
-    --li-text-main: #F3F8F6;
-    --li-text-muted: #95B3AA;
-    --li-text-dim: #6B8B82;
-
-    --li-input-bg: #0B1C17;
-    --li-input-border: #1E4D40;
-    --li-input-text: #F3F8F6;
-
-    --li-table-th-bg: #112E26;
-    --li-table-th-text: #95B3AA;
-    --li-table-tr-hover: rgba(30, 215, 124, 0.07);
-    --li-table-border: #1A4438;
-
-    --li-card-shadow: 0 12px 35px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4);
-    --li-glow-box: 0 0 22px rgba(212, 175, 55, 0.3);
-
-    --li-badge-winner-bg: rgba(212, 175, 55, 0.2);
-    --li-badge-winner-text: #fde047;
-    --li-badge-winner-border: rgba(212, 175, 55, 0.5);
-}
 
 /* ==========================================================================
    2. Container Principal (.li-wrap) e Reset Local
@@ -253,19 +203,7 @@
     transition: opacity 0.2s ease;
 }
 
-/* Alternância automática de Logo conforme o Tema */
-.li-wrap[data-theme="dark"] .li-logo-dark {
-    display: block !important;
-}
-.li-wrap[data-theme="dark"] .li-logo-light {
-    display: none !important;
-}
-.li-wrap[data-theme="light"] .li-logo-light {
-    display: block !important;
-}
-.li-wrap[data-theme="light"] .li-logo-dark {
-    display: none !important;
-}
+
 
 .li-wrap .li-brand-pill {
     display: inline-flex;
@@ -339,34 +277,7 @@
     flex-wrap: wrap;
 }
 
-/* Botão Alternador Modo Claro / Escuro */
-.li-wrap .li-theme-toggle-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    border-radius: 999px;
-    background: var(--li-bg-card-subtle);
-    border: 1px solid var(--li-border);
-    color: var(--li-text-main);
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-}
 
-.li-wrap .li-theme-toggle-btn:hover {
-    border-color: var(--li-brand-neon);
-    background: var(--li-bg-card-hover);
-    box-shadow: 0 0 12px var(--li-brand-glow);
-    transform: translateY(-1px);
-}
-
-.li-wrap .li-theme-toggle-btn .li-theme-toggle-icon {
-    font-size: 15px;
-    line-height: 1;
-}
 
 /* Botão Tela Cheia (Fullscreen) */
 .li-wrap .li-fullscreen-btn {
@@ -659,12 +570,7 @@
 }
 
 /* Indicador de calendário */
-.li-wrap[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.85);
-    cursor: pointer;
-}
-
-.li-wrap[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+.li-wrap input[type="date"]::-webkit-calendar-picker-indicator {
     filter: invert(0.3);
     cursor: pointer;
 }
@@ -1381,14 +1287,16 @@
 
 .li-wrap .li-app-layout {
     display: flex;
-    min-height: 100vh;
+    height: 100vh;
+    max-height: 100vh;
     width: 100%;
     margin: 0 !important;
     padding: 0 !important;
-    background-color: var(--li-bg-app);
+    background-color: var(--li-sidebar-bg);
     color: var(--li-text-main);
     position: relative;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 /* --------------------------------------------------------------------------
@@ -1431,11 +1339,11 @@
 
 /* Cabeçalho do Sidebar */
 .li-wrap .li-sidebar-header {
-    padding: 22px 20px 16px;
+    min-height: 73px;
+    padding: 16px 20px;
     border-bottom: 1px solid var(--li-sidebar-border);
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    align-items: center;
     box-sizing: border-box;
     width: 100%;
 }
@@ -1457,13 +1365,48 @@
     min-width: 0;
 }
 
+.li-wrap .li-brand-toggle {
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+    user-select: none;
+    outline: none;
+}
+
+.li-wrap .li-brand-toggle:hover {
+    transform: scale(1.03);
+    opacity: 0.92;
+}
+
+.li-wrap .li-brand-toggle:active {
+    transform: scale(0.97);
+}
+
 .li-wrap .li-logo-img {
     max-height: 40px;
-    max-width: 160px;
+    max-width: 180px;
     width: auto;
     object-fit: contain;
     display: block;
     transition: opacity 0.2s ease;
+}
+
+.li-wrap .li-logo-compact {
+    display: none;
+    max-height: 38px;
+    max-width: 42px;
+}
+
+.li-wrap .li-logo-compact-fallback {
+    display: none;
+    font-size: 24px;
+    line-height: 1;
+    width: 38px;
+    height: 38px;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 10px;
 }
 
 .li-wrap .li-sidebar-brand-text {
@@ -1471,30 +1414,6 @@
     font-weight: 800;
     letter-spacing: 0.05em;
     color: #ffffff;
-}
-
-/* Botão de Recolher o Menu Lateral */
-.li-wrap .li-sidebar-toggle-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: var(--li-sidebar-text);
-    font-size: 15px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    flex-shrink: 0;
-}
-
-.li-wrap .li-sidebar-toggle-btn:hover {
-    background: rgba(197, 160, 89, 0.2);
-    color: var(--li-gold);
-    border-color: var(--li-gold);
-    transform: scale(1.05);
 }
 
 /* Linha 2: Pílula de Status Live */
@@ -1625,8 +1544,8 @@
 }
 
 .li-wrap .li-nav-item:hover:not(.is-active) .li-nav-icon {
-    transform: scale(1.12);
-    color: var(--li-gold) !important;
+    transform: scale(1.1);
+    color: #ffffff !important;
 }
 
 /* O Destaque Orgânico (Inverted Radius Notch) do Design 1 (Tanto com menu aberto quanto fechado) */
@@ -1668,16 +1587,47 @@
 }
 
 .li-wrap .li-nav-icon {
-    font-size: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: 22px;
-    text-align: center;
+    height: 22px;
     flex-shrink: 0;
-    transition: transform 0.2s ease, color 0.2s ease;
+    color: var(--li-sidebar-text);
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease;
 }
 
-.li-wrap .li-nav-item.is-active .li-nav-icon {
-    color: var(--li-gold);
-    transform: scale(1.15);
+.li-wrap .li-nav-icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    display: block;
+    transition: stroke 0.2s ease, transform 0.2s ease;
+}
+
+.li-wrap .li-nav-icon svg.li-brand-icon {
+    stroke: none !important;
+}
+
+.li-wrap .li-sidebar .li-nav-item.is-active .li-nav-icon {
+    color: var(--li-brand) !important;
+    transform: scale(1.1);
+}
+
+.li-wrap .li-sidebar .li-nav-item.is-active .li-nav-icon svg:not(.li-brand-icon) {
+    stroke: var(--li-brand) !important;
+}
+
+.li-wrap .li-sidebar .li-nav-item.is-active .li-nav-icon svg.li-brand-icon {
+    stroke: none !important;
+}
+
+.li-wrap .li-sidebar .li-nav-item:not(.is-active) .li-nav-icon svg.li-brand-meta path {
+    fill: #0081FB !important;
+}
+
+.li-wrap .li-sidebar .li-nav-item.is-active .li-nav-icon svg.li-brand-meta path {
+    fill: #0081FB !important;
 }
 
 .li-wrap .li-nav-item.is-active .li-nav-text {
@@ -1773,19 +1723,26 @@
    ÁREA DE CONTEÚDO PRINCIPAL (MAIN WRAPPER & TOPBAR)
    -------------------------------------------------------------------------- */
 .li-wrap .li-main-wrapper {
-    flex: 1 1 auto;
+    position: fixed;
+    top: 10px;
+    bottom: 10px;
+    left: 270px;
+    right: 12px;
+    height: calc(100vh - 20px);
+    max-height: calc(100vh - 20px);
+    background: var(--li-bg-app);
+    border-radius: 24px;
+    border-top: 1.5px solid rgba(16, 130, 76, 0.35);
+    border-right: 1.5px solid rgba(16, 130, 76, 0.35);
+    border-bottom: 1.5px solid rgba(16, 130, 76, 0.35);
+    border-left: none !important;
+    box-shadow: 0 10px 30px rgba(10, 35, 28, 0.15);
+    box-sizing: border-box;
+    overflow: hidden;
+    z-index: 10;
     display: flex;
     flex-direction: column;
-    min-width: 0;
-    margin-left: 270px;
-    width: calc(100% - 270px);
-    min-height: 100vh;
-    background: var(--li-bg-app);
-    box-sizing: border-box;
-    margin-right: 0;
-    padding: 0;
-    transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1),
-                width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: left 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Quando o menu lateral for recolhido pelo botão: Modo Mini-Sidebar (Ícones Apenas) */
@@ -1798,8 +1755,32 @@
 }
 
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-main-wrapper {
-    margin-left: 72px !important;
-    width: calc(100% - 72px) !important;
+    left: 72px !important;
+    right: 12px !important;
+}
+
+/* Compensação para Admin Bar do WordPress */
+body.admin-bar .li-wrap .li-sidebar {
+    top: 32px;
+    height: calc(100vh - 32px);
+}
+
+body.admin-bar .li-wrap .li-main-wrapper {
+    top: 42px;
+    height: calc(100vh - 52px);
+    max-height: calc(100vh - 52px);
+}
+
+@media (max-width: 782px) {
+    body.admin-bar .li-wrap .li-sidebar {
+        top: 46px;
+        height: calc(100vh - 46px);
+    }
+    body.admin-bar .li-wrap .li-main-wrapper {
+        top: 54px;
+        height: calc(100vh - 62px);
+        max-height: calc(100vh - 62px);
+    }
 }
 
 /* Ocultar elementos de texto na sidebar compacta */
@@ -1810,14 +1791,15 @@
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-group-title,
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-profile-info,
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-footer,
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-brand-logos,
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-brand-text {
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-brand-text,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-logo-expanded {
     display: none !important;
 }
 
 /* Ajustes visuais dos ícones e cabeçalho na sidebar compacta */
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-header {
-    padding: 16px 8px 14px !important;
+    min-height: 73px;
+    padding: 16px 8px !important;
     align-items: center !important;
     justify-content: center !important;
 }
@@ -1827,27 +1809,21 @@
     width: 100% !important;
 }
 
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-toggle-btn {
-    width: 38px !important;
-    height: 38px !important;
-    font-size: 16px !important;
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-brand-logos {
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    width: 100% !important;
     margin: 0 auto !important;
 }
 
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-profile {
-    margin: 8px auto !important;
-    padding: 4px !important;
-    width: 44px !important;
-    height: 44px !important;
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-logo-compact {
+    display: flex !important;
+    align-items: center !important;
     justify-content: center !important;
-    border-radius: 10px !important;
-}
-
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-profile-avatar {
-    width: 34px !important;
-    height: 34px !important;
-    margin: 0 !important;
-    font-size: 16px !important;
+    max-height: 38px !important;
+    max-width: 42px !important;
+    margin: 0 auto !important;
 }
 
 .li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-nav,
@@ -2056,6 +2032,7 @@
 .li-wrap .li-content-scroll {
     padding: 24px 28px;
     flex: 1 1 auto;
+    height: 100%;
     overflow-y: auto;
     overflow-x: hidden;
     display: flex;
@@ -2063,6 +2040,78 @@
     gap: 20px;
     box-sizing: border-box;
     width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(16, 130, 76, 0.35) transparent;
+}
+
+.li-wrap .li-content-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.li-wrap .li-content-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.li-wrap .li-content-scroll::-webkit-scrollbar-thumb {
+    background: rgba(16, 130, 76, 0.35);
+    border-radius: 999px;
+}
+
+.li-wrap .li-content-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--li-brand);
+}
+
+/* Cabeçalho da Aba Executiva (Título e Subtítulo) */
+.li-wrap .li-tab-header {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+
+.li-wrap .li-tab-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--li-text-main);
+    margin: 0;
+    line-height: 1.15;
+    letter-spacing: -0.025em;
+}
+
+.li-wrap .li-tab-subtitle {
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--li-text-muted);
+    margin: 0;
+    line-height: 1.4;
+}
+
+/* Painéis de Conteúdo das Abas (Dashboard, Leads Meta, Leads Google) */
+.li-wrap .li-tab-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 100%;
+}
+
+.li-wrap .li-tab-panel:not(.is-active) {
+    display: none !important;
+}
+
+.li-wrap .li-tab-panel.is-active {
+    display: flex !important;
+    animation: liPanelFade 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes liPanelFade {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
 }
 
 /* --------------------------------------------------------------------------
@@ -2092,8 +2141,16 @@
     }
 
     .li-wrap .li-main-wrapper {
-        margin-left: 0 !important;
-        width: 100% !important;
+        left: 8px !important;
+        right: 8px !important;
+        top: 8px !important;
+        bottom: 8px !important;
+        width: auto !important;
+        height: calc(100vh - 16px) !important;
+        max-height: calc(100vh - 16px) !important;
+        margin: 0 !important;
+        border-radius: 18px !important;
+        border-left: 1.5px solid rgba(16, 130, 76, 0.35) !important;
     }
 
     .li-wrap .li-sidebar-mobile-toggle {
@@ -2268,6 +2325,14 @@
     justify-content: center;
     font-size: 22px;
     flex-shrink: 0;
+}
+
+.li-wrap .li-hero-icon-box svg {
+    width: 24px;
+    height: 24px;
+    display: block;
+    stroke: currentColor;
+    color: #ffffff;
 }
 
 .li-wrap .li-hero-card-footer {

@@ -245,14 +245,9 @@ class LeadRepository {
 
         if (!empty($args['channel'])) {
             $chan = sanitize_key($args['channel']);
-            if ($chan === 'google_ads') {
-                $where[] = "(gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%')";
-            } elseif ($chan === 'meta_ads') {
-                $where[] = "(fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%')";
-            } elseif ($chan === 'whatsapp') {
-                $where[] = "(formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '')";
-            } elseif ($chan === 'organico') {
-                $where[] = "(gclid = '' AND fbclid = '' AND ad_id = '' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'direct' OR utm_source = 'organico') AND formulario_nome NOT LIKE '%Google%' AND formulario_nome NOT LIKE '%Meta%' AND formulario_nome NOT LIKE '%WhatsApp%')";
+            $chan_sql = self::get_channel_sql_condition($chan);
+            if (!empty($chan_sql)) {
+                $where[] = $chan_sql;
             }
         }
 
@@ -286,6 +281,75 @@ class LeadRepository {
     }
 
     /**
+     * Retorna a expressão SQL unificada e segura para classificar leads por canal
+     *
+     * @param string $channel 'google_ads' | 'meta_ads' | 'whatsapp' | 'organico'
+     * @return string Cláusula SQL para WHERE ou CASE WHEN
+     */
+    public static function get_channel_sql_condition($channel) {
+        $chan = sanitize_key($channel);
+
+        if ($chan === 'google_ads') {
+            return "(
+                (gclid IS NOT NULL AND TRIM(gclid) != '') OR
+                (gad_source IS NOT NULL AND TRIM(gad_source) != '') OR
+                LOWER(COALESCE(utm_source, '')) IN ('google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads') OR
+                LOWER(COALESCE(utm_source, '')) LIKE '%google%' OR
+                (LOWER(COALESCE(utm_medium, '')) IN ('cpc', 'ppc', 'search', 'pmax') AND LOWER(COALESCE(utm_source, '')) NOT LIKE '%meta%' AND LOWER(COALESCE(utm_source, '')) NOT LIKE '%face%' AND LOWER(COALESCE(utm_source, '')) NOT LIKE '%insta%') OR
+                LOWER(COALESCE(formulario_nome, '')) LIKE '%google%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%gclid=%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%utm_source=google%' OR
+                LOWER(COALESCE(referrer, '')) LIKE '%google.%'
+            )";
+        }
+
+        if ($chan === 'meta_ads') {
+            return "(
+                (fbclid IS NOT NULL AND TRIM(fbclid) != '') OR
+                (fbc IS NOT NULL AND TRIM(fbc) != '') OR
+                (fbp IS NOT NULL AND TRIM(fbp) != '') OR
+                (campaign_id IS NOT NULL AND TRIM(campaign_id) != '') OR
+                (adset_id IS NOT NULL AND TRIM(adset_id) != '') OR
+                (ad_id IS NOT NULL AND TRIM(ad_id) != '') OR
+                LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories') OR
+                LOWER(COALESCE(utm_source, '')) LIKE '%meta%' OR
+                LOWER(COALESCE(utm_source, '')) LIKE '%facebook%' OR
+                LOWER(COALESCE(utm_source, '')) LIKE '%instagram%' OR
+                LOWER(COALESCE(utm_campaign, '')) LIKE '%meta%' OR
+                LOWER(COALESCE(utm_campaign, '')) LIKE '%facebook%' OR
+                LOWER(COALESCE(utm_campaign, '')) LIKE '%instagram%' OR
+                LOWER(COALESCE(utm_campaign, '')) LIKE '%fb%' OR
+                LOWER(COALESCE(formulario_nome, '')) LIKE '%meta%' OR
+                LOWER(COALESCE(formulario_nome, '')) LIKE '%facebook%' OR
+                LOWER(COALESCE(formulario_nome, '')) LIKE '%instagram%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%fbclid=%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%utm_source=meta%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%utm_source=facebook%' OR
+                LOWER(COALESCE(pagina_origem, '')) LIKE '%utm_source=instagram%' OR
+                LOWER(COALESCE(referrer, '')) LIKE '%facebook.com%' OR
+                LOWER(COALESCE(referrer, '')) LIKE '%instagram.com%'
+            )";
+        }
+
+        if ($chan === 'whatsapp') {
+            return "(
+                LOWER(COALESCE(formulario_nome, '')) LIKE '%whatsapp%' OR
+                (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
+                (conversation_id IS NOT NULL AND TRIM(conversation_id) != '')
+            )";
+        }
+
+        if ($chan === 'organico') {
+            $google = self::get_channel_sql_condition('google_ads');
+            $meta   = self::get_channel_sql_condition('meta_ads');
+            $wa     = self::get_channel_sql_condition('whatsapp');
+            return "(NOT ({$google}) AND NOT ({$meta}) AND NOT ({$wa}))";
+        }
+
+        return '';
+    }
+
+    /**
      * Identifica o canal de tráfego/origem de um lead
      *
      * @param object $lead Objeto com colunas do lead
@@ -297,21 +361,61 @@ class LeadRepository {
         }
 
         $utm_src  = strtolower(trim((string) ($lead->utm_source ?? '')));
+        $utm_med  = strtolower(trim((string) ($lead->utm_medium ?? '')));
+        $utm_camp = strtolower(trim((string) ($lead->utm_campaign ?? '')));
         $gclid    = trim((string) ($lead->gclid ?? ''));
+        $gad_src  = trim((string) ($lead->gad_source ?? ''));
         $fbclid   = trim((string) ($lead->fbclid ?? ''));
+        $fbc      = trim((string) ($lead->fbc ?? ''));
+        $fbp      = trim((string) ($lead->fbp ?? ''));
+        $camp_id  = trim((string) ($lead->campaign_id ?? ''));
         $ad_id    = trim((string) ($lead->ad_id ?? ''));
         $form     = strtolower(trim((string) ($lead->formulario_nome ?? '')));
         $origem   = strtolower(trim((string) ($lead->pagina_origem ?? '')));
+        $referrer = strtolower(trim((string) ($lead->referrer ?? '')));
         $wa_stat  = trim((string) ($lead->whatsapp_status ?? ''));
         $conv_id  = trim((string) ($lead->conversation_id ?? ''));
 
-        // 1. Google Ads: Tem gclid, utm_source google ou menção explícita
-        if (!empty($gclid) || $utm_src === 'google' || strpos($form, 'google') !== false || strpos($origem, 'google') !== false) {
+        // 1. Google Ads: Tem gclid, gad_source, utm_source google ou indicativos de mídia de busca/pmax
+        if (
+            !empty($gclid) ||
+            !empty($gad_src) ||
+            in_array($utm_src, ['google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads']) ||
+            strpos($utm_src, 'google') !== false ||
+            (in_array($utm_med, ['cpc', 'ppc', 'search', 'pmax']) && strpos($utm_src, 'face') === false && strpos($utm_src, 'meta') === false && strpos($utm_src, 'insta') === false) ||
+            strpos($form, 'google') !== false ||
+            strpos($origem, 'gclid=') !== false ||
+            strpos($origem, 'utm_source=google') !== false ||
+            strpos($referrer, 'google.') !== false
+        ) {
             return 'google_ads';
         }
 
-        // 2. Meta Ads: Tem fbclid, ad_id, utm meta/facebook/instagram ou menção explícita
-        if (!empty($fbclid) || !empty($ad_id) || in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig']) || strpos($form, 'meta') !== false || strpos($form, 'facebook') !== false || strpos($origem, 'meta') !== false) {
+        // 2. Meta Ads: Tem fbclid, fbc, fbp, campaign_id, ad_id ou indicativos de Facebook/Instagram
+        if (
+            !empty($fbclid) ||
+            !empty($fbc) ||
+            !empty($fbp) ||
+            !empty($camp_id) ||
+            !empty($ad_id) ||
+            in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories']) ||
+            strpos($utm_src, 'meta') !== false ||
+            strpos($utm_src, 'facebook') !== false ||
+            strpos($utm_src, 'instagram') !== false ||
+            strpos($utm_camp, 'meta') !== false ||
+            strpos($utm_camp, 'facebook') !== false ||
+            strpos($utm_camp, 'instagram') !== false ||
+            strpos($utm_camp, 'fb') !== false ||
+            strpos($form, 'meta') !== false ||
+            strpos($form, 'facebook') !== false ||
+            strpos($form, 'instagram') !== false ||
+            strpos($origem, 'fbclid=') !== false ||
+            strpos($origem, 'utm_source=meta') !== false ||
+            strpos($origem, 'utm_source=facebook') !== false ||
+            strpos($origem, 'utm_source=instagram') !== false ||
+            strpos($referrer, 'facebook.com') !== false ||
+            strpos($referrer, 'instagram.com') !== false
+        ) {
             return 'meta_ads';
         }
 
@@ -380,12 +484,9 @@ class LeadRepository {
         $where = ['1=1'];
 
         if (!empty($channel)) {
-            if ($channel === 'google_ads') {
-                $where[] = "(gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%')";
-            } elseif ($channel === 'meta_ads') {
-                $where[] = "(fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%')";
-            } elseif ($channel === 'whatsapp') {
-                $where[] = "(formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '')";
+            $chan_sql = self::get_channel_sql_condition($channel);
+            if (!empty($chan_sql)) {
+                $where[] = $chan_sql;
             }
         }
 
@@ -423,11 +524,15 @@ class LeadRepository {
             $params[] = $date_end;
         }
 
+        $google_cond = self::get_channel_sql_condition('google_ads');
+        $meta_cond   = self::get_channel_sql_condition('meta_ads');
+        $wa_cond     = self::get_channel_sql_condition('whatsapp');
+
         $sql = "SELECT 
             CASE 
-                WHEN (gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%') THEN 'google_ads'
-                WHEN (fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%') THEN 'meta_ads'
-                WHEN (formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '') THEN 'whatsapp'
+                WHEN {$google_cond} THEN 'google_ads'
+                WHEN {$meta_cond} THEN 'meta_ads'
+                WHEN {$wa_cond} THEN 'whatsapp'
                 ELSE 'organico'
             END as canal,
             COUNT(*) as total_leads,

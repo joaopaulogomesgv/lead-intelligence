@@ -42,6 +42,7 @@ class Settings {
             'enable_capi_qualified'    => 0,
             'logo_dark'                => '',
             'logo_light'               => '',
+            'logo_compact'             => '',
         ];
 
         $saved = get_option('lead_intelligence_settings', []);
@@ -123,6 +124,7 @@ class Settings {
             'enable_capi_qualified'    => $enable_capi_qual,
             'logo_dark'                => !empty($_POST['logo_dark']) ? esc_url_raw($_POST['logo_dark']) : '',
             'logo_light'               => !empty($_POST['logo_light']) ? esc_url_raw($_POST['logo_light']) : '',
+            'logo_compact'             => !empty($_POST['logo_compact']) ? esc_url_raw($_POST['logo_compact']) : '',
         ];
 
         update_option('lead_intelligence_settings', $new_settings);
@@ -342,36 +344,38 @@ class Settings {
                 </div>
 
                 <div class="li-card">
-                    <h3 class="li-card-title">5. Logotipo do Dashboard (Modo Escuro e Modo Claro)</h3>
-                    <p class="li-card-desc">Personalize a identidade visual exibida no topo do Dashboard. O sistema alterna a logotipo dinamicamente conforme o tema selecionado (Dark/Light).</p>
+                    <h3 class="li-card-title">5. Logotipo do Dashboard</h3>
+                    <p class="li-card-desc">Personalize a identidade visual exibida no topo do menu lateral do Dashboard.</p>
 
                     <table class="form-table">
                         <tr>
-                            <th scope="row"><label for="li_logo_dark">Logo Modo Escuro (Dark HUD)</label></th>
+                            <th scope="row"><label for="li_logo_light">Logotipo Menu Aberto</label></th>
                             <td>
                                 <div style="display: flex; gap: 8px; align-items: center; max-width: 600px;">
-                                    <input type="url" id="li_logo_dark" name="logo_dark" value="<?php echo esc_attr($settings['logo_dark']); ?>" class="regular-text" style="flex:1;" placeholder="https://.../logo-branca.png">
-                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_dark">Biblioteca de Mídia</button>
+                                    <input type="url" id="li_logo_light" name="logo_light" value="<?php echo esc_attr(!empty($settings['logo_light']) ? $settings['logo_light'] : ($settings['logo_dark'] ?? '')); ?>" class="regular-text" style="flex:1;" placeholder="https://.../logo-faveni-completa.png">
+                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_light">Biblioteca de Mídia</button>
                                 </div>
-                                <p class="description">Recomendado: logo em vetor ou PNG transparente com cores claras/brancas para fundo escuro.</p>
-                                <?php if (!empty($settings['logo_dark'])): ?>
-                                    <div style="margin-top: 10px; padding: 12px; background: #080c14; display: inline-block; border-radius: 8px; border: 1px solid #1e293b;">
-                                        <img src="<?php echo esc_url($settings['logo_dark']); ?>" style="max-height: 48px; max-width: 260px; object-fit: contain; display: block;" />
+                                <p class="description">Exibida quando a barra lateral estiver aberta/expandida. Ao clicar nela no Dashboard, o menu é recolhido.</p>
+                                <?php 
+                                $preview_logo = !empty($settings['logo_light']) ? $settings['logo_light'] : ($settings['logo_dark'] ?? '');
+                                if (!empty($preview_logo)): ?>
+                                    <div style="margin-top: 10px; padding: 12px; background: #ffffff; display: inline-block; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                        <img src="<?php echo esc_url($preview_logo); ?>" style="max-height: 48px; max-width: 260px; object-fit: contain; display: block;" />
                                     </div>
                                 <?php endif; ?>
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="li_logo_light">Logo Modo Claro (Light Mode)</label></th>
+                            <th scope="row"><label for="li_logo_compact">Logotipo Menu Minimizado (Ícone)</label></th>
                             <td>
                                 <div style="display: flex; gap: 8px; align-items: center; max-width: 600px;">
-                                    <input type="url" id="li_logo_light" name="logo_light" value="<?php echo esc_attr($settings['logo_light']); ?>" class="regular-text" style="flex:1;" placeholder="https://.../logo-oficial-faveni.png">
-                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_light">Biblioteca de Mídia</button>
+                                    <input type="url" id="li_logo_compact" name="logo_compact" value="<?php echo esc_attr($settings['logo_compact'] ?? ''); ?>" class="regular-text" style="flex:1;" placeholder="https://.../icone-tocha-faveni.png">
+                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_compact">Biblioteca de Mídia</button>
                                 </div>
-                                <p class="description">Recomendado: logo oficial colorida ou verde Faveni para fundos claros.</p>
-                                <?php if (!empty($settings['logo_light'])): ?>
-                                    <div style="margin-top: 10px; padding: 12px; background: #ffffff; display: inline-block; border-radius: 8px; border: 1px solid #e2e8f0;">
-                                        <img src="<?php echo esc_url($settings['logo_light']); ?>" style="max-height: 48px; max-width: 260px; object-fit: contain; display: block;" />
+                                <p class="description">Exibida quando o menu lateral estiver minimizado/compacto (ex: ícone da tocha ou brasão). Ao clicar nela, o menu se expande.</p>
+                                <?php if (!empty($settings['logo_compact'])): ?>
+                                    <div style="margin-top: 10px; padding: 12px; background: #163930; display: inline-block; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);">
+                                        <img src="<?php echo esc_url($settings['logo_compact']); ?>" style="max-height: 44px; max-width: 44px; object-fit: contain; display: block;" />
                                     </div>
                                 <?php endif; ?>
                             </td>

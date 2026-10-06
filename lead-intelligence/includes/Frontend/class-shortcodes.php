@@ -68,7 +68,7 @@ class Shortcodes {
         $atts = shortcode_atts([
             'public'               => 'false',
             'capability'           => 'manage_options',
-            'theme'                => 'dark',
+            'theme'                => 'light',
             'full_width'           => 'false',
             'periodo'              => '30d',
             'canal'                => '',
@@ -86,6 +86,7 @@ class Shortcodes {
             'logo'                 => '',
             'logo_dark'            => '',
             'logo_light'           => '',
+            'logo_compact'         => '',
         ], $atts, 'lead_intelligence_dashboard');
 
         // Verificação de permissões
@@ -99,7 +100,7 @@ class Shortcodes {
         // Opções para o DashboardController
         $options = [
             'is_frontend'          => true,
-            'theme'                => sanitize_key($atts['theme'] ?: 'dark'),
+            'theme'                => 'light',
             'full_width'           => filter_var($atts['full_width'], FILTER_VALIDATE_BOOLEAN),
             'periodo'              => sanitize_text_field($atts['periodo']),
             'canal'                => sanitize_key($atts['canal']),
@@ -129,6 +130,9 @@ class Shortcodes {
             $options['logo_light'] = esc_url_raw($atts['logo_light']);
         } elseif (!empty($atts['logo'])) {
             $options['logo_light'] = esc_url_raw($atts['logo']);
+        }
+        if (!empty($atts['logo_compact'])) {
+            $options['logo_compact'] = esc_url_raw($atts['logo_compact']);
         }
 
         ob_start();
