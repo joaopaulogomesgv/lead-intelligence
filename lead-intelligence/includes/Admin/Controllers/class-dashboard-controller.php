@@ -13,18 +13,65 @@ if (!defined('ABSPATH')) {
  */
 class DashboardController {
 
-    public static function render() {
+    public static function render(array $options = []) {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
+        $is_frontend          = !empty($options['is_frontend']) || !is_admin();
+        $theme                = !empty($options['theme']) ? sanitize_key($options['theme']) : 'dark';
+        if (!in_array($theme, ['dark', 'light'], true)) {
+            $theme = 'dark';
+        }
+        $default_period       = !empty($options['periodo']) ? sanitize_text_field($options['periodo']) : '30d';
+        $default_channel      = !empty($options['canal']) ? sanitize_key($options['canal']) : '';
+        $show_header          = array_key_exists('show_header', $options) ? (bool) $options['show_header'] : true;
+        $show_import          = array_key_exists('show_import', $options) ? (bool) $options['show_import'] : (!$is_frontend && current_user_can('manage_options'));
+        $show_filters         = array_key_exists('show_filters', $options) ? (bool) $options['show_filters'] : true;
+        $show_channel_compare = array_key_exists('show_channel_compare', $options) ? (bool) $options['show_channel_compare'] : true;
+        $show_kpis            = array_key_exists('show_kpis', $options) ? (bool) $options['show_kpis'] : true;
+        $show_calculator      = array_key_exists('show_calculator', $options) ? (bool) $options['show_calculator'] : true;
+        $show_chart           = array_key_exists('show_chart', $options) ? (bool) $options['show_chart'] : true;
+        $show_campaigns       = array_key_exists('show_campaigns', $options) ? (bool) $options['show_campaigns'] : true;
+        $show_creatives       = array_key_exists('show_creatives', $options) ? (bool) $options['show_creatives'] : true;
+        $custom_title         = !empty($options['title']) ? sanitize_text_field($options['title']) : 'Lead Intelligence • Dashboard de Qualidade';
+        $custom_subtitle      = !empty($options['subtitle']) ? sanitize_text_field($options['subtitle']) : 'Análise avançada da qualidade dos leads gerados pelas campanhas da Meta Ads.';
+        $is_full_width        = !empty($options['full_width']);
+
+        $plugin_settings = \LeadIntelligence\Admin\Settings::get_settings();
+        $logo_dark       = !empty($options['logo_dark']) ? esc_url_raw($options['logo_dark']) : ($plugin_settings['logo_dark'] ?? '');
+        $logo_light      = !empty($options['logo_light']) ? esc_url_raw($options['logo_light']) : ($plugin_settings['logo_light'] ?? '');
+
+        if (empty($logo_light) && !empty($logo_dark)) {
+            $logo_light = $logo_dark;
+        }
+        if (empty($logo_dark) && !empty($logo_light)) {
+            $logo_dark = $logo_light;
+        }
+
         // 1. Filtros
-        $periodo = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : '30d';
-        $filter_channel  = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
+        $custom_from     = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to       = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+
+        // Se datas personalizadas foram enviadas via GET, define o período como 'custom' automaticamente
+        if (!empty($custom_from) || !empty($custom_to)) {
+            $periodo = 'custom';
+        } else {
+            $periodo = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : $default_period;
+        }
+
+        $filter_channel  = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
         $filter_campaign = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
         $filter_curso    = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
         $filter_area     = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
-        $custom_from     = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
-        $custom_to       = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+
+        // URLs de formulário e reset
+        if ($is_frontend) {
+            $form_action = remove_query_arg(['periodo', 'canal', 'campanha', 'curso', 'area', 'from', 'to']);
+            $reset_url   = $form_action;
+        } else {
+            $form_action = '';
+            $reset_url   = admin_url('admin.php?page=lead-intelligence');
+        }
 
         // Cálculo de datas
         $now = current_time('mysql');
@@ -32,6 +79,14 @@ class DashboardController {
         $date_end = $now;
 
         switch ($periodo) {
+            case 'today':
+                $date_start = wp_date('Y-m-d 00:00:00');
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'yesterday':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-1 day'));
+                $date_end   = wp_date('Y-m-d 23:59:59', strtotime('-1 day'));
+                break;
             case '7d':
                 $date_start = wp_date('Y-m-d 00:00:00', strtotime('-7 days'));
                 break;
@@ -46,11 +101,16 @@ class DashboardController {
                 $date_end   = wp_date('Y-m-t 23:59:59', strtotime('last day of last month'));
                 break;
             case 'custom':
-                if (!empty($custom_from)) {
+                if (!empty($custom_from) && !empty($custom_to)) {
                     $date_start = $custom_from . ' 00:00:00';
-                }
-                if (!empty($custom_to)) {
-                    $date_end = $custom_to . ' 23:59:59';
+                    $date_end   = $custom_to . ' 23:59:59';
+                } elseif (!empty($custom_from)) {
+                    // Preencheu apenas uma data aleatória: filtra exatamente este dia completo
+                    $date_start = $custom_from . ' 00:00:00';
+                    $date_end   = $custom_from . ' 23:59:59';
+                } elseif (!empty($custom_to)) {
+                    $date_start = '';
+                    $date_end   = $custom_to . ' 23:59:59';
                 }
                 break;
             case 'all':
@@ -58,6 +118,10 @@ class DashboardController {
                 $date_start = '';
                 break;
         }
+
+        // Datas pré-calculadas para exibir sempre no input
+        $input_from = !empty($custom_from) ? $custom_from : (!empty($date_start) ? substr($date_start, 0, 10) : '');
+        $input_to   = !empty($custom_to) ? $custom_to : (!empty($date_end) ? substr($date_end, 0, 10) : '');
 
         // Construção da cláusula WHERE
         $where = ['1=1'];
@@ -181,230 +245,421 @@ class DashboardController {
             }
         }
         ?>
-        <div class="wrap li-wrap">
-            <div class="li-header" style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
-                <div>
-                    <h2>Lead Intelligence &bull; Dashboard de Qualidade</h2>
-                    <p class="li-subtitle">Análise avançada da qualidade dos leads gerados pelas campanhas da Meta Ads.</p>
-                </div>
-                <div>
-                    <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import')); ?>" class="button button-primary button-large">
-                        + Importar Planilha de Alunos
-                    </a>
-                </div>
-            </div>
+        <div class="wrap li-wrap li-wrap-dashboard <?php echo $is_frontend ? 'li-frontend-wrap' : ''; ?> <?php echo $is_full_width ? 'li-full-width' : ''; ?>" data-theme="<?php echo esc_attr($theme); ?>">
+            <div class="li-app-layout">
+                <!-- ========================================================
+                     1. MENU LATERAL À ESQUERDA (SIDEBAR HUD)
+                     ======================================================== -->
+                <aside class="li-sidebar" id="liSidebar">
+                    <div class="li-sidebar-header">
+                        <div class="li-sidebar-header-top">
+                            <?php if (!empty($logo_dark) || !empty($logo_light)): ?>
+                                <div class="li-brand-logos">
+                                    <?php if (!empty($logo_dark)): ?>
+                                        <img src="<?php echo esc_url($logo_dark); ?>" alt="Logo Faveni" class="li-logo-img li-logo-dark" />
+                                    <?php endif; ?>
+                                    <?php if (!empty($logo_light)): ?>
+                                        <img src="<?php echo esc_url($logo_light); ?>" alt="Logo Faveni" class="li-logo-img li-logo-light" />
+                                    <?php endif; ?>
+                                </div>
+                            <?php else: ?>
+                                <div class="li-sidebar-brand-text">FAVENI</div>
+                            <?php endif; ?>
 
-            <!-- BARRA DE FILTROS DO DASHBOARD -->
-            <div class="li-card li-filter-bar">
-                <form method="get" action="">
-                    <input type="hidden" name="page" value="lead-intelligence">
-
-                    <div class="li-filter-row">
-                        <div>
-                            <select name="periodo" onchange="toggleCustomDates(this.value)">
-                                <option value="7d" <?php selected($periodo, '7d'); ?>>Últimos 7 dias</option>
-                                <option value="30d" <?php selected($periodo, '30d'); ?>>Últimos 30 dias</option>
-                                <option value="month" <?php selected($periodo, 'month'); ?>>Este Mês</option>
-                                <option value="last_month" <?php selected($periodo, 'last_month'); ?>>Mês Passado</option>
-                                <option value="all" <?php selected($periodo, 'all'); ?>>Todo o Período</option>
-                                <option value="custom" <?php selected($periodo, 'custom'); ?>>Personalizado</option>
-                            </select>
+                            <!-- BOTÃO DE RECOLHER MENU LATERAL -->
+                            <button type="button" class="li-sidebar-toggle-btn" onclick="liToggleSidebarCollapse()" title="Recolher menu lateral">
+                                <span>⇤</span>
+                            </button>
                         </div>
 
-                        <div>
-                            <select name="canal">
-                                <option value="">Todos os Canais</option>
-                                <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
-                                <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
-                                <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
-                            </select>
+                        <!-- LINHA DE STATUS LIVE (MESMA LARGURA) -->
+                        <div class="li-brand-pill">
+                            <span class="li-brand-dot"></span>
+                            <span class="li-brand-title">FAVENI &bull; HUD</span>
+                            <span class="li-brand-live">LIVE</span>
                         </div>
+                    </div>
 
-                        <div id="liCustomDateBox" style="<?php echo ($periodo === 'custom') ? 'display:flex; gap:8px;' : 'display:none;'; ?>">
-                            <input type="date" name="from" value="<?php echo esc_attr($custom_from); ?>" placeholder="De">
-                            <input type="date" name="to" value="<?php echo esc_attr($custom_to); ?>" placeholder="Até">
+                    <div class="li-sidebar-profile">
+                        <div class="li-profile-avatar">🎓</div>
+                        <div class="li-profile-info">
+                            <span class="li-profile-name">Inteligência de Leads</span>
+                            <span class="li-profile-role">Central Oficial Faveni</span>
                         </div>
+                    </div>
 
-                        <?php if (!empty($all_campaigns)): ?>
-                            <div>
-                                <select name="campanha">
-                                    <option value="">Todas as Campanhas</option>
-                                    <?php foreach ($all_campaigns as $camp): ?>
-                                        <option value="<?php echo esc_attr($camp); ?>" <?php selected($filter_campaign, $camp); ?>>
-                                            <?php echo esc_html($camp); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                    <nav class="li-sidebar-nav">
+                        <div class="li-nav-group-title">MÓDULOS</div>
+                        <a href="#li-sec-filters" class="li-nav-item is-active" data-target="li-sec-filters" title="Dashboard Geral (<?php echo (int) $total_leads; ?> leads)">
+                            <span class="li-nav-icon">📊</span>
+                            <span class="li-nav-text">Dashboard Geral</span>
+                            <span class="li-nav-badge"><?php echo (int) $total_leads; ?></span>
+                        </a>
+                        <a href="#li-sec-compare" class="li-nav-item" data-target="li-sec-compare" title="Comparativo: Google Ads vs Meta Ads">
+                            <span class="li-nav-icon">⚖️</span>
+                            <span class="li-nav-text">Google vs Meta</span>
+                        </a>
+                        <a href="#li-sec-kpis" class="li-nav-item" data-target="li-sec-kpis" title="Métricas &amp; KPIs">
+                            <span class="li-nav-icon">💎</span>
+                            <span class="li-nav-text">Métricas &amp; KPIs</span>
+                        </a>
+                        <a href="#li-sec-calc" class="li-nav-item" data-target="li-sec-calc" title="Calculadora HUD de CPL">
+                            <span class="li-nav-icon">⚡</span>
+                            <span class="li-nav-text">Calculadora CPL</span>
+                        </a>
+                        <?php if ($show_chart && !empty($daily_evolution)): ?>
+                            <a href="#li-sec-chart" class="li-nav-item" data-target="li-sec-chart" title="Evolução Diária">
+                                <span class="li-nav-icon">📈</span>
+                                <span class="li-nav-text">Evolução Diária</span>
+                            </a>
+                        <?php endif; ?>
+                        <?php if ($show_campaigns): ?>
+                            <a href="#li-sec-campaigns" class="li-nav-item" data-target="li-sec-campaigns" title="Campanhas Meta Ads">
+                                <span class="li-nav-icon">🎯</span>
+                                <span class="li-nav-text">Campanhas Meta</span>
+                            </a>
+                        <?php endif; ?>
+                        <?php if ($show_creatives): ?>
+                            <a href="#li-sec-creatives" class="li-nav-item" data-target="li-sec-creatives" title="Anúncios &amp; Criativos">
+                                <span class="li-nav-icon">📢</span>
+                                <span class="li-nav-text">Anúncios &amp; Criativos</span>
+                            </a>
                         <?php endif; ?>
 
-                        <?php if (!empty($all_cursos)): ?>
-                            <div>
-                                <select name="curso">
-                                    <option value="">Todos os Cursos</option>
-                                    <?php foreach ($all_cursos as $c): ?>
-                                        <option value="<?php echo esc_attr($c); ?>" <?php selected($filter_curso, $c); ?>>
-                                            <?php echo esc_html($c); ?>
-                                        </option>
-                                    <?php endforeach; ?>
-                                </select>
-                            </div>
+                        <?php if (current_user_can('manage_options')): ?>
+                            <div class="li-nav-group-title" style="margin-top: 18px;">ADMINISTRAÇÃO</div>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads')); ?>" class="li-nav-item" target="_blank" title="Lista de Leads">
+                                <span class="li-nav-icon">👥</span>
+                                <span class="li-nav-text">Lista de Leads</span>
+                                <span class="li-nav-ext">↗</span>
+                            </a>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import')); ?>" class="li-nav-item" target="_blank" title="Importar Planilha">
+                                <span class="li-nav-icon">📥</span>
+                                <span class="li-nav-text">Importar Planilha</span>
+                                <span class="li-nav-ext">↗</span>
+                            </a>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings')); ?>" class="li-nav-item" target="_blank" title="Configurações">
+                                <span class="li-nav-icon">⚙️</span>
+                                <span class="li-nav-text">Configurações</span>
+                                <span class="li-nav-ext">↗</span>
+                            </a>
                         <?php endif; ?>
+                    </nav>
 
-                        <button type="submit" class="button button-primary">Aplicar Filtros</button>
-                        <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence')); ?>" class="button">Resetar</a>
+                    <div class="li-sidebar-footer">
+                        <span class="li-sidebar-ver">Lead Intelligence v1.5.1</span>
                     </div>
-                </form>
-            </div>
+                </aside>
 
-            <!-- COMPARATIVO EXECUTIVO: GOOGLE ADS VS META ADS -->
-            <?php
-            $g_data = $channel_summary['google_ads'];
-            $m_data = $channel_summary['meta_ads'];
-            $melhor_taxa = '';
-            if ($g_data->taxa > $m_data->taxa && $g_data->total_leads > 0) {
-                $melhor_taxa = 'google';
-            } elseif ($m_data->taxa > $g_data->taxa && $m_data->total_leads > 0) {
-                $melhor_taxa = 'meta';
-            }
-            ?>
-            <div class="li-card" style="padding: 22px; border-top: 4px solid #1a73e8; background: #ffffff;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px;">
-                    <div>
-                        <h3 class="li-card-title" style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
-                            <span>⚖️</span> Comparativo de Performance: Google Ads vs Meta Ads
-                        </h3>
-                        <p class="li-card-desc" style="margin: 4px 0 0 0;">Análise comparativa limpa e em tempo real do retorno em matrículas de cada canal.</p>
-                    </div>
-                    <?php if (!empty($filter_channel)): ?>
-                        <span class="li-badge" style="background:#f1f5f9; color:#475569; font-size:12px;">Filtro ativo: <?php echo esc_html($filter_channel === 'google_ads' ? 'Google Ads' : ($filter_channel === 'meta_ads' ? 'Meta Ads' : 'WhatsApp')); ?></span>
+                <!-- ========================================================
+                     2. CONTEÚDO PRINCIPAL (COM MENU SUPERIOR TOPBAR)
+                     ======================================================== -->
+                <div class="li-main-wrapper">
+                    <?php if ($show_header): ?>
+                        <!-- MENU SUPERIOR (TOPBAR HUD) -->
+                        <header class="li-topbar">
+                            <div class="li-topbar-left">
+                                <button type="button" class="li-sidebar-toggle-topbar" onclick="liToggleSidebarCollapse()" title="Menu Lateral (Abrir / Fechar)">
+                                    <span class="li-toggle-icon">☰</span>
+                                    <span class="li-toggle-text">Menu</span>
+                                </button>
+                                <div class="li-topbar-heading">
+                                    <h2 class="li-dashboard-title"><?php echo esc_html($custom_title); ?></h2>
+                                    <p class="li-subtitle"><?php echo esc_html($custom_subtitle); ?></p>
+                                </div>
+                            </div>
+
+                            <!-- CENTRO DO TOPBAR: INFORMAÇÕES CENTRALIZADAS -->
+                            <div class="li-topbar-center">
+                                <div class="li-topbar-pill" title="Total de Leads captados">
+                                    <span class="li-pill-lbl">Total Leads</span>
+                                    <span class="li-pill-val"><?php echo number_format_i18n($total_leads); ?></span>
+                                </div>
+                                <div class="li-topbar-pill li-pill-success" title="Total de Matrículas confirmadas">
+                                    <span class="li-pill-lbl">Confirmados</span>
+                                    <span class="li-pill-val"><?php echo number_format_i18n($total_qualificados); ?></span>
+                                </div>
+                                <div class="li-topbar-pill li-pill-info" title="Taxa de conversão do período">
+                                    <span class="li-pill-lbl">Taxa Geral</span>
+                                    <span class="li-pill-val"><?php echo $taxa_qualificacao; ?>%</span>
+                                </div>
+                            </div>
+
+                            <!-- DIREITA DO TOPBAR: CONTROLES E AÇÕES -->
+                            <div class="li-topbar-right">
+                                <button type="button" class="li-theme-toggle-btn" onclick="liToggleTheme()" title="Alternar Modo Claro / Escuro">
+                                    <span class="li-theme-toggle-icon"><?php echo ($theme === 'dark') ? '🌙' : '☀️'; ?></span>
+                                    <span class="li-theme-toggle-text"><?php echo ($theme === 'dark') ? 'Modo Escuro' : 'Modo Claro'; ?></span>
+                                </button>
+
+                                <?php if (!$is_frontend): ?>
+                                    <button type="button" class="button li-btn li-btn-ghost" onclick="navigator.clipboard.writeText('[lead_intelligence_dashboard]').then(function(){alert('Shortcode copiado:\n[lead_intelligence_dashboard]');});" title="Copiar shortcode">
+                                        📋 Shortcode
+                                    </button>
+                                <?php endif; ?>
+
+                                <?php if ($show_import): ?>
+                                    <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import')); ?>" class="button button-primary li-btn li-btn-faveni">
+                                        + Importar
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </header>
                     <?php endif; ?>
-                </div>
 
-                <div class="li-channel-compare-grid">
-                    <!-- COLUNA GOOGLE ADS -->
-                    <div class="li-channel-box li-channel-google">
-                        <div class="li-channel-box-header">
-                            <span class="li-channel-tag-google">🟢 Google Ads</span>
-                            <?php if ($melhor_taxa === 'google'): ?>
-                                <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                    <div class="li-content-scroll">
+
+            <?php if ($show_filters): ?>
+                <!-- BARRA DE FILTROS DO DASHBOARD (HUD TOOLBAR) -->
+                <div id="li-sec-filters" class="li-card li-filter-bar">
+                    <form method="get" action="<?php echo esc_url($form_action); ?>" class="li-filter-form">
+                        <?php if (!$is_frontend): ?>
+                            <input type="hidden" name="page" value="lead-intelligence">
+                        <?php endif; ?>
+
+                        <div class="li-filter-row">
+                            <!-- PERÍODO -->
+                            <div class="li-filter-col">
+                                <label class="li-filter-lbl" for="liPeriodoSelect">Período</label>
+                                <select name="periodo" id="liPeriodoSelect" class="li-select" onchange="liOnPeriodoChange(this.value)">
+                                    <option value="today" <?php selected($periodo, 'today'); ?>>Hoje</option>
+                                    <option value="yesterday" <?php selected($periodo, 'yesterday'); ?>>Ontem</option>
+                                    <option value="7d" <?php selected($periodo, '7d'); ?>>Últimos 7 dias</option>
+                                    <option value="30d" <?php selected($periodo, '30d'); ?>>Últimos 30 dias</option>
+                                    <option value="month" <?php selected($periodo, 'month'); ?>>Este Mês</option>
+                                    <option value="last_month" <?php selected($periodo, 'last_month'); ?>>Mês Passado</option>
+                                    <option value="all" <?php selected($periodo, 'all'); ?>>Todo o Período</option>
+                                    <option value="custom" <?php selected($periodo, 'custom'); ?>>📅 Personalizado...</option>
+                                </select>
+                            </div>
+
+                            <!-- INTERVALO DE DATAS (SEMPRE VISÍVEL) -->
+                            <div id="liCustomDateBox" class="li-filter-col li-filter-dates-col">
+                                <label class="li-filter-lbl">Intervalo de Datas</label>
+                                <div class="li-dates-capsule">
+                                    <span class="li-date-tag">De</span>
+                                    <input type="date" name="from" id="liDateInputFrom" value="<?php echo esc_attr($input_from); ?>" class="li-date-input" title="Data inicial" onchange="liOnDateInputChange()">
+                                    <span class="li-date-sep">➔</span>
+                                    <span class="li-date-tag">Até</span>
+                                    <input type="date" name="to" id="liDateInputTo" value="<?php echo esc_attr($input_to); ?>" class="li-date-input" title="Data final" onchange="liOnDateInputChange()">
+                                </div>
+                            </div>
+
+                            <!-- CANAL -->
+                            <div class="li-filter-col">
+                                <label class="li-filter-lbl">Canal de Origem</label>
+                                <select name="canal" class="li-select">
+                                    <option value="">Todos os Canais</option>
+                                    <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
+                                    <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
+                                    <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
+                                </select>
+                            </div>
+
+                            <!-- CAMPANHA -->
+                            <?php if (!empty($all_campaigns)): ?>
+                                <div class="li-filter-col">
+                                    <label class="li-filter-lbl">Campanha</label>
+                                    <select name="campanha" class="li-select">
+                                        <option value="">Todas as Campanhas</option>
+                                        <?php foreach ($all_campaigns as $camp): ?>
+                                            <option value="<?php echo esc_attr($camp); ?>" <?php selected($filter_campaign, $camp); ?>>
+                                                <?php echo esc_html($camp); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
                             <?php endif; ?>
-                        </div>
-                        <div class="li-channel-stats-row">
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num"><?php echo number_format_i18n($g_data->total_leads); ?></span>
-                                <span class="li-channel-stat-lbl">Leads Gerados</span>
-                            </div>
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num" style="color: #15803d;"><?php echo number_format_i18n($g_data->qualificados); ?></span>
-                                <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
-                            </div>
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num" style="color: #1a73e8;"><?php echo $g_data->taxa; ?>%</span>
-                                <span class="li-channel-stat-lbl">Taxa de Conversão</span>
-                            </div>
-                        </div>
-                        <div class="li-channel-progress-bg">
-                            <div class="li-channel-progress-bar-google" style="width: <?php echo min(100, $g_data->taxa); ?>%;"></div>
-                        </div>
-                    </div>
 
-                    <!-- DIVISOR VS -->
-                    <div class="li-channel-vs">
-                        <span>VS</span>
-                    </div>
-
-                    <!-- COLUNA META ADS -->
-                    <div class="li-channel-box li-channel-meta">
-                        <div class="li-channel-box-header">
-                            <span class="li-channel-tag-meta">🔵 Meta Ads</span>
-                            <?php if ($melhor_taxa === 'meta'): ?>
-                                <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                            <!-- CURSO -->
+                            <?php if (!empty($all_cursos)): ?>
+                                <div class="li-filter-col">
+                                    <label class="li-filter-lbl">Curso</label>
+                                    <select name="curso" class="li-select">
+                                        <option value="">Todos os Cursos</option>
+                                        <?php foreach ($all_cursos as $c): ?>
+                                            <option value="<?php echo esc_attr($c); ?>" <?php selected($filter_curso, $c); ?>>
+                                                <?php echo esc_html($c); ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
                             <?php endif; ?>
-                        </div>
-                        <div class="li-channel-stats-row">
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num"><?php echo number_format_i18n($m_data->total_leads); ?></span>
-                                <span class="li-channel-stat-lbl">Leads Gerados</span>
+
+                            <!-- AÇÕES -->
+                            <div class="li-filter-col li-filter-actions-col">
+                                <label class="li-filter-lbl">&nbsp;</label>
+                                <div class="li-filter-btns">
+                                    <button type="submit" class="button button-primary li-btn li-btn-faveni">
+                                        <span>🔍</span> Filtrar
+                                    </button>
+                                    <a href="<?php echo esc_url($reset_url); ?>" class="button li-btn li-btn-ghost" title="Limpar todos os filtros">
+                                        ↺ Resetar
+                                    </a>
+                                </div>
                             </div>
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num" style="color: #15803d;"><?php echo number_format_i18n($m_data->qualificados); ?></span>
-                                <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
+                        </div>
+                    </form>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($show_channel_compare): ?>
+                <!-- COMPARATIVO EXECUTIVO: GOOGLE ADS VS META ADS -->
+                <?php
+                $g_data = $channel_summary['google_ads'];
+                $m_data = $channel_summary['meta_ads'];
+                $melhor_taxa = '';
+                if ($g_data->taxa > $m_data->taxa && $g_data->total_leads > 0) {
+                    $melhor_taxa = 'google';
+                } elseif ($m_data->taxa > $g_data->taxa && $m_data->total_leads > 0) {
+                    $melhor_taxa = 'meta';
+                }
+                ?>
+                <div id="li-sec-compare" class="li-card li-card-channel-compare">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px;">
+                        <div>
+                            <h3 class="li-card-title" style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                                <span>⚖️</span> Comparativo de Performance: Google Ads vs Meta Ads
+                            </h3>
+                            <p class="li-card-desc" style="margin: 4px 0 0 0;">Análise comparativa limpa e em tempo real do retorno em matrículas de cada canal.</p>
+                        </div>
+                        <?php if (!empty($filter_channel)): ?>
+                            <span class="li-badge li-badge-active-filter">Filtro ativo: <?php echo esc_html($filter_channel === 'google_ads' ? 'Google Ads' : ($filter_channel === 'meta_ads' ? 'Meta Ads' : 'WhatsApp')); ?></span>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="li-channel-compare-grid">
+                        <!-- COLUNA GOOGLE ADS -->
+                        <div class="li-channel-box li-channel-google">
+                            <div class="li-channel-box-header">
+                                <span class="li-channel-tag-google">🟢 Google Ads</span>
+                                <?php if ($melhor_taxa === 'google'): ?>
+                                    <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                                <?php endif; ?>
                             </div>
-                            <div class="li-channel-stat">
-                                <span class="li-channel-stat-num" style="color: #0866ff;"><?php echo $m_data->taxa; ?>%</span>
-                                <span class="li-channel-stat-lbl">Taxa de Conversão</span>
+                            <div class="li-channel-stats-row">
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num"><?php echo number_format_i18n($g_data->total_leads); ?></span>
+                                    <span class="li-channel-stat-lbl">Leads Gerados</span>
+                                </div>
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num li-color-green"><?php echo number_format_i18n($g_data->qualificados); ?></span>
+                                    <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
+                                </div>
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num li-color-blue"><?php echo $g_data->taxa; ?>%</span>
+                                    <span class="li-channel-stat-lbl">Taxa de Conversão</span>
+                                </div>
+                            </div>
+                            <div class="li-channel-progress-bg">
+                                <div class="li-channel-progress-bar-google" style="width: <?php echo min(100, $g_data->taxa); ?>%;"></div>
                             </div>
                         </div>
-                        <div class="li-channel-progress-bg">
-                            <div class="li-channel-progress-bar-meta" style="width: <?php echo min(100, $m_data->taxa); ?>%;"></div>
+
+                        <!-- DIVISOR VS -->
+                        <div class="li-channel-vs">
+                            <span>VS</span>
+                        </div>
+
+                        <!-- COLUNA META ADS -->
+                        <div class="li-channel-box li-channel-meta">
+                            <div class="li-channel-box-header">
+                                <span class="li-channel-tag-meta">🔵 Meta Ads</span>
+                                <?php if ($melhor_taxa === 'meta'): ?>
+                                    <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                                <?php endif; ?>
+                            </div>
+                            <div class="li-channel-stats-row">
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num"><?php echo number_format_i18n($m_data->total_leads); ?></span>
+                                    <span class="li-channel-stat-lbl">Leads Gerados</span>
+                                </div>
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num li-color-green"><?php echo number_format_i18n($m_data->qualificados); ?></span>
+                                    <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
+                                </div>
+                                <div class="li-channel-stat">
+                                    <span class="li-channel-stat-num li-color-meta"><?php echo $m_data->taxa; ?>%</span>
+                                    <span class="li-channel-stat-lbl">Taxa de Conversão</span>
+                                </div>
+                            </div>
+                            <div class="li-channel-progress-bg">
+                                <div class="li-channel-progress-bar-meta" style="width: <?php echo min(100, $m_data->taxa); ?>%;"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
+            <?php endif; ?>
 
-            <!-- CARDS DE KPIs PRINCIPAIS -->
-            <div class="li-metric-grid">
-                <div class="li-metric-card">
-                    <span class="li-metric-label">Total de Leads</span>
-                    <span class="li-metric-value"><?php echo number_format_i18n($total_leads); ?></span>
-                    <span class="li-metric-sub">Elementor &amp; Campanhas</span>
+            <?php if ($show_kpis): ?>
+                <!-- CARDS DE KPIs PRINCIPAIS -->
+                <div id="li-sec-kpis" class="li-metric-grid">
+                    <div class="li-metric-card li-metric-total">
+                        <span class="li-metric-label">Total de Leads</span>
+                        <span class="li-metric-value"><?php echo number_format_i18n($total_leads); ?></span>
+                        <span class="li-metric-sub">Elementor &amp; Campanhas</span>
+                    </div>
+                    <div class="li-metric-card li-card-success li-metric-qual">
+                        <span class="li-metric-label">Leads Qualificados</span>
+                        <span class="li-metric-value"><?php echo number_format_i18n($total_qualificados); ?></span>
+                        <span class="li-metric-sub">Matrículas confirmadas</span>
+                    </div>
+                    <div class="li-metric-card li-card-warning li-metric-pend">
+                        <span class="li-metric-label">Pendentes</span>
+                        <span class="li-metric-value"><?php echo number_format_i18n($total_pendentes); ?></span>
+                        <span class="li-metric-sub">Aguardando planilha</span>
+                    </div>
+                    <div class="li-metric-card li-card-danger li-metric-desq">
+                        <span class="li-metric-label">Não Qualificados</span>
+                        <span class="li-metric-value"><?php echo number_format_i18n($total_desqualif); ?></span>
+                        <span class="li-metric-sub">Desqualificados/Recusados</span>
+                    </div>
+                    <div class="li-metric-card li-card-info li-metric-rate">
+                        <span class="li-metric-label">Taxa de Qualificação</span>
+                        <span class="li-metric-value"><?php echo $taxa_qualificacao; ?>%</span>
+                        <span class="li-metric-sub">Média do período</span>
+                    </div>
                 </div>
-                <div class="li-metric-card li-card-success">
-                    <span class="li-metric-label">Leads Qualificados</span>
-                    <span class="li-metric-value"><?php echo number_format_i18n($total_qualificados); ?></span>
-                    <span class="li-metric-sub">Matrículas confirmadas</span>
-                </div>
-                <div class="li-metric-card li-card-warning">
-                    <span class="li-metric-label">Pendentes</span>
-                    <span class="li-metric-value"><?php echo number_format_i18n($total_pendentes); ?></span>
-                    <span class="li-metric-sub">Aguardando planilha</span>
-                </div>
-                <div class="li-metric-card li-card-danger">
-                    <span class="li-metric-label">Não Qualificados</span>
-                    <span class="li-metric-value"><?php echo number_format_i18n($total_desqualif); ?></span>
-                    <span class="li-metric-sub">Desqualificados/Recusados</span>
-                </div>
-                <div class="li-metric-card li-card-info">
-                    <span class="li-metric-label">Taxa de Qualificação</span>
-                    <span class="li-metric-value" style="color: #0284c7;"><?php echo $taxa_qualificacao; ?>%</span>
-                    <span class="li-metric-sub">Média do período</span>
-                </div>
-            </div>
+            <?php endif; ?>
 
-            <!-- CALCULADORA DE CPL E INVESTIMENTO -->
-            <div class="li-card" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #ffffff;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 20px;">
-                    <div>
-                        <h3 style="color: #ffffff; margin: 0 0 6px 0; font-size: 16px;">💰 Calculadora de CPL e Custo por Lead Qualificado</h3>
-                        <p style="color: #94a3b8; font-size: 13px; margin: 0;">Informe o valor total investido nas campanhas da Meta no período para calcular o custo real de aquisição:</p>
+            <?php if ($show_calculator): ?>
+                <!-- CALCULADORA DE CPL E INVESTIMENTO -->
+                <div id="li-sec-calc" class="li-card li-card-calculator">
+                    <div class="li-calc-header">
+                        <div>
+                            <h3 class="li-calc-title">⚡ Calculadora HUD de CPL e Custo por Aluno</h3>
+                            <p class="li-calc-desc">Simulação em tempo real da eficiência do investimento em tráfego da Faveni:</p>
+                        </div>
+                        <div class="li-calc-input-wrap">
+                            <span class="li-calc-input-lbl">Investimento:</span>
+                            <div class="li-calc-field">
+                                <span class="li-calc-cur">R$</span>
+                                <input type="number" id="liInvestimentoInput" value="5000" min="0" step="100">
+                            </div>
+                            <button type="button" class="button button-primary li-btn li-btn-faveni" onclick="recalcularCPL()">Calcular</button>
+                        </div>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 13px; color: #cbd5e1;">Investimento Total:</span>
-                        <input type="number" id="liInvestimentoInput" value="5000" min="0" step="100" style="width: 130px; font-weight: 700; color: #0f172a; text-align: right; padding: 6px 10px; border-radius: 6px;">
-                        <button type="button" class="button button-primary" onclick="recalcularCPL()">Calcular</button>
+
+                    <div class="li-calc-grid">
+                        <div class="li-calc-box">
+                            <span class="li-calc-kpi-lbl">Custo por Lead Geral (CPL)</span>
+                            <div id="liCPLGeral" class="li-calc-kpi-val li-val-cyan">R$ 0,00</div>
+                        </div>
+                        <div class="li-calc-box">
+                            <span class="li-calc-kpi-lbl">Custo por Aluno Qualificado (CPQ)</span>
+                            <div id="liCPLQualificado" class="li-calc-kpi-val li-val-green">R$ 0,00</div>
+                        </div>
+                        <div class="li-calc-box">
+                            <span class="li-calc-kpi-lbl">Eficiência da Conversão</span>
+                            <div id="liEficiencia" class="li-calc-kpi-val li-val-amber"><?php echo $taxa_qualificacao; ?>%</div>
+                        </div>
                     </div>
                 </div>
+            <?php endif; ?>
 
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 20px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 18px;">
-                    <div>
-                        <span style="font-size: 12px; color: #94a3b8; text-transform: uppercase;">Custo por Lead Geral (CPL)</span>
-                        <div id="liCPLGeral" style="font-size: 26px; font-weight: 700; color: #38bdf8; margin-top: 4px;">R$ 0,00</div>
-                    </div>
-                    <div>
-                        <span style="font-size: 12px; color: #94a3b8; text-transform: uppercase;">Custo por Lead Qualificado (CPQ)</span>
-                        <div id="liCPLQualificado" style="font-size: 26px; font-weight: 700; color: #4ade80; margin-top: 4px;">R$ 0,00</div>
-                    </div>
-                    <div>
-                        <span style="font-size: 12px; color: #94a3b8; text-transform: uppercase;">Eficiência da Conversão</span>
-                        <div id="liEficiencia" style="font-size: 26px; font-weight: 700; color: #fbbf24; margin-top: 4px;"><?php echo $taxa_qualificacao; ?>%</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- GRÁFICO DE EVOLUÇÃO DIÁRIA -->
-            <?php if (!empty($daily_evolution)): ?>
-                <div class="li-card">
+            <?php if ($show_chart && !empty($daily_evolution)): ?>
+                <!-- GRÁFICO DE EVOLUÇÃO DIÁRIA -->
+                <div id="li-sec-chart" class="li-card">
                     <h3 class="li-card-title">📈 Evolução Diária de Captação vs. Qualificação</h3>
                     <p class="li-card-desc">Volume diário de leads gerados e leads confirmados na qualificação.</p>
 
@@ -437,147 +692,377 @@ class DashboardController {
                 </div>
             <?php endif; ?>
 
-            <!-- RELATÓRIO 1: DESEMPENHO POR CAMPANHA -->
-            <div class="li-card" style="padding: 0; overflow-x: auto;">
-                <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;">
-                    <h3 class="li-card-title">🎯 Qualidade de Leads por Campanha (Meta Ads)</h3>
-                    <p class="li-card-desc" style="margin-bottom: 0;">Descubra quais campanhas geram alunos reais com a maior taxa de qualificação e menor desperdício de verba.</p>
-                </div>
+            <?php if ($show_campaigns): ?>
+                <!-- RELATÓRIO 1: DESEMPENHO POR CAMPANHA -->
+                <div id="li-sec-campaigns" class="li-card" style="padding: 0; overflow-x: auto;">
+                    <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;">
+                        <h3 class="li-card-title">🎯 Qualidade de Leads por Campanha (Meta Ads)</h3>
+                        <p class="li-card-desc" style="margin-bottom: 0;">Descubra quais campanhas geram alunos reais com a maior taxa de qualificação e menor desperdício de verba.</p>
+                    </div>
 
-                <table class="wp-list-table widefat fixed striped li-table">
-                    <thead>
-                        <tr>
-                            <th>Campanha (UTM Campaign)</th>
-                            <th style="width: 110px; text-align: center;">Total Leads</th>
-                            <th style="width: 120px; text-align: center;">Qualificados</th>
-                            <th style="width: 130px; text-align: center;">Não Qualificados</th>
-                            <th style="width: 180px;">Taxa de Qualificação</th>
-                            <th style="width: 120px; text-align: center;">Classificação</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($campaigns)): ?>
+                    <table class="wp-list-table widefat fixed striped li-table">
+                        <thead>
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 35px; color: #64748b;">
-                                    Nenhuma campanha identificada no período selecionado.
-                                </td>
+                                <th>Campanha (UTM Campaign)</th>
+                                <th style="width: 110px; text-align: center;">Total Leads</th>
+                                <th style="width: 120px; text-align: center;">Qualificados</th>
+                                <th style="width: 130px; text-align: center;">Não Qualificados</th>
+                                <th style="width: 180px;">Taxa de Qualificação</th>
+                                <th style="width: 120px; text-align: center;">Classificação</th>
                             </tr>
-                        <?php else: ?>
-                            <?php foreach ($campaigns as $camp): ?>
-                                <?php
-                                $camp_taxa = $camp->leads > 0 ? round(($camp->qualificados / $camp->leads) * 100, 1) : 0;
-                                $is_high_quality = ($camp_taxa >= 25 && $camp->leads >= 5);
-                                ?>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($campaigns)): ?>
                                 <tr>
-                                    <td>
-                                        <strong><?php echo esc_html($camp->campanha); ?></strong>
+                                    <td colspan="6" style="text-align: center; padding: 35px; color: #64748b;">
+                                        Nenhuma campanha identificada no período selecionado.
                                     </td>
-                                    <td style="text-align: center; font-weight: 600;">
-                                        <?php echo number_format_i18n($camp->leads); ?>
-                                    </td>
-                                    <td style="text-align: center;">
-                                        <span style="font-weight: 700; color: #15803d;">
-                                            <?php echo number_format_i18n($camp->qualificados); ?>
-                                        </span>
-                                    </td>
-                                    <td style="text-align: center; color: #b91c1c;">
-                                        <?php echo number_format_i18n($camp->desqualificados); ?>
-                                    </td>
-                                    <td>
-                                        <div style="display: flex; align-items: center; gap: 8px;">
-                                            <div style="flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
-                                                <div style="width: <?php echo min(100, $camp_taxa); ?>%; height: 100%; background: <?php echo $camp_taxa >= 20 ? '#10b981' : ($camp_taxa >= 10 ? '#f59e0b' : '#ef4444'); ?>; border-radius: 4px;"></div>
-                                            </div>
-                                            <span style="font-size: 13px; font-weight: 700; min-width: 45px; text-align: right;">
-                                                <?php echo $camp_taxa; ?>%
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($campaigns as $camp): ?>
+                                    <?php
+                                    $camp_taxa = $camp->leads > 0 ? round(($camp->qualificados / $camp->leads) * 100, 1) : 0;
+                                    $is_high_quality = ($camp_taxa >= 25 && $camp->leads >= 5);
+                                    ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo esc_html($camp->campanha); ?></strong>
+                                        </td>
+                                        <td style="text-align: center; font-weight: 600;">
+                                            <?php echo number_format_i18n($camp->leads); ?>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <span style="font-weight: 700; color: #15803d;">
+                                                <?php echo number_format_i18n($camp->qualificados); ?>
                                             </span>
-                                        </div>
-                                    </td>
-                                    <td style="text-align: center;">
-                                        <?php if ($is_high_quality): ?>
-                                            <span class="li-badge li-status-qualificado" title="Campanha com alto retorno de qualificação">⭐ Alta Qualidade</span>
-                                        <?php elseif ($camp_taxa < 10 && $camp->leads >= 10): ?>
-                                            <span class="li-badge li-status-desqualificado" title="Alto custo por aluno real">⚠️ Baixa Qualidade</span>
-                                        <?php else: ?>
-                                            <span class="li-badge li-status-cinza">Normal</span>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- RELATÓRIO 2: QUALIDADE POR ANÚNCIO / CRIATIVO -->
-            <div class="li-card" style="padding: 0; overflow-x: auto;">
-                <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;">
-                    <h3 class="li-card-title">📢 Qualidade por Anúncio / Criativo</h3>
-                    <p class="li-card-desc" style="margin-bottom: 0;">Identifique quais criativos atraem o público mais qualificado para a equipe de vendas.</p>
+                                        </td>
+                                        <td style="text-align: center; color: #b91c1c;">
+                                            <?php echo number_format_i18n($camp->desqualificados); ?>
+                                        </td>
+                                        <td>
+                                            <div style="display: flex; align-items: center; gap: 8px;">
+                                                <div style="flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                                                    <div style="width: <?php echo min(100, $camp_taxa); ?>%; height: 100%; background: <?php echo $camp_taxa >= 20 ? '#10b981' : ($camp_taxa >= 10 ? '#f59e0b' : '#ef4444'); ?>; border-radius: 4px;"></div>
+                                                </div>
+                                                <span style="font-size: 13px; font-weight: 700; min-width: 45px; text-align: right;">
+                                                    <?php echo $camp_taxa; ?>%
+                                                </span>
+                                            </div>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <?php if ($is_high_quality): ?>
+                                                <span class="li-badge li-status-qualificado" title="Campanha com alto retorno de qualificação">⭐ Alta Qualidade</span>
+                                            <?php elseif ($camp_taxa < 10 && $camp->leads >= 10): ?>
+                                                <span class="li-badge li-status-desqualificado" title="Alto custo por aluno real">⚠️ Baixa Qualidade</span>
+                                            <?php else: ?>
+                                                <span class="li-badge li-status-cinza">Normal</span>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
                 </div>
+            <?php endif; ?>
 
-                <table class="wp-list-table widefat fixed striped li-table">
-                    <thead>
-                        <tr>
-                            <th>Anúncio / Criativo (ad_name / utm_content)</th>
-                            <th>Campanha</th>
-                            <th style="width: 110px; text-align: center;">Leads</th>
-                            <th style="width: 120px; text-align: center;">Qualificados</th>
-                            <th style="width: 150px; text-align: center;">Taxa de Qualificação</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($ads)): ?>
+            <?php if ($show_creatives): ?>
+                <!-- RELATÓRIO 2: QUALIDADE POR ANÚNCIO / CRIATIVO -->
+                <div id="li-sec-creatives" class="li-card" style="padding: 0; overflow-x: auto;">
+                    <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0;">
+                        <h3 class="li-card-title">📢 Qualidade por Anúncio / Criativo</h3>
+                        <p class="li-card-desc" style="margin-bottom: 0;">Identifique quais criativos atraem o público mais qualificado para a equipe de vendas.</p>
+                    </div>
+
+                    <table class="wp-list-table widefat fixed striped li-table">
+                        <thead>
                             <tr>
-                                <td colspan="5" style="text-align: center; padding: 35px; color: #64748b;">
-                                    Nenhum anúncio identificado no período.
-                                </td>
+                                <th>Anúncio / Criativo (ad_name / utm_content)</th>
+                                <th>Campanha</th>
+                                <th style="width: 110px; text-align: center;">Leads</th>
+                                <th style="width: 120px; text-align: center;">Qualificados</th>
+                                <th style="width: 150px; text-align: center;">Taxa de Qualificação</th>
                             </tr>
-                        <?php else: ?>
-                            <?php foreach ($ads as $ad): ?>
-                                <?php
-                                $ad_taxa = $ad->leads > 0 ? round(($ad->qualificados / $ad->leads) * 100, 1) : 0;
-                                ?>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($ads)): ?>
                                 <tr>
-                                    <td><strong><?php echo esc_html($ad->anuncio); ?></strong></td>
-                                    <td><span style="color: #64748b;"><?php echo esc_html($ad->campanha); ?></span></td>
-                                    <td style="text-align: center; font-weight: 600;"><?php echo number_format_i18n($ad->leads); ?></td>
-                                    <td style="text-align: center; font-weight: 700; color: #15803d;"><?php echo number_format_i18n($ad->qualificados); ?></td>
-                                    <td style="text-align: center;">
-                                        <span class="li-badge <?php echo $ad_taxa >= 20 ? 'li-status-qualificado' : 'li-status-pendente'; ?>">
-                                            <?php echo $ad_taxa; ?>%
-                                        </span>
+                                    <td colspan="5" style="text-align: center; padding: 35px; color: #64748b;">
+                                        Nenhum anúncio identificado no período.
                                     </td>
                                 </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
-            </div>
+                            <?php else: ?>
+                                <?php foreach ($ads as $ad): ?>
+                                    <?php
+                                    $ad_taxa = $ad->leads > 0 ? round(($ad->qualificados / $ad->leads) * 100, 1) : 0;
+                                    ?>
+                                    <tr>
+                                        <td><strong><?php echo esc_html($ad->anuncio); ?></strong></td>
+                                        <td><span style="color: #64748b;"><?php echo esc_html($ad->campanha); ?></span></td>
+                                        <td style="text-align: center; font-weight: 600;"><?php echo number_format_i18n($ad->leads); ?></td>
+                                        <td style="text-align: center; font-weight: 700; color: #15803d;"><?php echo number_format_i18n($ad->qualificados); ?></td>
+                                        <td style="text-align: center;">
+                                            <span class="li-badge <?php echo $ad_taxa >= 20 ? 'li-status-qualificado' : 'li-status-pendente'; ?>">
+                                                <?php echo $ad_taxa; ?>%
+                                            </span>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
+
+                    </div> <!-- /li-content-scroll -->
+                </div> <!-- /li-main-wrapper -->
+            </div> <!-- /li-app-layout -->
 
             <script>
-            function toggleCustomDates(val) {
-                var box = document.getElementById('liCustomDateBox');
-                if (val === 'custom') {
-                    box.style.display = 'flex';
-                } else {
-                    box.style.display = 'none';
+            function liToggleSidebar() {
+                var sidebar = document.getElementById('liSidebar');
+                if (sidebar) {
+                    sidebar.classList.toggle('is-open');
                 }
             }
 
+            // Fechar sidebar ao clicar fora em telas mobile
+            document.addEventListener('click', function(e) {
+                var sidebar = document.getElementById('liSidebar');
+                var toggle = document.querySelector('.li-sidebar-mobile-toggle');
+                if (!sidebar || !toggle) return;
+                if (sidebar.classList.contains('is-open')) {
+                    if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+                        sidebar.classList.remove('is-open');
+                    }
+                }
+            });
+
+            // Rolagem suave com destaque de item ativo
+            document.querySelectorAll('.li-nav-item[data-target]').forEach(function(item) {
+                item.addEventListener('click', function(e) {
+                    var targetId = this.getAttribute('data-target');
+                    var targetEl = document.getElementById(targetId);
+                    if (targetEl) {
+                        e.preventDefault();
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        document.querySelectorAll('.li-nav-item').forEach(function(n) { n.classList.remove('is-active'); });
+                        this.classList.add('is-active');
+                        var sidebar = document.getElementById('liSidebar');
+                        if (sidebar && window.innerWidth <= 980) {
+                            sidebar.classList.remove('is-open');
+                        }
+                    }
+                });
+            });
+
+            function liInitTheme() {
+                var wraps = document.querySelectorAll('.li-wrap');
+                if (!wraps.length) return;
+                var saved = localStorage.getItem('li_dashboard_theme');
+                var theme = saved || wraps[0].getAttribute('data-theme') || 'dark';
+                wraps.forEach(function(wrap) { wrap.setAttribute('data-theme', theme); });
+                liUpdateThemeUI(theme);
+            }
+
+            function liToggleTheme() {
+                var wraps = document.querySelectorAll('.li-wrap');
+                if (!wraps.length) return;
+                var current = wraps[0].getAttribute('data-theme') || 'dark';
+                var next = (current === 'dark') ? 'light' : 'dark';
+                wraps.forEach(function(wrap) { wrap.setAttribute('data-theme', next); });
+                localStorage.setItem('li_dashboard_theme', next);
+                liUpdateThemeUI(next);
+            }
+
+            function liUpdateThemeUI(theme) {
+                var btns = document.querySelectorAll('.li-theme-toggle-btn');
+                btns.forEach(function(btn) {
+                    var icon = btn.querySelector('.li-theme-toggle-icon');
+                    var text = btn.querySelector('.li-theme-toggle-text');
+                    if (theme === 'dark') {
+                        if (icon) icon.textContent = '🌙';
+                        if (text) text.textContent = 'Modo Escuro';
+                        btn.classList.add('is-dark');
+                        btn.classList.remove('is-light');
+                    } else {
+                        if (icon) icon.textContent = '☀️';
+                        if (text) text.textContent = 'Modo Claro';
+                        btn.classList.add('is-light');
+                        btn.classList.remove('is-dark');
+                    }
+                });
+            }
+
+            function liToggleFullscreen() {
+                var wrap = document.querySelector('.li-wrap');
+                if (!wrap) return;
+                var isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                if (!isFull) {
+                    if (wrap.requestFullscreen) {
+                        wrap.requestFullscreen();
+                    } else if (wrap.webkitRequestFullscreen) {
+                        wrap.webkitRequestFullscreen();
+                    }
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    } else if (document.webkitExitFullscreen) {
+                        document.webkitExitFullscreen();
+                    }
+                }
+            }
+
+            function liUpdateFullscreenUI() {
+                var isFull = !!(document.fullscreenElement || document.webkitFullscreenElement);
+                var btns = document.querySelectorAll('.li-fullscreen-btn');
+                var wraps = document.querySelectorAll('.li-wrap');
+                wraps.forEach(function(w) {
+                    if (isFull) {
+                        w.classList.add('is-fullscreen');
+                    } else {
+                        w.classList.remove('is-fullscreen');
+                    }
+                });
+                btns.forEach(function(btn) {
+                    var text = btn.querySelector('.li-fullscreen-text');
+                    var icon = btn.querySelector('.li-fullscreen-icon');
+                    if (isFull) {
+                        if (text) text.textContent = 'Sair da Tela Cheia';
+                        if (icon) icon.textContent = '✕';
+                    } else {
+                        if (text) text.textContent = 'Tela Cheia';
+                        if (icon) icon.textContent = '⛶';
+                    }
+                });
+            }
+
+            document.addEventListener('fullscreenchange', liUpdateFullscreenUI);
+            document.addEventListener('webkitfullscreenchange', liUpdateFullscreenUI);
+
+            function liFormatDateYMD(d) {
+                var year = d.getFullYear();
+                var month = String(d.getMonth() + 1).padStart(2, '0');
+                var day = String(d.getDate()).padStart(2, '0');
+                return year + '-' + month + '-' + day;
+            }
+
+            function liOnPeriodoChange(val) {
+                var inputFrom = document.getElementById('liDateInputFrom');
+                var inputTo = document.getElementById('liDateInputTo');
+                if (!inputFrom || !inputTo) return;
+
+                var today = new Date();
+                var from = '', to = '';
+
+                if (val === 'today') {
+                    from = liFormatDateYMD(today);
+                    to = liFormatDateYMD(today);
+                } else if (val === 'yesterday') {
+                    var y = new Date(today);
+                    y.setDate(today.getDate() - 1);
+                    from = liFormatDateYMD(y);
+                    to = liFormatDateYMD(y);
+                } else if (val === '7d') {
+                    var d7 = new Date(today);
+                    d7.setDate(today.getDate() - 7);
+                    from = liFormatDateYMD(d7);
+                    to = liFormatDateYMD(today);
+                } else if (val === '30d') {
+                    var d30 = new Date(today);
+                    d30.setDate(today.getDate() - 30);
+                    from = liFormatDateYMD(d30);
+                    to = liFormatDateYMD(today);
+                } else if (val === 'month') {
+                    var mStart = new Date(today.getFullYear(), today.getMonth(), 1);
+                    from = liFormatDateYMD(mStart);
+                    to = liFormatDateYMD(today);
+                } else if (val === 'last_month') {
+                    var lmStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    var lmEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+                    from = liFormatDateYMD(lmStart);
+                    to = liFormatDateYMD(lmEnd);
+                } else if (val === 'all') {
+                    from = '';
+                    to = '';
+                } else if (val === 'custom') {
+                    inputFrom.focus();
+                    return;
+                }
+
+                inputFrom.value = from;
+                inputTo.value = to;
+            }
+
+            function liOnDateInputChange() {
+                var select = document.getElementById('liPeriodoSelect');
+                if (select) {
+                    select.value = 'custom';
+                }
+            }
+
+            function toggleCustomDates(val) {
+                liOnPeriodoChange(val);
+            }
+
             function recalcularCPL() {
-                var investimento = parseFloat(document.getElementById('liInvestimentoInput').value) || 0;
+                var input = document.getElementById('liInvestimentoInput');
+                var geral = document.getElementById('liCPLGeral');
+                var qual = document.getElementById('liCPLQualificado');
+                if (!input || !geral || !qual) return;
+
+                var investimento = parseFloat(input.value) || 0;
                 var totalLeads = <?php echo (int) $total_leads; ?>;
                 var qualificados = <?php echo (int) $total_qualificados; ?>;
 
                 var cplGeral = totalLeads > 0 ? (investimento / totalLeads) : 0;
                 var cplQual = qualificados > 0 ? (investimento / qualificados) : 0;
 
-                document.getElementById('liCPLGeral').innerText = 'R$ ' + cplGeral.toFixed(2).replace('.', ',');
-                document.getElementById('liCPLQualificado').innerText = 'R$ ' + cplQual.toFixed(2).replace('.', ',');
+                geral.innerText = 'R$ ' + cplGeral.toFixed(2).replace('.', ',');
+                qual.innerText = 'R$ ' + cplQual.toFixed(2).replace('.', ',');
             }
 
-            document.addEventListener('DOMContentLoaded', recalcularCPL);
+            function liToggleSidebarCollapse() {
+                var layout = document.querySelector('.li-app-layout');
+                if (!layout) return;
+                var isCollapsed = layout.classList.toggle('li-sidebar-collapsed');
+                localStorage.setItem('li_sidebar_collapsed', isCollapsed ? '1' : '0');
+                liUpdateCollapseUI(isCollapsed);
+            }
+
+            function liUpdateCollapseUI(isCollapsed) {
+                var btn = document.querySelector('.li-sidebar-toggle-btn span');
+                if (btn) {
+                    btn.textContent = isCollapsed ? '⇥' : '⇤';
+                }
+                var topbarIcon = document.querySelector('.li-sidebar-toggle-topbar .li-toggle-icon');
+                if (topbarIcon) {
+                    topbarIcon.textContent = isCollapsed ? '⇥' : '☰';
+                }
+            }
+
+            function liInitSidebarCollapse() {
+                var layout = document.querySelector('.li-app-layout');
+                if (!layout) return;
+                var saved = localStorage.getItem('li_sidebar_collapsed');
+                var isCollapsed = (saved === '1');
+                if (isCollapsed) {
+                    layout.classList.add('li-sidebar-collapsed');
+                }
+                liUpdateCollapseUI(isCollapsed);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function() {
+                    liInitTheme();
+                    liInitSidebarCollapse();
+                    recalcularCPL();
+                });
+            } else {
+                liInitTheme();
+                liInitSidebarCollapse();
+                recalcularCPL();
+            }
             </script>
         </div>
         <?php

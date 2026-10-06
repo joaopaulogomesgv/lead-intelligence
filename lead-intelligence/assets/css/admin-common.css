@@ -1,305 +1,1091 @@
 /**
- * Lead Intelligence - Admin Styles
+ * Lead Intelligence - Futuristic Faveni HUD Design System
+ * 
+ * Brand Color: #10824C (Faveni Official Emerald)
+ * Features: Dark Mode HUD + Crisp Light Mode
+ * Isolation: Strictly scoped to .li-wrap (Zero WordPress or theme leakage)
  */
 
+/* ==========================================================================
+   1. Variáveis CSS Globais com Escopo Restrito (.li-wrap)
+   ========================================================================== */
+
+/* Tema Claro (Padrão e data-theme="light") */
+.li-wrap,
+.li-wrap[data-theme="light"] {
+    --li-brand: #10824C;
+    --li-brand-hover: #0c673c;
+    --li-brand-neon: #18b368;
+    --li-brand-glow: rgba(16, 130, 76, 0.25);
+    --li-brand-light: rgba(16, 130, 76, 0.08);
+
+    --li-bg-app: #f8fafc;
+    --li-bg-card: #ffffff;
+    --li-bg-card-subtle: #f1f5f9;
+    --li-bg-card-hover: #f8fafc;
+
+    --li-border: #e2e8f0;
+    --li-border-light: #edf2f7;
+    --li-border-glow: rgba(16, 130, 76, 0.35);
+
+    --li-text-main: #0f172a;
+    --li-text-muted: #64748b;
+    --li-text-dim: #94a3b8;
+
+    --li-input-bg: #ffffff;
+    --li-input-border: #cbd5e1;
+    --li-input-text: #0f172a;
+
+    --li-table-th-bg: #f8fafc;
+    --li-table-th-text: #475569;
+    --li-table-tr-hover: #f8fafc;
+    --li-table-border: #f1f5f9;
+
+    --li-card-shadow: 0 4px 16px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
+    --li-glow-box: 0 0 15px rgba(16, 130, 76, 0.15);
+
+    --li-badge-winner-bg: #fef08a;
+    --li-badge-winner-text: #854d0e;
+    --li-badge-winner-border: #fde047;
+}
+
+/* Tema Escuro Futurista HUD (data-theme="dark") - Inspirado em Dashboards de Alta Tecnologia */
+.li-wrap[data-theme="dark"] {
+    --li-brand: #10824C;
+    --li-brand-hover: #14995a;
+    --li-brand-neon: #1dd67c;
+    --li-brand-glow: rgba(24, 179, 104, 0.45);
+    --li-brand-light: rgba(16, 130, 76, 0.2);
+
+    --li-bg-app: #080c14;
+    --li-bg-card: #0f1523;
+    --li-bg-card-subtle: #141c2e;
+    --li-bg-card-hover: #182238;
+
+    --li-border: #1e293b;
+    --li-border-light: rgba(255, 255, 255, 0.08);
+    --li-border-glow: rgba(24, 179, 104, 0.5);
+
+    --li-text-main: #f8fafc;
+    --li-text-muted: #94a3b8;
+    --li-text-dim: #64748b;
+
+    --li-input-bg: #0b101b;
+    --li-input-border: #222f46;
+    --li-input-text: #f1f5f9;
+
+    --li-table-th-bg: #121927;
+    --li-table-th-text: #94a3b8;
+    --li-table-tr-hover: rgba(24, 179, 104, 0.07);
+    --li-table-border: #1a2334;
+
+    --li-card-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.65), 0 2px 6px -1px rgba(0, 0, 0, 0.4);
+    --li-glow-box: 0 0 20px rgba(16, 130, 76, 0.35);
+
+    --li-badge-winner-bg: rgba(234, 179, 8, 0.2);
+    --li-badge-winner-text: #fde047;
+    --li-badge-winner-border: rgba(234, 179, 8, 0.4);
+}
+
+/* ==========================================================================
+   2. Container Principal (.li-wrap) e Reset Local
+   ========================================================================== */
+
 .li-wrap {
-    max-width: 1300px;
-    margin: 20px 20px 0 2px;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+    width: 100%;
+    max-width: 100%;
+    margin: 0 0 24px 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", sans-serif;
+    color: var(--li-text-main);
+    background-color: var(--li-bg-app);
+    border-radius: 0;
+    padding: 24px 30px;
+    box-sizing: border-box;
+    transition: background-color 0.3s ease, color 0.3s ease;
+    position: relative;
+    border: none;
 }
 
-.li-header {
-    margin-bottom: 24px;
+.li-wrap *,
+.li-wrap *::before,
+.li-wrap *::after {
+    box-sizing: border-box;
 }
 
-.li-header h2 {
-    font-size: 22px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0 0 4px 0;
-    display: inline-block;
+/* Suporte específico quando embutido via shortcode no frontend (Largura Total e Sem Cantos Arredondados) */
+.li-wrap.li-frontend-wrap {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 24px 32px;
+    border-radius: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
 }
 
-.li-subtitle {
-    color: #64748b;
+/* Quebra de container para 100vw apenas quando NÃO for o layout do dashboard com sidebar */
+.li-wrap.li-frontend-wrap.li-full-width:not(.li-wrap-dashboard) {
+    width: 100vw !important;
+    position: relative !important;
+    left: 50% !important;
+    right: 50% !important;
+    margin-left: -50vw !important;
+    margin-right: -50vw !important;
+    max-width: 100vw !important;
+    border-radius: 0 !important;
+    border: none !important;
+    box-sizing: border-box !important;
+    padding: 30px 40px !important;
+}
+
+/* Regras específicas para o Layout Dashboard HUD com Sidebar (Sem corte, 100% largura limpa) */
+.li-wrap.li-wrap-dashboard,
+.li-wrap.li-wrap-dashboard.li-full-width,
+.li-wrap.li-frontend-wrap.li-wrap-dashboard,
+.li-wrap.li-frontend-wrap.li-wrap-dashboard.li-full-width {
+    width: 100% !important;
+    max-width: 100% !important;
+    left: auto !important;
+    right: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+    border: none !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    overflow-x: hidden !important;
+}
+
+/* Modo Tela Cheia (Fullscreen API e Classe .is-fullscreen) */
+.li-wrap:fullscreen,
+.li-wrap:-webkit-full-screen,
+.li-wrap.is-fullscreen {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    min-height: 100vh !important;
+    height: 100vh !important;
+    overflow-y: auto !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+    padding: 28px 36px !important;
+    border: none !important;
+    box-sizing: border-box !important;
+    background-color: var(--li-bg-app) !important;
+    z-index: 999999 !important;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+}
+
+/* ==========================================================================
+   3. Cabeçalho Futurista e Alternador de Tema
+   ========================================================================== */
+
+.li-wrap .li-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 26px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--li-border);
+}
+
+.li-wrap .li-header-main {
+    flex: 1;
+    min-width: 280px;
+}
+
+/* Logotipos da Marca no Cabeçalho */
+.li-wrap .li-header-brand-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+}
+
+.li-wrap .li-brand-logos {
+    display: flex;
+    align-items: center;
+}
+
+.li-wrap .li-logo-img {
+    max-height: 44px;
+    max-width: 240px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    transition: opacity 0.2s ease;
+}
+
+/* Alternância automática de Logo conforme o Tema */
+.li-wrap[data-theme="dark"] .li-logo-dark {
+    display: block !important;
+}
+.li-wrap[data-theme="dark"] .li-logo-light {
+    display: none !important;
+}
+.li-wrap[data-theme="light"] .li-logo-light {
+    display: block !important;
+}
+.li-wrap[data-theme="light"] .li-logo-dark {
+    display: none !important;
+}
+
+.li-wrap .li-brand-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--li-brand-light);
+    border: 1px solid var(--li-border-glow);
+    margin-bottom: 0;
+}
+
+.li-wrap .li-brand-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--li-brand-neon);
+    box-shadow: 0 0 10px var(--li-brand-neon);
+    animation: liPulse 2s infinite ease-in-out;
+}
+
+@keyframes liPulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(24, 179, 104, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 8px rgba(24, 179, 104, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(24, 179, 104, 0);
+    }
+}
+
+.li-wrap .li-brand-title {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--li-brand-neon);
+    text-transform: uppercase;
+}
+
+.li-wrap .li-brand-live {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    background: var(--li-brand);
+    color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+.li-wrap .li-dashboard-title {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--li-text-main);
+    margin: 0 0 6px 0;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.li-wrap .li-subtitle {
+    color: var(--li-text-muted);
     font-size: 14px;
     margin: 0;
 }
 
-/* CARDS */
-.li-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
+.li-wrap .li-header-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* Botão Alternador Modo Claro / Escuro */
+.li-wrap .li-theme-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    color: var(--li-text-main);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.li-wrap .li-theme-toggle-btn:hover {
+    border-color: var(--li-brand-neon);
+    background: var(--li-bg-card-hover);
+    box-shadow: 0 0 12px var(--li-brand-glow);
+    transform: translateY(-1px);
+}
+
+.li-wrap .li-theme-toggle-btn .li-theme-toggle-icon {
+    font-size: 15px;
+    line-height: 1;
+}
+
+/* Botão Tela Cheia (Fullscreen) */
+.li-wrap .li-fullscreen-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 999px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    color: var(--li-text-main);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.li-wrap .li-fullscreen-btn:hover {
+    border-color: var(--li-brand-neon);
+    background: var(--li-bg-card-hover);
+    box-shadow: 0 0 12px var(--li-brand-glow);
+    transform: translateY(-1px);
+}
+
+.li-wrap .li-fullscreen-btn .li-fullscreen-icon {
+    font-size: 14px;
+    line-height: 1;
+}
+
+/* ==========================================================================
+   4. Cards e Superfícies Futuristas
+   ========================================================================== */
+
+.li-wrap .li-card {
+    background: var(--li-bg-card);
+    border: 1px solid var(--li-border);
+    border-radius: 14px;
     padding: 24px;
     margin-bottom: 24px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    box-shadow: var(--li-card-shadow);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
 }
 
-.li-card-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: #0f172a;
+.li-wrap .li-card:hover {
+    border-color: var(--li-border-glow);
+}
+
+.li-wrap .li-card-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--li-text-main);
     margin: 0 0 6px 0;
+    letter-spacing: -0.01em;
 }
 
-.li-card-desc {
-    color: #64748b;
+.li-wrap .li-card-desc {
+    color: var(--li-text-muted);
     font-size: 13px;
     margin: 0 0 18px 0;
+    line-height: 1.5;
 }
 
-/* GRID DE MÉTRICAS */
-.li-metric-grid {
+/* ==========================================================================
+   5. Grid de Métricas / KPIs com Acentos HUD
+   ========================================================================== */
+
+.li-wrap .li-metric-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
 }
 
-.li-metric-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 20px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+.li-wrap .li-metric-card {
+    background: var(--li-bg-card);
+    border: 1px solid var(--li-border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    box-shadow: var(--li-card-shadow);
     display: flex;
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.li-metric-card::before {
+.li-wrap .li-metric-card:hover {
+    transform: translateY(-2px);
+    border-color: var(--li-border-glow);
+    box-shadow: var(--li-glow-box), var(--li-card-shadow);
+}
+
+.li-wrap .li-metric-card::before {
     content: "";
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     height: 4px;
-    background: #3b82f6;
+    background: linear-gradient(90deg, var(--li-brand), var(--li-brand-neon));
+    box-shadow: 0 0 10px var(--li-brand-glow);
 }
 
-.li-metric-card.li-card-success::before {
-    background: #10b981;
+.li-wrap .li-metric-card.li-card-success::before {
+    background: linear-gradient(90deg, #10b981, #34d399);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
-.li-metric-card.li-card-warning::before {
-    background: #f59e0b;
+.li-wrap .li-metric-card.li-card-warning::before {
+    background: linear-gradient(90deg, #f59e0b, #fbbf24);
+    box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
 }
 
-.li-metric-card.li-card-danger::before {
-    background: #ef4444;
+.li-wrap .li-metric-card.li-card-danger::before {
+    background: linear-gradient(90deg, #ef4444, #f87171);
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
 }
 
-.li-metric-card.li-card-info::before {
-    background: #8b5cf6;
+.li-wrap .li-metric-card.li-card-info::before {
+    background: linear-gradient(90deg, #8b5cf6, #a78bfa);
+    box-shadow: 0 0 10px rgba(139, 92, 246, 0.4);
 }
 
-.li-metric-label {
-    font-size: 12px;
+.li-wrap .li-metric-label {
+    font-size: 11px;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    font-weight: 600;
-    color: #64748b;
-    margin-bottom: 6px;
-}
-
-.li-metric-value {
-    font-size: 28px;
+    letter-spacing: 0.06em;
     font-weight: 700;
-    color: #0f172a;
+    color: var(--li-text-dim);
+    margin-bottom: 8px;
+}
+
+.li-wrap .li-metric-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--li-text-main);
     line-height: 1.1;
-    margin-bottom: 4px;
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
 }
 
-.li-metric-sub {
+.li-wrap .li-metric-sub {
     font-size: 12px;
-    color: #94a3b8;
+    color: var(--li-text-muted);
 }
 
-/* FILTROS */
-.li-filter-bar {
-    padding: 16px 20px;
+/* ==========================================================================
+   6. Barra de Filtros e Campos de Entrada HUD
+   ========================================================================== */
+
+.li-wrap .li-filter-bar {
+    padding: 20px 24px;
+    background: var(--li-bg-card);
+    border: 1px solid var(--li-border);
+    border-radius: 14px;
+    margin-bottom: 24px;
+    box-shadow: var(--li-card-shadow);
 }
 
-.li-filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
-}
-
-.li-search-box {
-    flex: 1;
-    min-width: 250px;
-}
-
-.li-search-box input {
-    width: 100%;
-    padding: 6px 12px;
-    border: 1px solid #cbd5e1;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-/* TABELAS */
-.li-table {
-    border: none;
-    box-shadow: none;
+.li-wrap .li-filter-form {
     margin: 0;
 }
 
-.li-table th {
-    background: #f8fafc;
-    color: #475569;
-    font-weight: 600;
-    font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    padding: 14px 16px;
-    border-bottom: 1px solid #e2e8f0;
+.li-wrap .li-filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
 }
 
-.li-table td {
-    padding: 14px 16px;
-    vertical-align: middle;
-    border-bottom: 1px solid #f1f5f9;
+.li-wrap .li-filter-col {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 140px;
+    min-width: 135px;
 }
 
-/* STATUS BADGES */
-.li-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 9999px;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1;
+.li-wrap .li-filter-col.li-filter-dates-col {
+    flex: 1.8 1 260px;
+    min-width: 250px;
 }
 
-.li-status-qualificado {
-    background: #dcfce7;
-    color: #15803d;
+.li-wrap .li-filter-col.li-filter-actions-col {
+    flex: 0 0 auto;
+    min-width: auto;
 }
 
-.li-status-pendente {
-    background: #fef3c7;
-    color: #b45309;
-}
-
-.li-status-desqualificado {
-    background: #fee2e2;
-    color: #b91c1c;
-}
-
-.li-status-cinza {
-    background: #f1f5f9;
-    color: #475569;
-}
-
-.li-status-aviso {
-    background: #ffedd5;
-    color: #c2410c;
-}
-
-.li-status-debug {
-    background: #ede9fe;
-    color: #6d28d9;
-}
-
-.li-badge-mini {
-    display: inline-block;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-size: 10px;
+.li-wrap .li-filter-lbl {
+    font-size: 11px;
     font-weight: 700;
-    background: #1877f2;
-    color: #ffffff;
-    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--li-text-dim);
+    margin: 0;
 }
 
-.li-tag {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 12px;
+/* Select customizado HUD com chevron SVG elegante (sem scrollbar nativa) */
+.li-wrap select,
+.li-wrap .li-select {
+    height: 42px;
+    line-height: 1.4;
+    padding: 8px 36px 8px 14px;
+    border: 1px solid var(--li-input-border);
+    border-radius: 8px;
+    background-color: var(--li-input-bg);
+    color: var(--li-input-text);
+    font-size: 13px;
     font-weight: 500;
-}
-
-.li-tag-blue {
-    background: #e0f2fe;
-    color: #0369a1;
-}
-
-/* TOGGLE SWITCH */
-.li-switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 24px;
-}
-
-.li-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.li-slider {
-    position: absolute;
+    font-family: inherit;
+    box-sizing: border-box;
+    outline: none;
     cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: #cbd5e1;
-    transition: .3s;
-    border-radius: 24px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394a3b8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
 }
 
-.li-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: .3s;
-    border-radius: 50%;
+.li-wrap select:focus,
+.li-wrap .li-select:focus {
+    border-color: var(--li-brand-neon);
+    box-shadow: 0 0 0 3px var(--li-brand-glow);
 }
 
-.li-switch input:checked + .li-slider {
-    background-color: #0284c7;
+.li-wrap select option,
+.li-wrap .li-select option {
+    background-color: var(--li-bg-card);
+    color: var(--li-text-main);
+    padding: 8px 12px;
 }
 
-.li-switch input:checked + .li-slider:before {
-    transform: translateX(20px);
+/* Cápsula de Datas De/Até */
+.li-wrap .li-dates-capsule {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--li-input-bg);
+    border: 1px solid var(--li-input-border);
+    border-radius: 8px;
+    padding: 0 10px;
+    height: 42px;
+    box-sizing: border-box;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-/* PAGINAÇÃO */
-.li-pagination {
+.li-wrap .li-dates-capsule:focus-within {
+    border-color: var(--li-brand-neon);
+    box-shadow: 0 0 0 3px var(--li-brand-glow);
+}
+
+.li-wrap .li-date-tag {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--li-text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-date-sep {
+    font-size: 12px;
+    color: var(--li-brand-neon);
+    font-weight: 800;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-date-input {
+    border: none !important;
+    background: transparent !important;
+    color: var(--li-input-text) !important;
+    padding: 0 2px !important;
+    height: 100% !important;
+    box-shadow: none !important;
+    font-size: 13px !important;
+    font-family: inherit !important;
+    outline: none !important;
+    flex: 1;
+    min-width: 100px;
+    cursor: pointer;
+}
+
+/* Indicador de calendário */
+.li-wrap[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.85);
+    cursor: pointer;
+}
+
+.li-wrap[data-theme="light"] input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.3);
+    cursor: pointer;
+}
+
+.li-wrap .li-filter-btns {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.li-wrap input[type="text"],
+.li-wrap input[type="number"] {
+    height: 42px;
+    line-height: 1.4;
+    padding: 8px 14px;
+    border: 1px solid var(--li-input-border);
+    border-radius: 8px;
+    background-color: var(--li-input-bg);
+    color: var(--li-input-text);
+    font-size: 13px;
+    font-family: inherit;
+    box-sizing: border-box;
+    outline: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.li-wrap input[type="text"]:focus,
+.li-wrap input[type="number"]:focus {
+    border-color: var(--li-brand-neon);
+    box-shadow: 0 0 0 3px var(--li-brand-glow);
+}
+
+/* Botões do Plugin */
+.li-wrap .button,
+.li-wrap .li-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 40px;
+    padding: 0 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    border: 1px solid var(--li-border);
+    background: var(--li-bg-card-subtle);
+    color: var(--li-text-main);
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.li-wrap .button:hover,
+.li-wrap .li-btn:hover {
+    background: var(--li-bg-card-hover);
+    border-color: var(--li-brand-neon);
+    color: var(--li-text-main);
+    transform: translateY(-1px);
+}
+
+/* Botão Oficial Faveni */
+.li-wrap .button-primary,
+.li-wrap .li-btn-primary,
+.li-wrap .li-btn-faveni {
+    background: linear-gradient(135deg, #10824C 0%, #169b5c 100%) !important;
+    border-color: #10824C !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 14px rgba(16, 130, 76, 0.4) !important;
+}
+
+.li-wrap .button-primary:hover,
+.li-wrap .li-btn-primary:hover,
+.li-wrap .li-btn-faveni:hover {
+    background: linear-gradient(135deg, #129155 0%, #1bb56c 100%) !important;
+    border-color: #129155 !important;
+    box-shadow: 0 6px 20px rgba(16, 130, 76, 0.6) !important;
+    transform: translateY(-1px);
+}
+
+.li-wrap .li-btn-ghost {
+    background: transparent !important;
+    border-color: var(--li-border) !important;
+    color: var(--li-text-muted) !important;
+}
+
+.li-wrap .li-btn-ghost:hover {
+    background: var(--li-bg-card-subtle) !important;
+    color: var(--li-text-main) !important;
+    border-color: var(--li-brand-neon) !important;
+}
+
+/* ==========================================================================
+   7. Comparativo Executivo Google Ads vs Meta Ads
+   ========================================================================= */
+
+.li-wrap .li-card-channel-compare {
+    background: var(--li-bg-card);
+    border: 1px solid var(--li-border);
+}
+
+.li-wrap .li-channel-compare-grid {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 14px;
+}
+
+@media (max-width: 900px) {
+    .li-wrap .li-channel-compare-grid {
+        flex-direction: column;
+    }
+}
+
+.li-wrap .li-channel-box {
+    flex: 1;
+    background: var(--li-bg-card-subtle);
+    border-radius: 12px;
+    padding: 18px 22px;
+    border: 1px solid var(--li-border);
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.li-wrap .li-channel-box:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.li-wrap .li-channel-google {
+    border-left: 4px solid #1a73e8;
+}
+
+.li-wrap .li-channel-meta {
+    border-left: 4px solid #0866ff;
+}
+
+.li-wrap .li-channel-box-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-top: 16px;
-    color: #64748b;
+    margin-bottom: 14px;
+}
+
+.li-wrap .li-channel-tag-google {
+    font-size: 14px;
+    font-weight: 700;
+    color: #38bdf8;
+}
+
+.li-wrap .li-channel-tag-meta {
+    font-size: 14px;
+    font-weight: 700;
+    color: #60a5fa;
+}
+
+.li-wrap .li-badge-winner {
+    background: var(--li-badge-winner-bg);
+    color: var(--li-badge-winner-text);
+    border: 1px solid var(--li-badge-winner-border);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+.li-wrap .li-channel-stats-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 14px;
+}
+
+.li-wrap .li-channel-stat {
+    display: flex;
+    flex-direction: column;
+}
+
+.li-wrap .li-channel-stat-num {
+    font-size: 22px;
+    font-weight: 800;
+    color: var(--li-text-main);
+    line-height: 1.2;
+}
+
+.li-wrap .li-channel-stat-lbl {
+    font-size: 11px;
+    color: var(--li-text-dim);
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.li-wrap .li-color-green {
+    color: var(--li-brand-neon) !important;
+}
+
+.li-wrap .li-color-blue {
+    color: #38bdf8 !important;
+}
+
+.li-wrap .li-color-meta {
+    color: #60a5fa !important;
+}
+
+.li-wrap .li-channel-progress-bg {
+    background: var(--li-border);
+    height: 6px;
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.li-wrap .li-channel-progress-bar-google {
+    background: linear-gradient(90deg, #1a73e8, #34a853);
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+.li-wrap .li-channel-progress-bar-meta {
+    background: linear-gradient(90deg, #0866ff, #00c6ff);
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+}
+
+.li-wrap .li-channel-vs {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--li-text-dim);
+    background: var(--li-bg-card-subtle);
+    width: 38px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    border: 1px solid var(--li-border);
+    flex-shrink: 0;
+}
+
+/* ==========================================================================
+   8. Calculadora HUD de CPL e Investimento
+   ========================================================================== */
+
+.li-wrap .li-card-calculator {
+    background: var(--li-bg-card);
+    border: 1px solid var(--li-border);
+}
+
+.li-wrap .li-calc-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.li-wrap .li-calc-title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--li-text-main);
+}
+
+.li-wrap .li-calc-desc {
+    margin: 4px 0 0 0;
+    color: var(--li-text-muted);
     font-size: 13px;
 }
 
-.li-pagination-links {
+.li-wrap .li-calc-input-wrap {
     display: flex;
-    gap: 4px;
+    align-items: center;
+    gap: 10px;
 }
 
-/* MODAL DE DETALHES */
+.li-wrap .li-calc-input-lbl {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--li-text-muted);
+}
+
+.li-wrap .li-calc-field {
+    display: flex;
+    align-items: center;
+    background: var(--li-input-bg);
+    border: 1px solid var(--li-input-border);
+    border-radius: 8px;
+    padding: 0 10px;
+}
+
+.li-wrap .li-calc-cur {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--li-text-muted);
+    margin-right: 4px;
+}
+
+.li-wrap .li-calc-field input {
+    width: 100px;
+    border: none;
+    box-shadow: none;
+    padding: 8px 4px;
+    background: transparent;
+    color: var(--li-input-text);
+    font-weight: 700;
+}
+
+.li-wrap .li-calc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+}
+
+.li-wrap .li-calc-box {
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    border-radius: 12px;
+    padding: 18px;
+}
+
+.li-wrap .li-calc-kpi-lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--li-text-dim);
+    display: block;
+    margin-bottom: 6px;
+}
+
+.li-wrap .li-calc-kpi-val {
+    font-size: 26px;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.li-wrap .li-val-cyan {
+    color: #06b6d4;
+    text-shadow: 0 0 12px rgba(6, 182, 212, 0.4);
+}
+
+.li-wrap .li-val-green {
+    color: var(--li-brand-neon);
+    text-shadow: 0 0 12px var(--li-brand-glow);
+}
+
+.li-wrap .li-val-amber {
+    color: #f59e0b;
+    text-shadow: 0 0 12px rgba(245, 158, 11, 0.4);
+}
+
+/* ==========================================================================
+   9. Tabelas HUD e Relatórios de Campanhas e Criativos
+   ========================================================================== */
+
+.li-wrap table.wp-list-table,
+.li-wrap table.li-table {
+    width: 100%;
+    border-collapse: collapse;
+    border-spacing: 0;
+    background: var(--li-bg-card);
+    border: none;
+    margin: 0;
+    font-size: 13px;
+}
+
+.li-wrap table.li-table th {
+    background: var(--li-table-th-bg);
+    color: var(--li-table-th-text);
+    font-weight: 700;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--li-table-border);
+    text-align: left;
+}
+
+.li-wrap table.li-table td {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--li-table-border);
+    color: var(--li-text-main);
+    vertical-align: middle;
+}
+
+.li-wrap table.li-table tbody tr:hover td {
+    background-color: var(--li-table-tr-hover);
+}
+
+/* Badges de Status */
+.li-wrap .li-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.li-wrap .li-status-qualificado {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.li-wrap .li-status-pendente {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.li-wrap .li-status-desqualificado {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.li-wrap .li-status-cinza {
+    background: var(--li-bg-card-subtle);
+    color: var(--li-text-muted);
+    border: 1px solid var(--li-border);
+}
+
+.li-wrap .li-status-aviso {
+    background: rgba(249, 115, 22, 0.15);
+    color: #fb923c;
+    border: 1px solid rgba(249, 115, 22, 0.3);
+}
+
+.li-wrap .li-status-debug {
+    background: rgba(139, 92, 246, 0.15);
+    color: #c084fc;
+    border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* ==========================================================================
+   10. Modal de Detalhes do Lead
+   ========================================================================== */
+
 .li-modal-backdrop {
     position: fixed;
     top: 0;
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(15, 23, 42, 0.65);
-    backdrop-filter: blur(4px);
+    background: rgba(8, 12, 20, 0.75);
+    backdrop-filter: blur(6px);
     z-index: 99999;
     display: flex;
     align-items: center;
@@ -307,13 +1093,15 @@
 }
 
 .li-modal-container {
-    background: #ffffff;
+    background: #0f1523;
+    color: #f8fafc;
+    border: 1px solid #1e293b;
     border-radius: 16px;
     max-width: 850px;
     width: 90%;
     max-height: 85vh;
     overflow-y: auto;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
 }
 
 .li-modal-header {
@@ -321,10 +1109,10 @@
     justify-content: space-between;
     align-items: center;
     padding: 20px 24px;
-    border-bottom: 1px solid #e2e8f0;
+    border-bottom: 1px solid #1e293b;
     position: sticky;
     top: 0;
-    background: #ffffff;
+    background: #0f1523;
     z-index: 2;
 }
 
@@ -332,20 +1120,20 @@
     margin: 0;
     font-size: 18px;
     font-weight: 700;
-    color: #0f172a;
+    color: #f8fafc;
 }
 
 .li-modal-close {
     background: none;
     border: none;
     font-size: 26px;
-    color: #64748b;
+    color: #94a3b8;
     cursor: pointer;
     line-height: 1;
 }
 
 .li-modal-close:hover {
-    color: #ef4444;
+    color: #f87171;
 }
 
 .li-modal-body {
@@ -359,8 +1147,8 @@
 }
 
 .li-modal-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: #141c2e;
+    border: 1px solid #1e293b;
     border-radius: 10px;
     padding: 16px;
 }
@@ -369,179 +1157,762 @@
     margin: 0 0 12px 0;
     font-size: 14px;
     font-weight: 700;
-    color: #0369a1;
-    border-bottom: 1px solid #e2e8f0;
+    color: #38bdf8;
+    border-bottom: 1px solid #1e293b;
     padding-bottom: 6px;
 }
 
 .li-modal-box p {
     margin: 0 0 8px 0;
     font-size: 13px;
-    color: #334155;
+    color: #cbd5e1;
 }
 
 .li-modal-box code {
-    background: #e2e8f0;
-    color: #0f172a;
+    background: #0b101b;
+    color: #34d399;
     padding: 2px 6px;
     border-radius: 4px;
     font-size: 12px;
+    border: 1px solid #1e293b;
 }
 
 /* ==========================================================================
-   Badges e Rótulos de Canal de Tráfego
+   11. Responsividade
    ========================================================================== */
-.li-badge-google {
-    background: #e8f0fe !important;
-    color: #1a73e8 !important;
-    border: 1px solid #c2e7ff !important;
-}
 
-.li-badge-meta {
-    background: #e7f3ff !important;
-    color: #0866ff !important;
-    border: 1px solid #d0e7ff !important;
-}
-
-.li-badge-whatsapp {
-    background: #dcfce7 !important;
-    color: #15803d !important;
-    border: 1px solid #bbf7d0 !important;
-}
-
-.li-badge-direct {
-    background: #f1f5f9 !important;
-    color: #475569 !important;
-    border: 1px solid #e2e8f0 !important;
-}
-
-/* ==========================================================================
-   Comparativo Executivo Google Ads vs Meta Ads
-   ========================================================================== */
-.li-channel-compare-grid {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-top: 10px;
-}
-
-@media (max-width: 900px) {
-    .li-channel-compare-grid {
+@media (max-width: 768px) {
+    .li-wrap .li-header {
         flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    .li-wrap .li-header-controls {
+        justify-content: flex-start;
+    }
+
+    .li-wrap .li-filter-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .li-wrap .li-filter-col,
+    .li-wrap .li-filter-col select,
+    .li-wrap .li-dates-capsule,
+    .li-wrap .li-filter-btns,
+    .li-wrap .li-filter-btns button,
+    .li-wrap .li-filter-btns a {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .li-wrap .li-metric-grid {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
-.li-channel-box {
-    flex: 1;
-    background: #f8fafc;
-    border-radius: 10px;
-    padding: 16px 20px;
-    border: 1px solid #e2e8f0;
+@media (max-width: 480px) {
+    .li-wrap {
+        padding: 16px;
+        margin: 10px;
+    }
+
+    .li-wrap .li-metric-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* ==========================================================================
+   12. Controles Auxiliares (Configurações, Listagem de Leads e Paginação)
+   ========================================================================== */
+
+.li-wrap .li-switch {
     position: relative;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    display: inline-block;
+    width: 44px;
+    height: 24px;
 }
 
-.li-channel-box:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+.li-wrap .li-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
 }
 
-.li-channel-google {
-    border-left: 4px solid #1a73e8;
+.li-wrap .li-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--li-input-border);
+    transition: .3s;
+    border-radius: 24px;
 }
 
-.li-channel-meta {
-    border-left: 4px solid #0866ff;
+.li-wrap .li-slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: .3s;
+    border-radius: 50%;
 }
 
-.li-channel-box-header {
+.li-wrap .li-switch input:checked + .li-slider {
+    background-color: var(--li-brand-neon);
+}
+
+.li-wrap .li-switch input:checked + .li-slider:before {
+    transform: translateX(20px);
+}
+
+.li-wrap .li-pagination {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 14px;
+    margin-top: 16px;
+    color: var(--li-text-muted);
+    font-size: 13px;
 }
 
-.li-channel-tag-google {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1a73e8;
-}
-
-.li-channel-tag-meta {
-    font-size: 14px;
-    font-weight: 700;
-    color: #0866ff;
-}
-
-.li-badge-winner {
-    background: #fef08a;
-    color: #854d0e;
-    font-size: 11px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: 999px;
-    border: 1px solid #fde047;
-}
-
-.li-channel-stats-row {
+.li-wrap .li-pagination-links {
     display: flex;
-    gap: 20px;
-    margin-bottom: 12px;
+    gap: 4px;
 }
 
-.li-channel-stat {
+.li-wrap .li-badge-mini {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    background: #1877f2;
+    color: #ffffff;
+    margin-top: 3px;
+}
+
+.li-wrap .li-tag {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.li-wrap .li-tag-blue {
+    background: rgba(14, 165, 233, 0.15);
+    color: #38bdf8;
+    border: 1px solid rgba(14, 165, 233, 0.3);
+}
+
+.li-wrap .li-badge-google {
+    background: rgba(26, 115, 232, 0.15) !important;
+    color: #60a5fa !important;
+    border: 1px solid rgba(26, 115, 232, 0.3) !important;
+}
+
+.li-wrap .li-badge-meta {
+    background: rgba(8, 102, 255, 0.15) !important;
+    color: #38bdf8 !important;
+    border: 1px solid rgba(8, 102, 255, 0.3) !important;
+}
+
+.li-wrap .li-badge-whatsapp {
+    background: rgba(22, 163, 74, 0.15) !important;
+    color: #4ade80 !important;
+    border: 1px solid rgba(22, 163, 74, 0.3) !important;
+}
+
+.li-wrap .li-badge-direct {
+    background: var(--li-bg-card-subtle) !important;
+    color: var(--li-text-muted) !important;
+    border: 1px solid var(--li-border) !important;
+}
+
+/* ==========================================================================
+   17. Layout HUD com Menu Lateral (Sidebar) e Menu Superior (Topbar)
+   ========================================================================== */
+
+/* Remove paddings e margens externas do wrapper quando o layout do dashboard está ativo */
+.li-wrap.li-wrap-dashboard,
+.li-wrap:has(.li-app-layout),
+.li-wrap.li-frontend-wrap:has(.li-app-layout) {
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+}
+
+.li-wrap .li-app-layout {
+    display: flex;
+    min-height: 100vh;
+    width: 100%;
+    margin: 0 !important;
+    padding: 0 !important;
+    background-color: var(--li-bg-app);
+    color: var(--li-text-main);
+    position: relative;
+    box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   SIDEBAR LATERAL HUD (FIXO NA TELA)
+   -------------------------------------------------------------------------- */
+.li-wrap .li-sidebar {
+    width: 270px;
+    min-width: 270px;
+    max-width: 270px;
+    background: var(--li-bg-card);
+    border-right: 1px solid var(--li-border);
     display: flex;
     flex-direction: column;
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    z-index: 1000;
+    box-sizing: border-box;
+    padding: 0;
+    margin: 0;
+    transform: translateX(0);
+    transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                min-width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                max-width 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.25s cubic-bezier(0.16, 1, 0.3, 1),
+                background-color 0.3s ease,
+                border-color 0.3s ease;
 }
 
-.li-channel-stat-num {
-    font-size: 20px;
+.li-wrap .li-sidebar::-webkit-scrollbar {
+    width: 5px;
+}
+.li-wrap .li-sidebar::-webkit-scrollbar-thumb {
+    background: var(--li-border);
+    border-radius: 4px;
+}
+
+/* Cabeçalho do Sidebar */
+.li-wrap .li-sidebar-header {
+    padding: 20px 18px 16px;
+    border-bottom: 1px solid var(--li-border);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* Linha 1: Logo + Botão de Recolher (Largura 100%) */
+.li-wrap .li-sidebar-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    box-sizing: border-box;
+    gap: 8px;
+}
+
+.li-wrap .li-brand-logos {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.li-wrap .li-logo-img {
+    max-height: 40px;
+    max-width: 160px;
+    width: auto;
+    object-fit: contain;
+    display: block;
+    transition: opacity 0.2s ease;
+}
+
+.li-wrap .li-sidebar-brand-text {
+    font-size: 16px;
     font-weight: 800;
-    color: #0f172a;
-    line-height: 1.2;
+    letter-spacing: -0.02em;
+    color: var(--li-brand-neon);
 }
 
-.li-channel-stat-lbl {
-    font-size: 11px;
-    color: #64748b;
-    margin-top: 2px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-
-.li-channel-progress-bg {
-    background: #e2e8f0;
-    height: 6px;
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.li-channel-progress-bar-google {
-    background: linear-gradient(90deg, #1a73e8, #34a853);
-    height: 100%;
-    border-radius: 999px;
-    transition: width 0.4s ease;
-}
-
-.li-channel-progress-bar-meta {
-    background: linear-gradient(90deg, #0866ff, #00c6ff);
-    height: 100%;
-    border-radius: 999px;
-    transition: width 0.4s ease;
-}
-
-.li-channel-vs {
-    font-size: 14px;
-    font-weight: 800;
-    color: #94a3b8;
-    background: #f1f5f9;
-    width: 36px;
-    height: 36px;
+/* Botão de Recolher o Menu Lateral */
+.li-wrap .li-sidebar-toggle-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    border: 1px solid #cbd5e1;
+    width: 32px;
+    height: 32px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    border-radius: 8px;
+    color: var(--li-text-muted);
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
     flex-shrink: 0;
+}
+
+.li-wrap .li-sidebar-toggle-btn:hover {
+    background: var(--li-brand-light);
+    color: var(--li-brand-neon);
+    border-color: var(--li-border-glow);
+    transform: scale(1.05);
+}
+
+/* Linha 2: Pílula de Status Live (Exatamente no Mesmo Tamanho / Largura 100%) */
+.li-wrap .li-brand-pill {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    background: var(--li-brand-light);
+    border: 1px solid var(--li-border-glow);
+    box-sizing: border-box;
+    margin: 0;
+}
+
+.li-wrap .li-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background-color: #10b981;
+    box-shadow: 0 0 8px #10b981;
+    animation: liPulse 1.8s infinite;
+}
+
+/* Card de Perfil / Operação */
+.li-wrap .li-sidebar-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    margin: 14px 14px 6px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    border-radius: 10px;
+}
+
+.li-wrap .li-profile-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--li-brand-light);
+    border: 1px solid var(--li-border-glow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-profile-info {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.li-wrap .li-profile-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--li-text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.li-wrap .li-profile-role {
+    font-size: 11px;
+    color: var(--li-text-dim);
+    margin-top: 1px;
+}
+
+/* Navegação do Sidebar */
+.li-wrap .li-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 12px 12px;
+    flex: 1;
+}
+
+.li-wrap .li-nav-group-title {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--li-text-dim);
+    padding: 12px 12px 6px;
+}
+
+.li-wrap .li-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 8px;
+    text-decoration: none !important;
+    color: var(--li-text-muted);
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+
+.li-wrap .li-nav-item:hover {
+    background: var(--li-brand-light);
+    color: var(--li-brand-neon);
+    border-color: rgba(16, 130, 76, 0.2);
+    transform: translateX(3px);
+}
+
+.li-wrap .li-nav-item.is-active {
+    background: var(--li-brand-light);
+    color: var(--li-brand-neon);
+    font-weight: 700;
+    border-color: var(--li-border-glow);
+    box-shadow: 0 0 12px var(--li-brand-glow);
+}
+
+.li-wrap .li-nav-icon {
+    font-size: 15px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-nav-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.li-wrap .li-nav-badge {
+    padding: 2px 7px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    background: var(--li-brand-glow);
+    color: var(--li-brand-neon);
+    border: 1px solid var(--li-border-glow);
+}
+
+.li-wrap .li-nav-ext {
+    font-size: 11px;
+    color: var(--li-text-dim);
+}
+
+/* Rodapé do Sidebar */
+.li-wrap .li-sidebar-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--li-border);
+    text-align: center;
+}
+
+.li-wrap .li-sidebar-ver {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--li-text-dim);
+}
+
+/* --------------------------------------------------------------------------
+   ÁREA DE CONTEÚDO PRINCIPAL (MAIN WRAPPER & TOPBAR)
+   -------------------------------------------------------------------------- */
+.li-wrap .li-main-wrapper {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    margin-left: 270px;
+    width: calc(100% - 270px);
+    min-height: 100vh;
+    background: var(--li-bg-app);
+    box-sizing: border-box;
+    margin-right: 0;
+    padding: 0;
+    transition: margin-left 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+                width 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Quando o menu lateral for recolhido pelo botão: Modo Mini-Sidebar (Ícones Apenas) */
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar {
+    width: 72px !important;
+    min-width: 72px !important;
+    max-width: 72px !important;
+    transform: none !important;
+    pointer-events: auto !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-main-wrapper {
+    margin-left: 72px !important;
+    width: calc(100% - 72px) !important;
+}
+
+/* Ocultar elementos de texto na sidebar compacta */
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-brand-pill,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-text,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-badge,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-ext,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-group-title,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-profile-info,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-footer,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-brand-logos,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-brand-text {
+    display: none !important;
+}
+
+/* Ajustes visuais dos ícones e cabeçalho na sidebar compacta */
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-header {
+    padding: 16px 8px 14px !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-header-top {
+    justify-content: center !important;
+    width: 100% !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-toggle-btn {
+    width: 38px !important;
+    height: 38px !important;
+    font-size: 16px !important;
+    margin: 0 auto !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-profile {
+    margin: 8px auto !important;
+    padding: 4px !important;
+    width: 44px !important;
+    height: 44px !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-profile-avatar {
+    width: 34px !important;
+    height: 34px !important;
+    margin: 0 !important;
+    font-size: 16px !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-sidebar-nav {
+    padding: 8px 6px !important;
+    align-items: center !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item {
+    width: 44px !important;
+    height: 44px !important;
+    padding: 0 !important;
+    justify-content: center !important;
+    border-radius: 10px !important;
+    margin: 4px auto !important;
+    position: relative !important;
+    border: 1px solid transparent !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item:hover {
+    transform: scale(1.08) !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-icon {
+    font-size: 18px !important;
+    margin: 0 !important;
+    width: auto !important;
+    text-align: center !important;
+}
+
+/* Topbar Superior Fixo (Sticky no topo da janela) */
+.li-wrap .li-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 16px 28px;
+    background: var(--li-bg-card);
+    border-bottom: 1px solid var(--li-border);
+    position: sticky;
+    top: 0;
+    z-index: 900;
+    backdrop-filter: blur(12px);
+    box-sizing: border-box;
+    width: 100%;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+.li-wrap .li-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 0 1 auto;
+    min-width: 200px;
+}
+
+/* Botão Toggle no Topbar para Recolher / Expandir Menu */
+.li-wrap .li-sidebar-toggle-topbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 38px;
+    padding: 0 12px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    border-radius: 8px;
+    color: var(--li-text-main);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.li-wrap .li-sidebar-toggle-topbar:hover {
+    background: var(--li-brand-light);
+    color: var(--li-brand-neon);
+    border-color: var(--li-border-glow);
+    transform: translateY(-1px);
+}
+
+.li-wrap .li-topbar-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--li-text-main);
+    margin: 0;
+    line-height: 1.2;
+}
+
+.li-wrap .li-topbar-desc {
+    font-size: 12px;
+    color: var(--li-text-muted);
+    margin: 3px 0 0 0;
+}
+
+/* Centralização de Informações Chave no Topbar */
+.li-wrap .li-topbar-center {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: center;
+    flex: 1 1 auto;
+}
+
+.li-wrap .li-topbar-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--li-bg-card-subtle);
+    border: 1px solid var(--li-border);
+    border-radius: 999px;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.li-wrap .li-topbar-pill:hover {
+    border-color: var(--li-border-glow);
+    background: var(--li-brand-light);
+}
+
+.li-wrap .li-pill-lbl {
+    color: var(--li-text-muted);
+    font-weight: 500;
+    letter-spacing: 0.02em;
+}
+
+.li-wrap .li-pill-val {
+    font-weight: 800;
+    color: var(--li-text-main);
+}
+
+.li-wrap .li-pill-qual .li-pill-val {
+    color: #10b981;
+    text-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
+}
+
+.li-wrap .li-pill-rate .li-pill-val {
+    color: #38bdf8;
+    text-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+/* Ações do Topbar (Direita) */
+.li-wrap .li-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 0 0 auto;
+}
+
+/* Área de Rolagem do Conteúdo */
+.li-wrap .li-content-scroll {
+    padding: 24px 28px;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    box-sizing: border-box;
+    width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVIDADE: TABLETS E DISPOSITIVOS MÓVEIS
+   -------------------------------------------------------------------------- */
+@media (max-width: 1180px) {
+    .li-wrap .li-topbar-center {
+        display: none;
+    }
+}
+
+@media (max-width: 980px) {
+    .li-wrap .li-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 270px;
+        max-width: 270px;
+        z-index: 99999;
+        transform: translateX(-100%);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .li-wrap .li-sidebar.is-open {
+        transform: translateX(0) !important;
+    }
+
+    .li-wrap .li-main-wrapper {
+        margin-left: 0 !important;
+        width: 100% !important;
+    }
+
+    .li-wrap .li-sidebar-mobile-toggle {
+        display: inline-flex;
+    }
+
+    .li-wrap .li-topbar {
+        padding: 14px 18px;
+    }
+
+    .li-wrap .li-content-scroll {
+        padding: 18px 16px;
+    }
 }
 
 

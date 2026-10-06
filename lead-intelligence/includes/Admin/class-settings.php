@@ -40,6 +40,8 @@ class Settings {
             'capi_test_event_code'     => '',
             'enable_capi_lead'         => 0,
             'enable_capi_qualified'    => 0,
+            'logo_dark'                => '',
+            'logo_light'               => '',
         ];
 
         $saved = get_option('lead_intelligence_settings', []);
@@ -119,6 +121,8 @@ class Settings {
             'capi_test_event_code'     => $capi_test_event_code,
             'enable_capi_lead'         => $enable_capi_lead,
             'enable_capi_qualified'    => $enable_capi_qual,
+            'logo_dark'                => !empty($_POST['logo_dark']) ? esc_url_raw($_POST['logo_dark']) : '',
+            'logo_light'               => !empty($_POST['logo_light']) ? esc_url_raw($_POST['logo_light']) : '',
         ];
 
         update_option('lead_intelligence_settings', $new_settings);
@@ -128,6 +132,7 @@ class Settings {
     }
 
     public static function render() {
+        wp_enqueue_media();
         $settings = self::get_settings();
         $webhook_url = get_rest_url(null, 'lead-intelligence/v1/meta/webhook');
         ?>
@@ -336,10 +341,65 @@ class Settings {
                     </table>
                 </div>
 
+                <div class="li-card">
+                    <h3 class="li-card-title">5. Logotipo do Dashboard (Modo Escuro e Modo Claro)</h3>
+                    <p class="li-card-desc">Personalize a identidade visual exibida no topo do Dashboard. O sistema alterna a logotipo dinamicamente conforme o tema selecionado (Dark/Light).</p>
+
+                    <table class="form-table">
+                        <tr>
+                            <th scope="row"><label for="li_logo_dark">Logo Modo Escuro (Dark HUD)</label></th>
+                            <td>
+                                <div style="display: flex; gap: 8px; align-items: center; max-width: 600px;">
+                                    <input type="url" id="li_logo_dark" name="logo_dark" value="<?php echo esc_attr($settings['logo_dark']); ?>" class="regular-text" style="flex:1;" placeholder="https://.../logo-branca.png">
+                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_dark">Biblioteca de Mídia</button>
+                                </div>
+                                <p class="description">Recomendado: logo em vetor ou PNG transparente com cores claras/brancas para fundo escuro.</p>
+                                <?php if (!empty($settings['logo_dark'])): ?>
+                                    <div style="margin-top: 10px; padding: 12px; background: #080c14; display: inline-block; border-radius: 8px; border: 1px solid #1e293b;">
+                                        <img src="<?php echo esc_url($settings['logo_dark']); ?>" style="max-height: 48px; max-width: 260px; object-fit: contain; display: block;" />
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="li_logo_light">Logo Modo Claro (Light Mode)</label></th>
+                            <td>
+                                <div style="display: flex; gap: 8px; align-items: center; max-width: 600px;">
+                                    <input type="url" id="li_logo_light" name="logo_light" value="<?php echo esc_attr($settings['logo_light']); ?>" class="regular-text" style="flex:1;" placeholder="https://.../logo-oficial-faveni.png">
+                                    <button type="button" class="button li-media-upload-btn" data-target="li_logo_light">Biblioteca de Mídia</button>
+                                </div>
+                                <p class="description">Recomendado: logo oficial colorida ou verde Faveni para fundos claros.</p>
+                                <?php if (!empty($settings['logo_light'])): ?>
+                                    <div style="margin-top: 10px; padding: 12px; background: #ffffff; display: inline-block; border-radius: 8px; border: 1px solid #e2e8f0;">
+                                        <img src="<?php echo esc_url($settings['logo_light']); ?>" style="max-height: 48px; max-width: 260px; object-fit: contain; display: block;" />
+                                    </div>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+
                 <p class="submit">
                     <input type="submit" name="li_save_settings" id="submit" class="button button-primary button-large" value="Salvar Configurações">
                 </p>
             </form>
+
+            <script>
+            jQuery(document).ready(function($) {
+                $('.li-media-upload-btn').on('click', function(e) {
+                    e.preventDefault();
+                    var targetId = $(this).data('target');
+                    var customUploader = wp.media({
+                        title: 'Selecionar Logotipo',
+                        button: { text: 'Usar este Logotipo' },
+                        multiple: false
+                    }).on('select', function() {
+                        var attachment = customUploader.state().get('selection').first().toJSON();
+                        $('#' + targetId).val(attachment.url);
+                    }).open();
+                });
+            });
+            </script>
         </div>
         <?php
     }
