@@ -1629,8 +1629,9 @@
     color: var(--li-gold) !important;
 }
 
-/* O Destaque Orgânico (Inverted Radius Notch) do Design 1 */
-.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active {
+/* O Destaque Orgânico (Inverted Radius Notch) do Design 1 (Apenas quando a sidebar NÃO estiver recolhida) */
+.li-wrap:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active,
+.li-wrap .li-app-layout:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active {
     background: var(--li-bg-app) !important;
     color: var(--li-sidebar-text-active) !important;
     font-weight: 800;
@@ -1641,7 +1642,8 @@
     position: relative;
 }
 
-.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::before {
+.li-wrap:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::before,
+.li-wrap .li-app-layout:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::before {
     content: "";
     position: absolute;
     top: -24px;
@@ -1653,7 +1655,8 @@
     z-index: 31;
 }
 
-.li-wrap .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::after {
+.li-wrap:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::after,
+.li-wrap .li-app-layout:not(.li-sidebar-collapsed) .li-sidebar:not(.is-collapsed) .li-nav-item.is-active::after {
     content: "";
     position: absolute;
     bottom: -24px;
@@ -1853,22 +1856,55 @@
     align-items: center !important;
 }
 
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item {
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item {
     width: 44px !important;
     height: 44px !important;
     padding: 0 !important;
     justify-content: center !important;
-    border-radius: 10px !important;
+    border-radius: 12px !important;
     margin: 4px auto !important;
     position: relative !important;
     border: 1px solid transparent !important;
 }
 
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item:hover {
+/* Suprime terminantemente qualquer curva ou corte quando a barra lateral estiver recolhida */
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item::before,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item::after,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item::before,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item::after,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item.is-active::before,
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item.is-active::after,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item.is-active::before,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item.is-active::after {
+    display: none !important;
+    content: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item.is-active,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item.is-active {
+    background: var(--li-bg-app) !important;
+    color: var(--li-sidebar-text-active) !important;
+    width: 44px !important;
+    height: 44px !important;
+    margin: 4px auto !important;
+    border-radius: 12px !important;
+    box-shadow: 0 0 14px var(--li-gold-glow) !important;
+    border: 1.5px solid var(--li-gold) !important;
+    justify-content: center !important;
+}
+
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-item:hover,
+.li-wrap .li-sidebar.is-collapsed .li-nav-item:hover {
     transform: scale(1.08) !important;
 }
 
-.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-icon {
+.li-wrap .li-app-layout.li-sidebar-collapsed .li-nav-icon,
+.li-wrap .li-sidebar.is-collapsed .li-nav-icon {
     font-size: 18px !important;
     margin: 0 !important;
     width: auto !important;

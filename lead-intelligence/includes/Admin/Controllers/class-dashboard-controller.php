@@ -353,7 +353,7 @@ class DashboardController {
                             <span class="li-status-pulse"></span>
                             <span class="li-status-text">Monitoramento Ativo</span>
                         </div>
-                        <span class="li-sidebar-ver">Lead Intelligence v1.6.4</span>
+                        <span class="li-sidebar-ver">Lead Intelligence v1.6.5</span>
                     </div>
                 </aside>
 
@@ -1148,6 +1148,10 @@ class DashboardController {
                 var layout = document.querySelector('.li-app-layout');
                 if (!layout) return;
                 var isCollapsed = layout.classList.toggle('li-sidebar-collapsed');
+                var sidebar = document.getElementById('liSidebar');
+                if (sidebar) {
+                    sidebar.classList.toggle('is-collapsed', isCollapsed);
+                }
                 localStorage.setItem('li_sidebar_collapsed', isCollapsed ? '1' : '0');
                 liUpdateCollapseUI(isCollapsed);
             }
@@ -1170,6 +1174,10 @@ class DashboardController {
                 var isCollapsed = (saved === '1');
                 if (isCollapsed) {
                     layout.classList.add('li-sidebar-collapsed');
+                    var sidebar = document.getElementById('liSidebar');
+                    if (sidebar) {
+                        sidebar.classList.add('is-collapsed');
+                    }
                 }
                 liUpdateCollapseUI(isCollapsed);
             }
