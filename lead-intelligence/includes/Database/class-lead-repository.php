@@ -243,6 +243,19 @@ class LeadRepository {
             $params[] = $args['date_to'] . ' 23:59:59';
         }
 
+        if (!empty($args['channel'])) {
+            $chan = sanitize_key($args['channel']);
+            if ($chan === 'google_ads') {
+                $where[] = "(gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%')";
+            } elseif ($chan === 'meta_ads') {
+                $where[] = "(fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%')";
+            } elseif ($chan === 'whatsapp') {
+                $where[] = "(formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '')";
+            } elseif ($chan === 'organico') {
+                $where[] = "(gclid = '' AND fbclid = '' AND ad_id = '' AND (utm_source IS NULL OR utm_source = '' OR utm_source = 'direct' OR utm_source = 'organico') AND formulario_nome NOT LIKE '%Google%' AND formulario_nome NOT LIKE '%Meta%' AND formulario_nome NOT LIKE '%WhatsApp%')";
+            }
+        }
+
         $where_sql = implode(' AND ', $where);
 
         $allowed_orderby = ['id', 'nome', 'email', 'data_cadastro', 'qualificacao_status', 'score'];
@@ -273,23 +286,186 @@ class LeadRepository {
     }
 
     /**
-     * Retorna contadores agregados para dashboard e badges
+     * Identifica o canal de tráfego/origem de um lead
+     *
+     * @param object $lead Objeto com colunas do lead
+     * @return string 'google_ads' | 'meta_ads' | 'whatsapp' | 'organico'
      */
-    public static function get_status_counts() {
+    public static function get_channel($lead) {
+        if (!$lead) {
+            return 'organico';
+        }
+
+        $utm_src  = strtolower(trim((string) ($lead->utm_source ?? '')));
+        $gclid    = trim((string) ($lead->gclid ?? ''));
+        $fbclid   = trim((string) ($lead->fbclid ?? ''));
+        $ad_id    = trim((string) ($lead->ad_id ?? ''));
+        $form     = strtolower(trim((string) ($lead->formulario_nome ?? '')));
+        $origem   = strtolower(trim((string) ($lead->pagina_origem ?? '')));
+        $wa_stat  = trim((string) ($lead->whatsapp_status ?? ''));
+        $conv_id  = trim((string) ($lead->conversation_id ?? ''));
+
+        // 1. Google Ads: Tem gclid, utm_source google ou menção explícita
+        if (!empty($gclid) || $utm_src === 'google' || strpos($form, 'google') !== false || strpos($origem, 'google') !== false) {
+            return 'google_ads';
+        }
+
+        // 2. Meta Ads: Tem fbclid, ad_id, utm meta/facebook/instagram ou menção explícita
+        if (!empty($fbclid) || !empty($ad_id) || in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig']) || strpos($form, 'meta') !== false || strpos($form, 'facebook') !== false || strpos($origem, 'meta') !== false) {
+            return 'meta_ads';
+        }
+
+        // 3. WhatsApp Direto
+        if (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id)) {
+            return 'whatsapp';
+        }
+
+        return 'organico';
+    }
+
+    /**
+     * Retorna informações de rótulo e estilo do canal
+     *
+     * @param string $channel
+     * @return array ['label' => string, 'badge_class' => string, 'icon' => string, 'color' => string]
+     */
+    public static function get_channel_info($channel) {
+        switch ($channel) {
+            case 'google_ads':
+                return [
+                    'label'       => 'Google Ads',
+                    'badge_class' => 'li-badge-google',
+                    'icon'        => 'dashicons-google',
+                    'dot'         => '🟢',
+                    'color'       => '#1a73e8',
+                    'bg'          => '#e8f0fe',
+                ];
+            case 'meta_ads':
+                return [
+                    'label'       => 'Meta Ads',
+                    'badge_class' => 'li-badge-meta',
+                    'icon'        => 'dashicons-facebook',
+                    'dot'         => '🔵',
+                    'color'       => '#0866ff',
+                    'bg'          => '#e7f3ff',
+                ];
+            case 'whatsapp':
+                return [
+                    'label'       => 'WhatsApp Direto',
+                    'badge_class' => 'li-badge-whatsapp',
+                    'icon'        => 'dashicons-format-chat',
+                    'dot'         => '💬',
+                    'color'       => '#15803d',
+                    'bg'          => '#dcfce7',
+                ];
+            case 'organico':
+            default:
+                return [
+                    'label'       => 'Direto / Site',
+                    'badge_class' => 'li-badge-direct',
+                    'icon'        => 'dashicons-admin-site',
+                    'dot'         => '⚪',
+                    'color'       => '#475569',
+                    'bg'          => '#f1f5f9',
+                ];
+        }
+    }
+
+    /**
+     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal)
+     */
+    public static function get_status_counts($channel = '') {
         global $wpdb;
         $table = DbSchema::get_leads_table();
+        $where = ['1=1'];
+
+        if (!empty($channel)) {
+            if ($channel === 'google_ads') {
+                $where[] = "(gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%')";
+            } elseif ($channel === 'meta_ads') {
+                $where[] = "(fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%')";
+            } elseif ($channel === 'whatsapp') {
+                $where[] = "(formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '')";
+            }
+        }
+
+        $where_sql = implode(' AND ', $where);
 
         $results = $wpdb->get_results(
-            "SELECT qualificacao_status, COUNT(*) as total FROM {$table} GROUP BY qualificacao_status",
+            "SELECT qualificacao_status, COUNT(*) as total FROM {$table} WHERE {$where_sql} GROUP BY qualificacao_status",
             OBJECT_K
         );
 
         return [
-            'total'              => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table}"),
+            'total'              => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$where_sql}"),
             'qualificado'        => isset($results['qualificado']) ? (int) $results['qualificado']->total : 0,
             'nao_qualificado'    => isset($results['nao_qualificado']) ? (int) $results['nao_qualificado']->total : 0,
             'pendente'           => isset($results['pendente']) ? (int) $results['pendente']->total : 0,
             'sem_correspondencia'=> isset($results['sem_correspondencia']) ? (int) $results['sem_correspondencia']->total : 0,
         ];
+    }
+
+    /**
+     * Retorna resumo comparativo direto entre Google Ads e Meta Ads
+     */
+    public static function get_channel_comparison_summary($date_start = '', $date_end = '') {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+
+        $where_date = '1=1';
+        $params = [];
+        if (!empty($date_start)) {
+            $where_date .= " AND data_cadastro >= %s";
+            $params[] = $date_start;
+        }
+        if (!empty($date_end)) {
+            $where_date .= " AND data_cadastro <= %s";
+            $params[] = $date_end;
+        }
+
+        $sql = "SELECT 
+            CASE 
+                WHEN (gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%') THEN 'google_ads'
+                WHEN (fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%') THEN 'meta_ads'
+                WHEN (formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '') THEN 'whatsapp'
+                ELSE 'organico'
+            END as canal,
+            COUNT(*) as total_leads,
+            SUM(CASE WHEN qualificacao_status = 'qualificado' THEN 1 ELSE 0 END) as qualificados,
+            SUM(CASE WHEN qualificacao_status = 'nao_qualificado' THEN 1 ELSE 0 END) as nao_qualificados,
+            SUM(CASE WHEN qualificacao_status = 'pendente' THEN 1 ELSE 0 END) as pendentes
+        FROM {$table}
+        WHERE {$where_date}
+        GROUP BY canal";
+
+        if (!empty($params)) {
+            $sql = $wpdb->prepare($sql, $params);
+        }
+
+        $results = $wpdb->get_results($sql, OBJECT_K);
+
+        $default_item = function($canal) {
+            return (object) [
+                'canal'            => $canal,
+                'total_leads'      => 0,
+                'qualificados'     => 0,
+                'nao_qualificados' => 0,
+                'pendentes'        => 0,
+                'taxa'             => 0,
+            ];
+        };
+
+        $channels = ['google_ads', 'meta_ads', 'whatsapp', 'organico'];
+        $formatted = [];
+
+        foreach ($channels as $c) {
+            $row = isset($results[$c]) ? $results[$c] : $default_item($c);
+            $total = (int) $row->total_leads;
+            $qual  = (int) $row->qualificados;
+            $row->taxa = $total > 0 ? round(($qual / $total) * 100, 1) : 0;
+            $formatted[$c] = $row;
+        }
+
+        return $formatted;
     }
 }

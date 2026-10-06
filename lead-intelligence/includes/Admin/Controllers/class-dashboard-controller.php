@@ -19,6 +19,7 @@ class DashboardController {
 
         // 1. Filtros
         $periodo = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : '30d';
+        $filter_channel  = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
         $filter_campaign = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
         $filter_curso    = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
         $filter_area     = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
@@ -70,6 +71,15 @@ class DashboardController {
             $where[] = "data_cadastro <= %s";
             $params[] = $date_end;
         }
+        if (!empty($filter_channel)) {
+            if ($filter_channel === 'google_ads') {
+                $where[] = "(gclid != '' OR utm_source = 'google' OR formulario_nome LIKE '%Google%' OR pagina_origem LIKE '%Google%')";
+            } elseif ($filter_channel === 'meta_ads') {
+                $where[] = "(fbclid != '' OR ad_id != '' OR utm_source IN ('meta', 'facebook', 'instagram', 'fb') OR formulario_nome LIKE '%Meta%' OR formulario_nome LIKE '%Facebook%' OR pagina_origem LIKE '%Meta%')";
+            } elseif ($filter_channel === 'whatsapp') {
+                $where[] = "(formulario_nome LIKE '%WhatsApp%' OR whatsapp_status != '' OR conversation_id != '')";
+            }
+        }
         if (!empty($filter_campaign)) {
             $where[] = "utm_campaign = %s";
             $params[] = $filter_campaign;
@@ -84,6 +94,9 @@ class DashboardController {
         }
 
         $where_sql = implode(' AND ', $where);
+
+        // Resumo Comparativo por Canal (Google Ads vs Meta Ads)
+        $channel_summary = LeadRepository::get_channel_comparison_summary($date_start, $date_end);
 
         // 2. Métricas dos Cards
         $metrics_query = "SELECT 
@@ -198,6 +211,15 @@ class DashboardController {
                             </select>
                         </div>
 
+                        <div>
+                            <select name="canal">
+                                <option value="">Todos os Canais</option>
+                                <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
+                                <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
+                                <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
+                            </select>
+                        </div>
+
                         <div id="liCustomDateBox" style="<?php echo ($periodo === 'custom') ? 'display:flex; gap:8px;' : 'display:none;'; ?>">
                             <input type="date" name="from" value="<?php echo esc_attr($custom_from); ?>" placeholder="De">
                             <input type="date" name="to" value="<?php echo esc_attr($custom_to); ?>" placeholder="Até">
@@ -233,6 +255,92 @@ class DashboardController {
                         <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence')); ?>" class="button">Resetar</a>
                     </div>
                 </form>
+            </div>
+
+            <!-- COMPARATIVO EXECUTIVO: GOOGLE ADS VS META ADS -->
+            <?php
+            $g_data = $channel_summary['google_ads'];
+            $m_data = $channel_summary['meta_ads'];
+            $melhor_taxa = '';
+            if ($g_data->taxa > $m_data->taxa && $g_data->total_leads > 0) {
+                $melhor_taxa = 'google';
+            } elseif ($m_data->taxa > $g_data->taxa && $m_data->total_leads > 0) {
+                $melhor_taxa = 'meta';
+            }
+            ?>
+            <div class="li-card" style="padding: 22px; border-top: 4px solid #1a73e8; background: #ffffff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 18px;">
+                    <div>
+                        <h3 class="li-card-title" style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                            <span>⚖️</span> Comparativo de Performance: Google Ads vs Meta Ads
+                        </h3>
+                        <p class="li-card-desc" style="margin: 4px 0 0 0;">Análise comparativa limpa e em tempo real do retorno em matrículas de cada canal.</p>
+                    </div>
+                    <?php if (!empty($filter_channel)): ?>
+                        <span class="li-badge" style="background:#f1f5f9; color:#475569; font-size:12px;">Filtro ativo: <?php echo esc_html($filter_channel === 'google_ads' ? 'Google Ads' : ($filter_channel === 'meta_ads' ? 'Meta Ads' : 'WhatsApp')); ?></span>
+                    <?php endif; ?>
+                </div>
+
+                <div class="li-channel-compare-grid">
+                    <!-- COLUNA GOOGLE ADS -->
+                    <div class="li-channel-box li-channel-google">
+                        <div class="li-channel-box-header">
+                            <span class="li-channel-tag-google">🟢 Google Ads</span>
+                            <?php if ($melhor_taxa === 'google'): ?>
+                                <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="li-channel-stats-row">
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num"><?php echo number_format_i18n($g_data->total_leads); ?></span>
+                                <span class="li-channel-stat-lbl">Leads Gerados</span>
+                            </div>
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num" style="color: #15803d;"><?php echo number_format_i18n($g_data->qualificados); ?></span>
+                                <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
+                            </div>
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num" style="color: #1a73e8;"><?php echo $g_data->taxa; ?>%</span>
+                                <span class="li-channel-stat-lbl">Taxa de Conversão</span>
+                            </div>
+                        </div>
+                        <div class="li-channel-progress-bg">
+                            <div class="li-channel-progress-bar-google" style="width: <?php echo min(100, $g_data->taxa); ?>%;"></div>
+                        </div>
+                    </div>
+
+                    <!-- DIVISOR VS -->
+                    <div class="li-channel-vs">
+                        <span>VS</span>
+                    </div>
+
+                    <!-- COLUNA META ADS -->
+                    <div class="li-channel-box li-channel-meta">
+                        <div class="li-channel-box-header">
+                            <span class="li-channel-tag-meta">🔵 Meta Ads</span>
+                            <?php if ($melhor_taxa === 'meta'): ?>
+                                <span class="li-badge-winner" title="Maior percentual de conversão de alunos">🏆 Maior Taxa de Qualificação</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="li-channel-stats-row">
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num"><?php echo number_format_i18n($m_data->total_leads); ?></span>
+                                <span class="li-channel-stat-lbl">Leads Gerados</span>
+                            </div>
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num" style="color: #15803d;"><?php echo number_format_i18n($m_data->qualificados); ?></span>
+                                <span class="li-channel-stat-lbl">Matrículas Confirmadas</span>
+                            </div>
+                            <div class="li-channel-stat">
+                                <span class="li-channel-stat-num" style="color: #0866ff;"><?php echo $m_data->taxa; ?>%</span>
+                                <span class="li-channel-stat-lbl">Taxa de Conversão</span>
+                            </div>
+                        </div>
+                        <div class="li-channel-progress-bg">
+                            <div class="li-channel-progress-bar-meta" style="width: <?php echo min(100, $m_data->taxa); ?>%;"></div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- CARDS DE KPIs PRINCIPAIS -->

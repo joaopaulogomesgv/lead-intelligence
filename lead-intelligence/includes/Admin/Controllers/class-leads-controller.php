@@ -52,14 +52,16 @@ class LeadsController {
 
         $search    = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
+        $channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
         $page      = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
         $per_page  = 20;
 
-        $counts = LeadRepository::get_status_counts();
+        $counts = LeadRepository::get_status_counts($channel);
 
         $leads_data = LeadRepository::get_leads([
             'search'   => $search,
             'status'   => $status,
+            'channel'  => $channel,
             'page'     => $page,
             'per_page' => $per_page,
             'orderby'  => 'id',
@@ -127,19 +129,27 @@ class LeadsController {
                 <div class="li-metric-card li-card-info">
                     <span class="li-metric-label">Taxa de Qualificação</span>
                     <span class="li-metric-value"><?php echo $taxa_qualificacao; ?>%</span>
-                    <span class="li-metric-sub">Média geral</span>
+                    <span class="li-metric-sub">Média do filtro atual</span>
                 </div>
             </div>
 
             <!-- BARRA DE BUSCA E FILTROS -->
             <div class="li-card li-filter-bar">
                 <form method="get" action="">
-                    <input type="hidden" name="page" value="lead-intelligence-leads">
+                    <input type="hidden" name="page" value="<?php echo esc_attr($current_page); ?>">
 
                     <div class="li-filter-row">
                         <div class="li-search-box">
                             <input type="text" name="s" value="<?php echo esc_attr($search); ?>" placeholder="Buscar por nome, e-mail, telefone ou curso...">
                         </div>
+
+                        <select name="canal">
+                            <option value="">Todos os Canais</option>
+                            <option value="google_ads" <?php selected($channel, 'google_ads'); ?>>🟢 Google Ads</option>
+                            <option value="meta_ads" <?php selected($channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
+                            <option value="whatsapp" <?php selected($channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
+                            <option value="organico" <?php selected($channel, 'organico'); ?>>⚪ Direto / Site</option>
+                        </select>
 
                         <select name="status">
                             <option value="">Todos os Status</option>
@@ -150,7 +160,7 @@ class LeadsController {
                         </select>
 
                         <button type="submit" class="button button-primary">Filtrar</button>
-                        <?php if (!empty($search) || !empty($status)): ?>
+                        <?php if (!empty($search) || !empty($status) || !empty($channel)): ?>
                             <a href="<?php echo esc_url($current_url); ?>" class="button">Limpar Filtros</a>
                         <?php endif; ?>
                     </div>
@@ -166,7 +176,7 @@ class LeadsController {
                             <th style="width: 130px;">Data</th>
                             <th>Lead / Contato</th>
                             <th>Curso / Interesse</th>
-                            <th>Origem / UTM</th>
+                            <th style="width: 230px;">Canal / Origem</th>
                             <th style="width: 130px;">Status</th>
                             <th style="width: 100px;">Ações</th>
                         </tr>
@@ -177,11 +187,15 @@ class LeadsController {
                                 <td colspan="7" style="text-align: center; padding: 40px 20px; color: #64748b;">
                                     <span class="dashicons dashicons-id-alt" style="font-size: 36px; width: 36px; height: 36px; color: #94a3b8; margin-bottom: 10px;"></span>
                                     <p style="font-size: 15px; margin: 0;">Nenhum lead encontrado com os filtros selecionados.</p>
-                                    <p style="font-size: 13px; margin: 5px 0 0;">Submeta um formulário no Elementor Pro para ver os dados sendo capturados automaticamente aqui.</p>
+                                    <p style="font-size: 13px; margin: 5px 0 0;">Verifique os filtros de canal ou importe novas planilhas.</p>
                                 </td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($leads as $lead): ?>
+                                <?php
+                                $lead_channel = LeadRepository::get_channel($lead);
+                                $chan_info    = LeadRepository::get_channel_info($lead_channel);
+                                ?>
                                 <tr>
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
@@ -218,20 +232,30 @@ class LeadsController {
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <div style="font-size: 12px; font-weight: 500;">
+                                        <!-- BADGE DE CANAL CLARO E CERTEIRO -->
+                                        <div style="margin-bottom: 4px;">
+                                            <span class="li-badge <?php echo esc_attr($chan_info['badge_class']); ?>" style="display:inline-flex; align-items:center; gap:5px; font-weight:600; font-size:11px; padding:3px 8px;">
+                                                <span><?php echo esc_html($chan_info['dot']); ?></span>
+                                                <span><?php echo esc_html($chan_info['label']); ?></span>
+                                            </span>
+                                        </div>
+                                        <div style="font-size: 12px; color: #334155; font-weight: 500;">
                                             <?php echo esc_html(!empty($lead->formulario_nome) ? $lead->formulario_nome : 'Formulário'); ?>
                                         </div>
-                                        <?php if (!empty($lead->utm_campaign) || !empty($lead->utm_source)): ?>
+                                        <?php if (!empty($lead->utm_campaign)): ?>
                                             <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
-                                                <span title="Campanha">🎯 <?php echo esc_html($lead->utm_campaign ?: $lead->utm_source); ?></span>
+                                                <span title="Campanha">🎯 <?php echo esc_html($lead->utm_campaign); ?></span>
                                             </div>
                                         <?php endif; ?>
-                                        <div style="margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                        <div style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
                                             <?php if (!empty($lead->gclid)): ?>
-                                                <span class="li-badge-mini" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;" title="Google Click ID">Google Ads</span>
+                                                <span class="li-badge-mini" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;" title="Google Click ID">gclid</span>
                                             <?php endif; ?>
                                             <?php if (!empty($lead->fbclid)): ?>
-                                                <span class="li-badge-mini" title="Meta Click ID">FB Meta</span>
+                                                <span class="li-badge-mini" style="background:#e7f3ff; color:#0866ff; border-color:#d0e7ff;" title="Meta Click ID">fbclid</span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($lead->ad_id)): ?>
+                                                <span class="li-badge-mini" title="Meta Ad ID">Ad #<?php echo esc_html(substr($lead->ad_id, -6)); ?></span>
                                             <?php endif; ?>
                                         </div>
                                     </td>
@@ -328,7 +352,19 @@ class LeadsController {
                     html += '</div>';
 
                     // Seção 2: UTMs e Atribuição Meta Ads / Google Ads
+                    var chanBadge = '⚪ Direto / Site';
+                    var src = (lead.utm_source || '').toLowerCase();
+                    var form = (lead.formulario_nome || '').toLowerCase();
+                    if (lead.gclid || src === 'google' || form.indexOf('google') !== -1) {
+                        chanBadge = '<span style="color:#1a73e8; font-weight:700;">🟢 Google Ads</span>';
+                    } else if (lead.fbclid || lead.ad_id || ['meta','facebook','instagram','fb'].indexOf(src) !== -1 || form.indexOf('meta') !== -1 || form.indexOf('facebook') !== -1) {
+                        chanBadge = '<span style="color:#0866ff; font-weight:700;">🔵 Meta Ads</span>';
+                    } else if (form.indexOf('whatsapp') !== -1 || lead.whatsapp_status || lead.conversation_id) {
+                        chanBadge = '<span style="color:#15803d; font-weight:700;">💬 WhatsApp Direto</span>';
+                    }
+
                     html += '<div class="li-modal-box"><h4>🎯 Atribuição de Campanha & Ads</h4>';
+                    html += '<p><strong>Canal de Origem:</strong> ' + chanBadge + '</p>';
                     html += '<p><strong>Campanha:</strong> <span id="liModalCampName" style="font-weight:600; color:#0f172a;">' + (lead.campaign_name || lead.utm_campaign || '-') + '</span></p>';
                     html += '<p><strong>Conjunto / AdSet:</strong> <span id="liModalAdSetName" style="font-weight:600; color:#0f172a;">' + (lead.adset_name || lead.utm_content || '-') + '</span></p>';
                     html += '<p><strong>Anúncio:</strong> <span id="liModalAdName" style="font-weight:600; color:#0f172a;">' + (lead.ad_name || lead.utm_term || '-') + '</span></p>';

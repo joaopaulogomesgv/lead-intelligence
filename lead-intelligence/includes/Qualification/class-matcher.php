@@ -23,21 +23,26 @@ class Matcher {
      * @param array $mapping Mapeamento de colunas selecionado pelo usuário
      * @param string $filename Nome do arquivo da planilha
      * @param int $import_id ID do lote de importação
+     * @param string $channel Canal de origem ('google_ads' | 'meta_ads' | 'planilha')
      * @return array ['status' => 'matched'|'created'|'skipped', 'lead_id' => int, 'reason' => string]
      */
-    public static function process_row($row_data, $mapping, $filename, $import_id = 0) {
+    public static function process_row($row_data, $mapping, $filename, $import_id = 0, $channel = 'google_ads') {
         global $wpdb;
         $leads_table = DbSchema::get_leads_table();
         $history_table = DbSchema::get_history_table();
 
         // 1. Extração dos campos mapeados
-        $raw_phone = self::get_mapped_value($row_data, $mapping, 'telefone');
-        $raw_email = self::get_mapped_value($row_data, $mapping, 'email');
-        $raw_name  = self::get_mapped_value($row_data, $mapping, 'nome');
-        $raw_date  = self::get_mapped_value($row_data, $mapping, 'data');
-        $raw_course= self::get_mapped_value($row_data, $mapping, 'curso');
-        $raw_area  = self::get_mapped_value($row_data, $mapping, 'area');
-        $raw_status= self::get_mapped_value($row_data, $mapping, 'status');
+        $raw_phone   = self::get_mapped_value($row_data, $mapping, 'telefone');
+        $raw_email   = self::get_mapped_value($row_data, $mapping, 'email');
+        $raw_name    = self::get_mapped_value($row_data, $mapping, 'nome');
+        $raw_date    = self::get_mapped_value($row_data, $mapping, 'data');
+        $raw_course  = self::get_mapped_value($row_data, $mapping, 'curso');
+        $raw_area    = self::get_mapped_value($row_data, $mapping, 'area');
+        $raw_status  = self::get_mapped_value($row_data, $mapping, 'status');
+        $raw_gclid   = self::get_mapped_value($row_data, $mapping, 'gclid');
+        $raw_fbclid  = self::get_mapped_value($row_data, $mapping, 'fbclid');
+        $raw_ad_id   = self::get_mapped_value($row_data, $mapping, 'ad_id');
+        $raw_camp    = self::get_mapped_value($row_data, $mapping, 'campanha');
 
         $phone_norm = !empty($raw_phone) ? PhoneNormalizer::normalize($raw_phone) : '';
         $email_norm = !empty($raw_email) ? sanitize_email($raw_email) : '';
@@ -98,6 +103,18 @@ class Matcher {
             if (empty($existing->area_interesse) && !empty($raw_area)) {
                 $update_data['area_interesse'] = sanitize_text_field($raw_area);
             }
+            if (empty($existing->gclid) && !empty($raw_gclid)) {
+                $update_data['gclid'] = sanitize_text_field($raw_gclid);
+            }
+            if (empty($existing->fbclid) && !empty($raw_fbclid)) {
+                $update_data['fbclid'] = sanitize_text_field($raw_fbclid);
+            }
+            if (empty($existing->ad_id) && !empty($raw_ad_id)) {
+                $update_data['ad_id'] = sanitize_text_field($raw_ad_id);
+            }
+            if (empty($existing->utm_campaign) && !empty($raw_camp)) {
+                $update_data['utm_campaign'] = sanitize_text_field($raw_camp);
+            }
 
             // Incrementa score de qualidade
             $new_score = ((int) $existing->score) + 10;
@@ -120,6 +137,7 @@ class Matcher {
                 'telefone' => $phone_norm,
                 'email'    => $email_norm,
                 'status'   => $qualificacao_status,
+                'canal'    => $channel,
             ]);
 
             // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado
@@ -135,6 +153,16 @@ class Matcher {
         }
 
         // CASO B: LEAD NÃO EXISTIA NO BANCO (Registro novo originado da planilha)
+        $form_label = 'Importação Planilha';
+        $utm_source = 'planilha';
+        if ($channel === 'google_ads') {
+            $form_label = 'Google Ads (Planilha)';
+            $utm_source = 'google';
+        } elseif ($channel === 'meta_ads') {
+            $form_label = 'Meta Ads (Planilha)';
+            $utm_source = 'meta';
+        }
+
         $new_lead_data = [
             'uuid'                 => wp_generate_uuid4(),
             'nome'                 => sanitize_text_field($raw_name),
@@ -143,14 +171,20 @@ class Matcher {
             'telefone_normalizado' => $phone_norm,
             'tipo_curso'           => sanitize_text_field($raw_course),
             'area_interesse'       => sanitize_text_field($raw_area),
-            'formulario_nome'      => 'Importação Planilha',
-            'pagina_origem'        => 'Arquivo: ' . sanitize_text_field($filename),
+            'gclid'                => sanitize_text_field($raw_gclid),
+            'fbclid'               => sanitize_text_field($raw_fbclid),
+            'ad_id'                => sanitize_text_field($raw_ad_id),
+            'utm_source'           => $utm_source,
+            'utm_medium'           => 'cpc',
+            'utm_campaign'         => sanitize_text_field($raw_camp),
+            'formulario_nome'      => $form_label,
+            'pagina_origem'        => 'Planilha: ' . sanitize_text_field($filename),
             'qualificacao_status'  => $qualificacao_status,
             'qualificacao_data'    => $qualificacao_data,
             'qualificacao_origem'  => 'planilha: ' . sanitize_text_field($filename),
             'qualificacao_dados'   => $json_dados,
             'score'                => 10,
-            'motivo_qualificacao'  => 'Importado via planilha (sem formulário Elementor prévio)',
+            'motivo_qualificacao'  => "Importado via {$form_label} (sem formulário Elementor prévio)",
             'data_cadastro'        => $qualificacao_data,
             'created_at'           => current_time('mysql'),
             'updated_at'           => current_time('mysql'),
@@ -198,13 +232,13 @@ class Matcher {
     public static function normalize_status($status_str) {
         $clean = strtolower(trim((string) $status_str));
 
-        if (preg_match('/(qualificad|matriculad|aprovad|pago|sim|ganho|fechado|aluno)/i', $clean)) {
+        if (preg_match('/(qualificad|matriculad|aprovad|pago|sim|ganho|fechado|aluno|vendid)/i', $clean)) {
             return 'qualificado';
         }
         if (preg_match('/(desqualificad|nao|no|cancelad|perdido|recusad|invalido|reprovad)/i', $clean)) {
             return 'nao_qualificado';
         }
-        if (preg_match('/(pendente|aguardando|em analise|negociacao)/i', $clean)) {
+        if (preg_match('/(pendente|aguardando|em analise|negociacao|ativo|em andamento)/i', $clean)) {
             return 'pendente';
         }
 
