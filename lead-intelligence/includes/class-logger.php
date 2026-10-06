@@ -71,7 +71,7 @@ class Logger {
     public static function clean_old_logs($dias = 30) {
         global $wpdb;
         $logs_table = \LeadIntelligence\Database\DbSchema::get_logs_table();
-        $date = gmdate('Y-m-d H:i:s', strtotime("-{$dias} days"));
+        $date = wp_date('Y-m-d H:i:s', strtotime("-{$dias} days"));
         $wpdb->query($wpdb->prepare("DELETE FROM {$logs_table} WHERE created_at < %s", $date));
     }
 }

@@ -80,8 +80,56 @@ class ElementorListener {
         $ip      = self::get_client_ip();
         $ua      = !empty($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field($_SERVER['HTTP_USER_AGENT']) : '';
 
-        // Captura consolidada de parâmetros UTM e Meta Clicks (POST > GET > Cookies)
+        // 1. Extração direta de campos ocultos existentes no formulário (gclid, fbclid, referrer, page_url, etc.)
+        $form_tracking = [];
+        if (!empty($raw_fields) && is_array($raw_fields)) {
+            foreach ($raw_fields as $f_id => $f_info) {
+                $f_key   = strtolower(trim((string) $f_id));
+                $f_title = isset($f_info['title']) ? strtolower(trim((string) $f_info['title'])) : '';
+                $f_val   = isset($f_info['value']) ? trim((string) $f_info['value']) : '';
+                if ($f_val === '') {
+                    continue;
+                }
+
+                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source'] as $tk) {
+                    if ($f_key === $tk || $f_title === $tk || strpos($f_key, $tk) !== false || strpos($f_title, $tk) !== false) {
+                        $form_tracking[$tk] = sanitize_text_field($f_val);
+                    }
+                }
+            }
+        }
+
+        // 2. Extração via URL da página de submissão (page_url enviado ou HTTP_REFERER)
+        $page_url_candidate = !empty($form_tracking['page_url']) ? $form_tracking['page_url'] : $referer;
+        $url_params = [];
+        if (!empty($page_url_candidate)) {
+            $parsed_q = parse_url($page_url_candidate, PHP_URL_QUERY);
+            if (!empty($parsed_q)) {
+                parse_str($parsed_q, $url_params);
+            }
+        }
+
+        // 3. Captura consolidada de parâmetros UTM e Meta Clicks (Cookies + Server-Side)
         $tracking = UtmTracker::get_current_tracking_data();
+
+        // Mapeamentos unificados com máxima prioridade (Form Fields > URL Query > Tracker Cookies)
+        $gclid          = !empty($form_tracking['gclid']) ? $form_tracking['gclid'] : (!empty($url_params['gclid']) ? sanitize_text_field($url_params['gclid']) : (!empty($tracking['gclid']) ? $tracking['gclid'] : ''));
+        $fbclid         = !empty($form_tracking['fbclid']) ? $form_tracking['fbclid'] : (!empty($url_params['fbclid']) ? sanitize_text_field($url_params['fbclid']) : (!empty($tracking['fbclid']) ? $tracking['fbclid'] : ''));
+        $referrer_final = !empty($form_tracking['referrer']) ? $form_tracking['referrer'] : (!empty($tracking['referrer']) ? $tracking['referrer'] : '');
+        $gad_source     = !empty($form_tracking['gad_source']) ? $form_tracking['gad_source'] : (!empty($url_params['gad_source']) ? sanitize_text_field($url_params['gad_source']) : (!empty($tracking['gad_source']) ? $tracking['gad_source'] : ''));
+
+        $campaign_id    = !empty($form_tracking['campaign_id']) ? $form_tracking['campaign_id'] : (!empty($form_tracking['gad_campaignid']) ? $form_tracking['gad_campaignid'] : (!empty($url_params['gad_campaignid']) ? sanitize_text_field($url_params['gad_campaignid']) : (!empty($url_params['campaign_id']) ? sanitize_text_field($url_params['campaign_id']) : (!empty($tracking['campaign_id']) ? $tracking['campaign_id'] : ''))));
+
+        $utm_source     = !empty($form_tracking['utm_source']) ? $form_tracking['utm_source'] : (!empty($url_params['utm_source']) ? sanitize_text_field($url_params['utm_source']) : (!empty($tracking['utm_source']) ? $tracking['utm_source'] : ''));
+        $utm_medium     = !empty($form_tracking['utm_medium']) ? $form_tracking['utm_medium'] : (!empty($url_params['utm_medium']) ? sanitize_text_field($url_params['utm_medium']) : (!empty($tracking['utm_medium']) ? $tracking['utm_medium'] : ''));
+        $utm_campaign   = !empty($form_tracking['utm_campaign']) ? $form_tracking['utm_campaign'] : (!empty($url_params['utm_campaign']) ? sanitize_text_field($url_params['utm_campaign']) : (!empty($tracking['utm_campaign']) ? $tracking['utm_campaign'] : ''));
+
+        if (empty($utm_source) && !empty($gclid)) {
+            $utm_source = 'google_ads';
+        }
+        if (empty($utm_campaign) && !empty($campaign_id)) {
+            $utm_campaign = $campaign_id;
+        }
 
         // Monta os dados para persistência
         $lead_data = [
@@ -92,21 +140,24 @@ class ElementorListener {
             'area_interesse'  => $extracted['area_interesse'],
             'formulario_id'   => $form_id,
             'formulario_nome' => $form_name,
-            'pagina_origem'   => $referer,
+            'pagina_origem'   => $page_url_candidate,
             'ip_address'      => $ip,
             'user_agent'      => $ua,
-            'utm_source'      => $tracking['utm_source'],
-            'utm_medium'      => $tracking['utm_medium'],
-            'utm_campaign'    => $tracking['utm_campaign'],
-            'utm_content'     => $tracking['utm_content'],
-            'utm_term'        => $tracking['utm_term'],
-            'fbclid'          => $tracking['fbclid'],
+            'gclid'           => $gclid,
+            'gad_source'      => $gad_source,
+            'referrer'        => $referrer_final,
+            'utm_source'      => $utm_source,
+            'utm_medium'      => $utm_medium,
+            'utm_campaign'    => $utm_campaign,
+            'utm_content'     => !empty($form_tracking['utm_content']) ? $form_tracking['utm_content'] : (!empty($url_params['utm_content']) ? sanitize_text_field($url_params['utm_content']) : $tracking['utm_content']),
+            'utm_term'        => !empty($form_tracking['utm_term']) ? $form_tracking['utm_term'] : (!empty($url_params['utm_term']) ? sanitize_text_field($url_params['utm_term']) : $tracking['utm_term']),
+            'fbclid'          => $fbclid,
             'fbc'             => $tracking['fbc'],
             'fbp'             => $tracking['fbp'],
-            'campaign_id'     => $tracking['campaign_id'],
+            'campaign_id'     => $campaign_id,
             'adset_id'        => $tracking['adset_id'],
             'ad_id'           => $tracking['ad_id'],
-            'campaign_name'   => $tracking['campaign_name'],
+            'campaign_name'   => !empty($tracking['campaign_name']) ? $tracking['campaign_name'] : $utm_campaign,
             'adset_name'      => $tracking['adset_name'],
             'ad_name'         => $tracking['ad_name'],
         ];

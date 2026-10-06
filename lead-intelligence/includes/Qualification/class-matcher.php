@@ -234,7 +234,7 @@ class Matcher {
 
         $timestamp = strtotime($clean);
         if ($timestamp !== false) {
-            return gmdate('Y-m-d H:i:s', $timestamp);
+            return wp_date('Y-m-d H:i:s', $timestamp);
         }
 
         return current_time('mysql');

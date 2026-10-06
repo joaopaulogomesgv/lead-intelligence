@@ -32,17 +32,17 @@ class DashboardController {
 
         switch ($periodo) {
             case '7d':
-                $date_start = gmdate('Y-m-d 00:00:00', strtotime('-7 days'));
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-7 days'));
                 break;
             case '30d':
-                $date_start = gmdate('Y-m-d 00:00:00', strtotime('-30 days'));
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-30 days'));
                 break;
             case 'month':
-                $date_start = gmdate('Y-m-01 00:00:00');
+                $date_start = wp_date('Y-m-01 00:00:00');
                 break;
             case 'last_month':
-                $date_start = gmdate('Y-m-01 00:00:00', strtotime('first day of last month'));
-                $date_end   = gmdate('Y-m-t 23:59:59', strtotime('last day of last month'));
+                $date_start = wp_date('Y-m-01 00:00:00', strtotime('first day of last month'));
+                $date_end   = wp_date('Y-m-t 23:59:59', strtotime('last day of last month'));
                 break;
             case 'custom':
                 if (!empty($custom_from)) {

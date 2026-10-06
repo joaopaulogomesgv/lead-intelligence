@@ -13,9 +13,10 @@ Esta skill orienta o agente em como inspecionar, desenvolver e empacotar qualque
 ## Princípios Invioláveis
 1. **Não tocar no Webhook do InterageZap**: O plugin atua como ouvinte passivo em `elementor_pro/forms/new_record` e possui webhook próprio na Meta (`/wp-json/lead-intelligence/v1/meta/webhook`).
 2. **Tabelas Próprias**: Leads são armazenados em `wp_li_leads` e histórico em `wp_li_lead_history`. Nunca use posts/postmeta.
-3. **Empacotamento**: Sempre execute `py build/package.py` para gerar o `.zip` com barras Unix (`/`) e salvar na Área de Trabalho.
-4. **Meta Graph API**: Padrão `v26.0`.
-5. **Normalização de Telefones**: Sempre usar `\LeadIntelligence\PhoneNormalizer::normalize($phone)` (+55 DDD 9 dígitos).
+3. **Versionamento Obrigatório a Cada Atualização**: Toda e qualquer alteração de código exige o incremento da versão (SemVer: ex. 1.0.0 -> 1.0.1) em `lead-intelligence.php` (no docblock `Version:` e em `LEAD_INTELLIGENCE_VERSION`) ANTES de empacotar.
+4. **Empacotamento Seguro (ZIP/WinRAR)**: Sempre execute `python build/package.py` para gerar o `.zip` com barras Unix (`/`) e salvar na Área de Trabalho.
+5. **Meta Graph API**: Padrão `v26.0`.
+6. **Normalização de Telefones**: Sempre usar `\LeadIntelligence\PhoneNormalizer::normalize($phone)` (+55 DDD 9 dígitos).
 
 ## Módulos Principais
 
@@ -51,7 +52,9 @@ Esta skill orienta o agente em como inspecionar, desenvolver e empacotar qualque
 
 ## Procedimento de Empacotamento
 Sempre que concluir alterações:
+1. Incremente a versão em `lead-intelligence/lead-intelligence.php` (no cabeçalho `Version:` e na constante `LEAD_INTELLIGENCE_VERSION`).
+2. Execute:
 ```bash
-py build/package.py
+python build/package.py
 ```
-Isso atualiza `lead-intelligence.zip` na raiz e na Área de Trabalho do usuário.
+Isso valida a versão atual e atualiza `lead-intelligence.zip` na raiz e na Área de Trabalho do usuário.

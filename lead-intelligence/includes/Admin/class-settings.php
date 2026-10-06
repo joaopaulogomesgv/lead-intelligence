@@ -271,7 +271,10 @@ class Settings {
                             <th scope="row"><label for="meta_access_token">Access Token do Sistema (System User)</label></th>
                             <td>
                                 <input type="password" id="meta_access_token" name="meta_access_token" value="<?php echo !empty($settings['meta_access_token']) ? '••••••••••••••••' : ''; ?>" class="large-text">
-                                <p class="description">Token permanente gerado no Business Manager da Meta.</p>
+                                <p class="description">
+                                    Token permanente gerado no Business Manager da Meta.<br>
+                                    <strong style="color: #0284c7;">📌 Captura Automática de Campanhas:</strong> Para que o plugin puxe automaticamente os nomes de <strong>Campanha, Conjunto (AdSet) e Anúncio</strong> dos leads de Click-to-WhatsApp, este Token deve pertencer a um Usuário do Sistema com a permissão <code>ads_read</code> (além das de WhatsApp) e a sua Conta de Anúncios deve estar vinculada a ele no Meta Business Suite.
+                                </p>
                             </td>
                         </tr>
                         <tr>

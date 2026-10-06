@@ -12,7 +12,8 @@
         cookieDays: 30,
         trackingKeys: [
             'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
-            'fbclid', 'fbc', 'fbp', 'campaign_id', 'adset_id', 'ad_id',
+            'fbclid', 'gclid', 'gbraid', 'wbraid', 'gad_source', 'gad_campaignid',
+            'referrer', 'page_url', 'fbc', 'fbp', 'campaign_id', 'adset_id', 'ad_id',
             'campaign_name', 'adset_name', 'ad_name'
         ]
     };
@@ -70,6 +71,22 @@
         var urlParams = getUrlParams();
         var storageAvailable = typeof window.localStorage !== 'undefined';
 
+        // Captura do document.referrer (ex: googlesyndication, instagram, etc.)
+        if (document.referrer) {
+            setCookie(config.cookiePrefix + 'referrer', document.referrer, config.cookieDays);
+            if (storageAvailable) {
+                localStorage.setItem('li_referrer', document.referrer);
+            }
+        }
+
+        // Captura da URL completa atual
+        if (window.location.href) {
+            setCookie(config.cookiePrefix + 'page_url', window.location.href, config.cookieDays);
+            if (storageAvailable) {
+                localStorage.setItem('li_page_url', window.location.href);
+            }
+        }
+
         // Tratamento especial para fbclid e cookies da Meta (_fbc e _fbp)
         if (urlParams.fbclid) {
             var fbclid = urlParams.fbclid;
@@ -82,6 +99,15 @@
             if (!getCookie('_fbc')) {
                 var fbcVal = 'fb.1.' + (+new Date()) + '.' + fbclid;
                 setCookie('_fbc', fbcVal, config.cookieDays);
+            }
+        }
+
+        // Tratamento especial para gclid do Google Ads
+        if (urlParams.gclid) {
+            var gclid = urlParams.gclid;
+            setCookie(config.cookiePrefix + 'gclid', gclid, config.cookieDays);
+            if (storageAvailable) {
+                localStorage.setItem('li_gclid', gclid);
             }
         }
 

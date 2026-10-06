@@ -20,6 +20,13 @@ class UtmTracker {
         'utm_content',
         'utm_term',
         'fbclid',
+        'gclid',
+        'gbraid',
+        'wbraid',
+        'gad_source',
+        'gad_campaignid',
+        'referrer',
+        'page_url',
         'fbc',
         'fbp',
         'campaign_id',
@@ -142,6 +149,15 @@ class UtmTracker {
     public static function get_current_tracking_data() {
         $result = [];
 
+        // Extração de parâmetros da URL de onde partiu a requisição (essencial para AJAX do Elementor)
+        $referer_params = [];
+        if (!empty($_SERVER['HTTP_REFERER'])) {
+            $query_str = parse_url($_SERVER['HTTP_REFERER'], PHP_URL_QUERY);
+            if (!empty($query_str)) {
+                parse_str($query_str, $referer_params);
+            }
+        }
+
         foreach (self::TRACKING_KEYS as $key) {
             $val = '';
 
@@ -153,7 +169,11 @@ class UtmTracker {
             elseif (!empty($_GET[$key])) {
                 $val = sanitize_text_field(wp_unslash($_GET[$key]));
             }
-            // 3. Cookie específico li_*
+            // 3. Parâmetro na URL da página de origem do AJAX (HTTP_REFERER)
+            elseif (!empty($referer_params[$key])) {
+                $val = sanitize_text_field(wp_unslash($referer_params[$key]));
+            }
+            // 4. Cookie específico li_*
             elseif (!empty($_COOKIE['li_' . $key])) {
                 $val = sanitize_text_field(wp_unslash($_COOKIE['li_' . $key]));
             }
@@ -172,6 +192,20 @@ class UtmTracker {
             }
 
             $result[$key] = $val;
+        }
+
+        // Mapeamentos inteligentes de equivalência Google Ads
+        if (empty($result['campaign_id']) && !empty($result['gad_campaignid'])) {
+            $result['campaign_id'] = $result['gad_campaignid'];
+        }
+        if (empty($result['utm_campaign']) && !empty($result['gad_campaignid'])) {
+            $result['utm_campaign'] = $result['gad_campaignid'];
+        }
+        if (empty($result['utm_source']) && !empty($result['gclid'])) {
+            $result['utm_source'] = 'google_ads';
+        }
+        if (empty($result['utm_medium']) && !empty($result['gclid'])) {
+            $result['utm_medium'] = 'cpc';
         }
 
         return $result;

@@ -44,6 +44,14 @@ Este documento define as regras, restrições e conhecimento arquitetural obriga
    - Os cookies `_fbc`, `_fbp`, `client_ip_address` e `client_user_agent` **não** devem ser hasheados.
    - Nunca disparar eventos automaticamente se os toggles de CAPI estiverem desligados nas configurações.
 
+6. **Versionamento Obrigatório a Cada Atualização (Regra do Pacote ZIP/WinRAR)**:
+   - **Toda e qualquer alteração** de código, lógica ou assets do plugin **DEVE OBRIGATORIAMENTE** incrementar a versão do plugin (SemVer: ex. 1.0.0 -> 1.0.1 -> 1.0.2) **ANTES** de gerar o pacote compactado (ZIP/WinRAR).
+   - A versão deve ser atualizada em:
+     1. Cabeçalho de `lead-intelligence/lead-intelligence.php` (`* Version: x.y.z`)
+     2. Constante `LEAD_INTELLIGENCE_VERSION` em `lead-intelligence/lead-intelligence.php`
+     3. Constante `LEAD_INTELLIGENCE_DB_VERSION` (caso haja mudança estrutural de banco de dados).
+   - O WordPress exige incremento de versão para registrar corretamente a atualização do plugin e evitar conflitos de cache e banco.
+
 ---
 
 ## 3. Estrutura de Arquivos e Responsabilidades
@@ -106,7 +114,9 @@ build/
 ---
 
 ## 5. Fluxo de Trabalho Recomendado para Novas Features
-
-1. **Alterou código PHP ou assets?** Sempre execute `py build/package.py` para sincronizar o arquivo `.zip` na Área de Trabalho do usuário.
+ 
+1. **Alterou código PHP ou assets?**
+   - **Passo 1 (Obrigatório)**: Incremente a versão em `lead-intelligence/lead-intelligence.php` (no cabeçalho `Version:` e na constante `LEAD_INTELLIGENCE_VERSION`).
+   - **Passo 2**: Execute `python build/package.py` para sincronizar o arquivo `.zip` com caminhos Unix na Área de Trabalho do usuário.
 2. **Adicionou colunas no banco?** Atualize a constante `LEAD_INTELLIGENCE_DB_VERSION` em `lead-intelligence.php` e adicione o campo em `class-db-schema.php` (o método `DbSchema::maybe_update()` rodará o `dbDelta` automaticamente).
 3. **Manteve segurança de ponta?** Sempre use `check_admin_referer()` em formulários POST do admin, `sanitize_*` em inputs e `esc_attr` / `esc_html` em outputs.

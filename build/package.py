@@ -25,7 +25,19 @@ def package_plugin():
             target_desktop = cand
             break
 
-    print(f"Compactando plugin de: {source_dir}")
+    # Extrai versão atual do plugin
+    version = 'desconhecida'
+    main_file = os.path.join(source_dir, 'lead-intelligence.php')
+    if os.path.exists(main_file):
+        with open(main_file, 'r', encoding='utf-8') as f:
+            for line in f:
+                if 'LEAD_INTELLIGENCE_VERSION' in line and 'define' in line:
+                    parts = line.split(',')
+                    if len(parts) > 1:
+                        version = parts[1].strip().strip("');\"")
+                        break
+
+    print(f"Compactando plugin versão v{version} de: {source_dir}")
 
     # Cria o arquivo ZIP garantindo separadores '/' (estilo Unix)
     with zipfile.ZipFile(output_local, 'w', zipfile.ZIP_DEFLATED) as zipf:

@@ -72,6 +72,11 @@ class DbSchema {
             utm_content varchar(255) DEFAULT '',
             utm_term varchar(255) DEFAULT '',
             fbclid text DEFAULT NULL,
+            gclid varchar(255) DEFAULT '',
+            gbraid varchar(255) DEFAULT '',
+            wbraid varchar(255) DEFAULT '',
+            gad_source varchar(50) DEFAULT '',
+            referrer text DEFAULT NULL,
             fbc varchar(255) DEFAULT '',
             fbp varchar(255) DEFAULT '',
             campaign_id varchar(100) DEFAULT '',
@@ -186,6 +191,55 @@ class DbSchema {
         $installed_ver = get_option('lead_intelligence_db_version', '0.0.0');
         if (version_compare($installed_ver, LEAD_INTELLIGENCE_DB_VERSION, '<')) {
             self::create_tables();
+            \LeadIntelligence\WhatsApp\MessageHandler::retro_enrich_leads();
+            self::retro_enrich_google_leads();
+        }
+    }
+
+    /**
+     * Recupera parâmetros do Google Ads (gclid, campaign_id, etc.) retroativamente da pagina_origem
+     */
+    public static function retro_enrich_google_leads() {
+        global $wpdb;
+        $leads_table = self::get_leads_table();
+
+        $leads = $wpdb->get_results("SELECT id, pagina_origem, gclid, campaign_id, utm_source, utm_campaign FROM {$leads_table} WHERE pagina_origem LIKE '%gclid=%' OR pagina_origem LIKE '%utm_%'");
+        if (empty($leads)) {
+            return;
+        }
+
+        foreach ($leads as $l) {
+            $query = parse_url($l->pagina_origem, PHP_URL_QUERY);
+            if (empty($query)) {
+                continue;
+            }
+
+            $params = [];
+            parse_str($query, $params);
+
+            $updates = [];
+            if (empty($l->gclid) && !empty($params['gclid'])) {
+                $updates['gclid'] = sanitize_text_field($params['gclid']);
+            }
+            if (!empty($params['gad_campaignid']) && empty($l->campaign_id)) {
+                $updates['campaign_id'] = sanitize_text_field($params['gad_campaignid']);
+            }
+            if (!empty($params['gad_source'])) {
+                $updates['gad_source'] = sanitize_text_field($params['gad_source']);
+            }
+            if (empty($l->utm_source) && !empty($params['utm_source'])) {
+                $updates['utm_source'] = sanitize_text_field($params['utm_source']);
+            }
+            if (empty($l->utm_campaign) && !empty($params['utm_campaign'])) {
+                $updates['utm_campaign'] = sanitize_text_field($params['utm_campaign']);
+            } elseif (empty($l->utm_campaign) && !empty($params['gad_campaignid'])) {
+                $updates['utm_campaign'] = sanitize_text_field($params['gad_campaignid']);
+            }
+
+            if (!empty($updates)) {
+                $updates['updated_at'] = current_time('mysql');
+                $wpdb->update($leads_table, $updates, ['id' => $l->id]);
+            }
         }
     }
 }

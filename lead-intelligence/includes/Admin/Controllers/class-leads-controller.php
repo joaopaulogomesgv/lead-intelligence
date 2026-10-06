@@ -3,6 +3,7 @@ namespace LeadIntelligence\Admin\Controllers;
 
 use LeadIntelligence\Database\LeadRepository;
 use LeadIntelligence\PhoneNormalizer;
+use LeadIntelligence\WhatsApp\WabaClient;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -13,9 +14,41 @@ if (!defined('ABSPATH')) {
  */
 class LeadsController {
 
+    /**
+     * Endpoint AJAX para sincronização individual de anúncio da Meta para um lead
+     */
+    public static function ajax_sync_lead_ad() {
+        check_ajax_referer('li_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permissão negada.']);
+        }
+
+        $lead_id = isset($_POST['lead_id']) ? (int) $_POST['lead_id'] : 0;
+        if ($lead_id <= 0) {
+            wp_send_json_error(['message' => 'ID de lead inválido.']);
+        }
+
+        $result = WabaClient::sync_lead_ad_data($lead_id);
+        if ($result['success']) {
+            wp_send_json_success($result);
+        } else {
+            wp_send_json_error($result);
+        }
+    }
+
     public static function render() {
         $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence-leads';
         $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');
+
+        $sync_message = null;
+        $sync_success = true;
+        if (isset($_POST['li_sync_all_ads'])) {
+            check_admin_referer('li_sync_all_ads_verify', 'li_nonce');
+            $sync_res = WabaClient::sync_all_pending_leads();
+            $sync_message = $sync_res['message'];
+            $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
+        }
 
         $search    = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
@@ -48,12 +81,26 @@ class LeadsController {
             : 'Monitoramento em tempo real dos leads capturados via formulários Elementor Pro e planilhas.';
         ?>
         <div class="wrap li-wrap">
-            <div class="li-header">
+            <div class="li-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:15px;">
                 <div>
                     <h2>Lead Intelligence &bull; <?php echo esc_html($page_title); ?></h2>
                     <p class="li-subtitle"><?php echo esc_html($page_sub); ?></p>
                 </div>
+                <div>
+                    <form method="post" action="" style="display:inline;">
+                        <?php wp_nonce_field('li_sync_all_ads_verify', 'li_nonce'); ?>
+                        <button type="submit" name="li_sync_all_ads" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px;">
+                            <span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Sincronizar Campanhas Meta (WhatsApp)
+                        </button>
+                    </form>
+                </div>
             </div>
+
+            <?php if ($sync_message): ?>
+                <div class="notice <?php echo $sync_success ? 'notice-success' : 'notice-warning'; ?> is-dismissible" style="margin-bottom: 20px;">
+                    <p><strong><?php echo $sync_success ? '✔' : '⚠️'; ?></strong> <?php echo esc_html($sync_message); ?></p>
+                </div>
+            <?php endif; ?>
 
             <!-- CARDS DE MÉTRICAS -->
             <div class="li-metric-grid">
@@ -179,9 +226,14 @@ class LeadsController {
                                                 <span title="Campanha">🎯 <?php echo esc_html($lead->utm_campaign ?: $lead->utm_source); ?></span>
                                             </div>
                                         <?php endif; ?>
-                                        <?php if (!empty($lead->fbclid)): ?>
-                                            <span class="li-badge-mini" title="Meta Click ID detectado">FB Meta</span>
-                                        <?php endif; ?>
+                                        <div style="margin-top: 3px; display: flex; gap: 4px; flex-wrap: wrap;">
+                                            <?php if (!empty($lead->gclid)): ?>
+                                                <span class="li-badge-mini" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;" title="Google Click ID">Google Ads</span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($lead->fbclid)): ?>
+                                                <span class="li-badge-mini" title="Meta Click ID">FB Meta</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                     <td>
                                         <?php
@@ -249,6 +301,11 @@ class LeadsController {
             </div>
 
             <script>
+            window.liAdminAjax = {
+                url: '<?php echo esc_url(admin_url('admin-ajax.php')); ?>',
+                nonce: '<?php echo esc_js(wp_create_nonce('li_ajax_nonce')); ?>'
+            };
+
             function closeLiModal() {
                 document.getElementById('liLeadModal').style.display = 'none';
             }
@@ -270,19 +327,32 @@ class LeadsController {
                     html += '<p><strong>Área de Interesse:</strong> ' + (lead.area_interesse || '-') + '</p>';
                     html += '</div>';
 
-                    // Seção 2: UTMs e Atribuição Meta Ads
-                    html += '<div class="li-modal-box"><h4>🎯 Parâmetros UTM e Meta Ads</h4>';
+                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads
+                    html += '<div class="li-modal-box"><h4>🎯 Atribuição de Campanha & Ads</h4>';
+                    html += '<p><strong>Campanha:</strong> <span id="liModalCampName" style="font-weight:600; color:#0f172a;">' + (lead.campaign_name || lead.utm_campaign || '-') + '</span></p>';
+                    html += '<p><strong>Conjunto / AdSet:</strong> <span id="liModalAdSetName" style="font-weight:600; color:#0f172a;">' + (lead.adset_name || lead.utm_content || '-') + '</span></p>';
+                    html += '<p><strong>Anúncio:</strong> <span id="liModalAdName" style="font-weight:600; color:#0f172a;">' + (lead.ad_name || lead.utm_term || '-') + '</span></p>';
+                    html += '<hr style="margin: 8px 0; border: none; border-top: 1px dashed #e2e8f0;">';
                     html += '<p><strong>utm_source:</strong> <code>' + (lead.utm_source || '-') + '</code></p>';
                     html += '<p><strong>utm_medium:</strong> <code>' + (lead.utm_medium || '-') + '</code></p>';
-                    html += '<p><strong>utm_campaign:</strong> <code>' + (lead.utm_campaign || '-') + '</code></p>';
-                    html += '<p><strong>utm_content:</strong> <code>' + (lead.utm_content || '-') + '</code></p>';
-                    html += '<p><strong>utm_term:</strong> <code>' + (lead.utm_term || '-') + '</code></p>';
-                    html += '<p><strong>fbclid:</strong> <code>' + (lead.fbclid || '-') + '</code></p>';
-                    html += '<p><strong>fbc:</strong> <code>' + (lead.fbc || '-') + '</code></p>';
-                    html += '<p><strong>fbp:</strong> <code>' + (lead.fbp || '-') + '</code></p>';
-                    if (lead.campaign_id) html += '<p><strong>Campaign ID:</strong> <code>' + lead.campaign_id + '</code></p>';
-                    if (lead.adset_id) html += '<p><strong>AdSet ID:</strong> <code>' + lead.adset_id + '</code></p>';
-                    if (lead.ad_id) html += '<p><strong>Ad ID:</strong> <code>' + lead.ad_id + '</code></p>';
+                    html += '<p><strong>utm_campaign:</strong> <code id="liModalUtmCamp">' + (lead.utm_campaign || '-') + '</code></p>';
+                    html += '<p><strong>utm_content:</strong> <code id="liModalUtmContent">' + (lead.utm_content || '-') + '</code></p>';
+                    html += '<p><strong>utm_term:</strong> <code id="liModalUtmTerm">' + (lead.utm_term || '-') + '</code></p>';
+                    html += '<p><strong>gclid (Google Ads):</strong> <code style="word-break:break-all;">' + (lead.gclid || '-') + '</code></p>';
+                    html += '<p><strong>fbclid / CTWA:</strong> <code style="word-break:break-all;">' + (lead.fbclid || '-') + '</code></p>';
+                    html += '<p><strong>Campaign ID / Gad:</strong> <code id="liModalCampId">' + (lead.campaign_id || '-') + '</code></p>';
+                    html += '<p><strong>AdSet ID:</strong> <code id="liModalAdSetId">' + (lead.adset_id || '-') + '</code></p>';
+                    html += '<p><strong>Ad ID:</strong> <code id="liModalAdId">' + (lead.ad_id || '-') + '</code></p>';
+
+                    if (lead.ad_id) {
+                        html += '<div style="margin-top: 14px; padding: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;">';
+                        html += '<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0369a1; margin-bottom: 6px;">Sincronização com Meta Marketing API</div>';
+                        html += '<button type="button" class="button button-primary" id="liBtnSyncLeadAd" data-lead-id="' + lead.id + '" style="display:inline-flex; align-items:center; gap:6px;">';
+                        html += '<span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Buscar Dados Oficiais na Meta';
+                        html += '</button>';
+                        html += '<div id="liSyncLeadResult" style="margin-top:8px; font-size:12px; display:none;"></div>';
+                        html += '</div>';
+                    }
                     html += '</div>';
 
                     // Seção 3: Qualificação e WhatsApp
@@ -298,7 +368,8 @@ class LeadsController {
                     // Seção 4: Metadados Técnicos
                     html += '<div class="li-modal-box"><h4>🌐 Metadados Técnicos</h4>';
                     html += '<p><strong>Formulário:</strong> ' + (lead.formulario_nome || '-') + ' (' + (lead.formulario_id || '-') + ')</p>';
-                    html += '<p><strong>Página de Origem:</strong> <a href="' + lead.pagina_origem + '" target="_blank">' + (lead.pagina_origem || '-') + '</a></p>';
+                    html += '<p><strong>Página de Origem:</strong> <a href="' + (lead.pagina_origem || '#') + '" target="_blank" style="word-break:break-all; font-size:12px;">' + (lead.pagina_origem || '-') + '</a></p>';
+                    html += '<p><strong>Referrer Externo:</strong> <span style="word-break:break-all; font-size:12px; color:#475569;">' + (lead.referrer || '-') + '</span></p>';
                     html += '<p><strong>Endereço IP:</strong> ' + (lead.ip_address || '-') + '</p>';
                     html += '<p><strong>User Agent:</strong> <span style="font-size:11px; word-break:break-all;">' + (lead.user_agent || '-') + '</span></p>';
                     html += '</div>';
@@ -307,6 +378,56 @@ class LeadsController {
 
                     document.getElementById('liModalContent').innerHTML = html;
                     document.getElementById('liLeadModal').style.display = 'flex';
+
+                    // Handler do botão de sincronização individual
+                    var syncBtn = document.getElementById('liBtnSyncLeadAd');
+                    if (syncBtn) {
+                        syncBtn.addEventListener('click', function() {
+                            var leadId = this.getAttribute('data-lead-id');
+                            var resultDiv = document.getElementById('liSyncLeadResult');
+                            var btn = this;
+                            btn.disabled = true;
+                            btn.innerHTML = '<span class="dashicons dashicons-update" style="animation:spin 1s infinite linear;"></span> Consultando Meta...';
+                            resultDiv.style.display = 'block';
+                            resultDiv.innerHTML = '<span style="color:#64748b;">Aguarde, comunicando com a Meta Marketing API...</span>';
+
+                            var formData = new FormData();
+                            formData.append('action', 'li_sync_lead_ad');
+                            formData.append('lead_id', leadId);
+                            formData.append('nonce', window.liAdminAjax.nonce);
+
+                            fetch(window.liAdminAjax.url, {
+                                method: 'POST',
+                                body: formData
+                            })
+                            .then(function(r) { return r.json(); })
+                            .then(function(res) {
+                                btn.disabled = false;
+                                btn.innerHTML = '<span class="dashicons dashicons-update"></span> Buscar Dados Oficiais na Meta';
+                                if (res.success && res.data) {
+                                    var d = res.data.data || res.data.meta || {};
+                                    var l = res.data.lead || {};
+                                    resultDiv.innerHTML = '<div style="background:#dcfce7; color:#15803d; padding:8px 10px; border-radius:4px; font-weight:500;">✔ ' + (res.data.message || 'Dados sincronizados com sucesso!') + '</div>';
+                                    if (document.getElementById('liModalCampName')) document.getElementById('liModalCampName').innerText = l.campaign_name || d.campaign_name || '-';
+                                    if (document.getElementById('liModalAdSetName')) document.getElementById('liModalAdSetName').innerText = l.adset_name || d.adset_name || '-';
+                                    if (document.getElementById('liModalAdName')) document.getElementById('liModalAdName').innerText = l.ad_name || d.ad_name || '-';
+                                    if (document.getElementById('liModalCampId')) document.getElementById('liModalCampId').innerText = l.campaign_id || d.campaign_id || '-';
+                                    if (document.getElementById('liModalAdSetId')) document.getElementById('liModalAdSetId').innerText = l.adset_id || d.adset_id || '-';
+                                    if (document.getElementById('liModalUtmCamp')) document.getElementById('liModalUtmCamp').innerText = l.utm_campaign || d.campaign_name || '-';
+                                    if (document.getElementById('liModalUtmContent')) document.getElementById('liModalUtmContent').innerText = l.utm_content || d.adset_name || '-';
+                                    if (document.getElementById('liModalUtmTerm')) document.getElementById('liModalUtmTerm').innerText = l.utm_term || d.ad_name || '-';
+                                } else {
+                                    var err = (res.data && res.data.message) ? res.data.message : 'Erro ao consultar a Meta.';
+                                    resultDiv.innerHTML = '<div style="background:#fee2e2; color:#b91c1c; padding:8px 10px; border-radius:4px;">❌ ' + err + '<br><small style="color:#7f1d1d; display:block; margin-top:4px;">Dica: certifique-se de que o token possua a permissão <strong>ads_read</strong> e a Conta de Anúncios esteja associada ao System User no Meta Business Suite.</small></div>';
+                                }
+                            })
+                            .catch(function(e) {
+                                btn.disabled = false;
+                                btn.innerHTML = '<span class="dashicons dashicons-update"></span> Buscar Dados Oficiais na Meta';
+                                resultDiv.innerHTML = '<div style="background:#fee2e2; color:#b91c1c; padding:8px 10px; border-radius:4px;">❌ Falha na requisição: ' + e.message + '</div>';
+                            });
+                        });
+                    }
                 });
             });
 

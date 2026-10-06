@@ -42,7 +42,15 @@ class Autoloader {
             return;
         }
 
-        // Fallback direto sem conversão
+        // Fallback 1: Tratar casos compostos como WhatsApp -> whatsapp (sem hífen interno)
+        $alt_kebab = str_replace('whats-app', 'whatsapp', $kebab);
+        $alt_file = $base_dir . $sub_path . 'class-' . str_replace('_', '-', $alt_kebab) . '.php';
+        if (file_exists($alt_file)) {
+            require_once $alt_file;
+            return;
+        }
+
+        // Fallback 2: direto sem conversão
         $direct_file = $base_dir . $sub_path . 'class-' . strtolower($class_name) . '.php';
         if (file_exists($direct_file)) {
             require_once $direct_file;
