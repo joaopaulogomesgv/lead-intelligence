@@ -353,7 +353,7 @@ class DashboardController {
                             <span class="li-status-pulse"></span>
                             <span class="li-status-text">Monitoramento Ativo</span>
                         </div>
-                        <span class="li-sidebar-ver">Lead Intelligence v1.6.5</span>
+                        <span class="li-sidebar-ver">Lead Intelligence v1.6.6</span>
                     </div>
                 </aside>
 
