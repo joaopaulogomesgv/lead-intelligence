@@ -32,6 +32,16 @@ class Shortcodes {
             [],
             LEAD_INTELLIGENCE_VERSION
         );
+
+        // Se for a página /dashboard/ ou contiver o shortcode, enfileira logo no <head>
+        global $post;
+        $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+        if (
+            (is_a($post, 'WP_Post') && (has_shortcode($post->post_content, 'lead_intelligence_dashboard') || has_shortcode($post->post_content, 'li_dashboard'))) ||
+            strpos($uri, 'dashboard') !== false
+        ) {
+            wp_enqueue_style('li-admin-css');
+        }
     }
 
     /**
@@ -136,7 +146,12 @@ class Shortcodes {
         }
 
         ob_start();
-        DashboardController::render($options);
+        try {
+            DashboardController::render($options);
+        } catch (\Throwable $e) {
+            \LeadIntelligence\Logger::error('Falha ao renderizar DashboardController via shortcode: ' . $e->getMessage(), 'dashboard');
+            echo '<div class="li-wrap" style="padding: 20px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; color: #9f1239; margin: 20px;"><strong>Erro ao carregar Dashboard:</strong> ' . esc_html($e->getMessage()) . '</div>';
+        }
         return ob_get_clean();
     }
 

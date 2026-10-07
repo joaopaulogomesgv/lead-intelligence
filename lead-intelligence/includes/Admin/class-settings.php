@@ -27,11 +27,13 @@ class Settings {
                 'telefone'       => 'telefone,phone,whatsapp,tel,celular,fone,contato',
                 'tipo_curso'     => 'tipo_curso,curso,modalidade,tipo,nivel',
                 'area_interesse' => 'area_interesse,area,interesse,curso_interesse,especializacao',
+                'polo'           => 'polo,unidade,cidade,polo_apoio,campus,local',
             ],
             'meta_app_id'              => '',
             'meta_app_secret'          => '',
             'meta_waba_id'             => '',
             'meta_phone_number_id'     => '',
+            'meta_phone_numbers'       => [],
             'meta_access_token'        => '',
             'meta_verify_token'        => wp_generate_password(24, false),
             'meta_graph_version'       => 'v26.0',
@@ -47,6 +49,25 @@ class Settings {
 
         $saved = get_option('lead_intelligence_settings', []);
         return wp_parse_args($saved, $defaults);
+    }
+
+    /**
+     * Retorna a lista configurada de polos e números de WhatsApp via PoloRepository
+     *
+     * @return array
+     */
+    public static function get_phone_numbers() {
+        return \LeadIntelligence\WhatsApp\PoloRepository::get_all();
+    }
+
+    /**
+     * Localiza o polo pelo Phone Number ID recebido da Meta
+     *
+     * @param string $phone_number_id
+     * @return array|null
+     */
+    public static function find_polo_by_phone_number_id($phone_number_id) {
+        return \LeadIntelligence\WhatsApp\PoloRepository::find_by_phone_number_id($phone_number_id);
     }
 
     public static function handle_save() {
@@ -74,6 +95,7 @@ class Settings {
             'telefone'       => sanitize_text_field($_POST['field_mapping_telefone'] ?? ''),
             'tipo_curso'     => sanitize_text_field($_POST['field_mapping_tipo_curso'] ?? ''),
             'area_interesse' => sanitize_text_field($_POST['field_mapping_area_interesse'] ?? ''),
+            'polo'           => sanitize_text_field($_POST['field_mapping_polo'] ?? ''),
         ];
 
         // Meta Cloud API
@@ -81,7 +103,56 @@ class Settings {
         $meta_waba_id         = sanitize_text_field($_POST['meta_waba_id'] ?? '');
         $meta_phone_number_id = sanitize_text_field($_POST['meta_phone_number_id'] ?? '');
         $meta_verify_token    = sanitize_text_field($_POST['meta_verify_token'] ?? '');
-        $meta_graph_version   = sanitize_text_field($_POST['meta_graph_version'] ?? 'v21.0');
+        $meta_graph_version   = sanitize_text_field($_POST['meta_graph_version'] ?? 'v26.0');
+
+        // Múltiplos Polos & Números da Meta Cloud API
+        $meta_polos = [];
+        $raw_polos = $_POST['meta_polos'] ?? [];
+        $default_phone_id = '';
+
+        if (is_array($raw_polos)) {
+            $has_default = false;
+            foreach ($raw_polos as $idx => $p) {
+                $p_nome = sanitize_text_field($p['nome'] ?? '');
+                $p_id   = sanitize_text_field($p['phone_number_id'] ?? '');
+                $p_disp = sanitize_text_field($p['display_phone'] ?? '');
+                $p_def  = !empty($p['is_default']) ? 1 : 0;
+
+                if (empty($p_nome) && empty($p_id)) {
+                    continue;
+                }
+
+                if (empty($p_nome)) {
+                    $p_nome = 'Polo ' . ($idx + 1);
+                }
+
+                if ($p_def) {
+                    $has_default = true;
+                    $default_phone_id = $p_id;
+                }
+
+                $meta_polos[] = [
+                    'id'              => 'polo_' . ($idx + 1),
+                    'nome'            => $p_nome,
+                    'phone_number_id' => $p_id,
+                    'display_phone'   => $p_disp,
+                    'is_default'      => $p_def,
+                ];
+            }
+
+            if (!$has_default && !empty($meta_polos)) {
+                $meta_polos[0]['is_default'] = 1;
+                $default_phone_id = $meta_polos[0]['phone_number_id'];
+            }
+        }
+
+        // Fallback para manter o campo simples legado atualizado
+        if (empty($default_phone_id) && !empty($meta_polos)) {
+            $default_phone_id = $meta_polos[0]['phone_number_id'] ?? '';
+        }
+        if (empty($default_phone_id) && !empty($meta_phone_number_id)) {
+            $default_phone_id = $meta_phone_number_id;
+        }
 
         // Preserva tokens sensíveis se vier mascarado
         $meta_app_secret   = sanitize_text_field($_POST['meta_app_secret'] ?? '');
@@ -113,7 +184,8 @@ class Settings {
             'meta_app_id'              => $meta_app_id,
             'meta_app_secret'          => $meta_app_secret,
             'meta_waba_id'             => $meta_waba_id,
-            'meta_phone_number_id'     => $meta_phone_number_id,
+            'meta_phone_number_id'     => $default_phone_id,
+            'meta_phone_numbers'       => $meta_polos,
             'meta_access_token'        => $meta_access_token,
             'meta_verify_token'        => !empty($meta_verify_token) ? $meta_verify_token : $current['meta_verify_token'],
             'meta_graph_version'       => $meta_graph_version,
@@ -227,6 +299,13 @@ class Settings {
                                 <p class="description">Ex: <code>area_interesse, area, interesse, especializacao, curso_interesse</code></p>
                             </td>
                         </tr>
+                        <tr>
+                            <th scope="row"><label for="field_mapping_polo">Polo / Unidade</label></th>
+                            <td>
+                                <input type="text" id="field_mapping_polo" name="field_mapping_polo" value="<?php echo esc_attr($settings['field_mapping']['polo'] ?? 'polo,unidade,cidade,polo_apoio,campus,local'); ?>" class="regular-text">
+                                <p class="description">Ex: <code>polo, unidade, cidade, polo_apoio, campus, local</code></p>
+                            </td>
+                        </tr>
                     </table>
                 </div>
 
@@ -269,9 +348,28 @@ class Settings {
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="meta_phone_number_id">Phone Number ID</label></th>
+                            <th scope="row" style="vertical-align: top; padding-top: 15px;">
+                                <label>Polos & Números do WhatsApp</label>
+                            </th>
                             <td>
-                                <input type="text" id="meta_phone_number_id" name="meta_phone_number_id" value="<?php echo esc_attr($settings['meta_phone_number_id']); ?>" class="regular-text">
+                                <?php $polos_list = \LeadIntelligence\WhatsApp\PoloRepository::get_all(); ?>
+                                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; max-width: 650px;">
+                                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 15px; flex-wrap: wrap;">
+                                        <div>
+                                            <div style="font-weight: 700; font-size: 14px; color: #1e293b; margin-bottom: 4px;">
+                                                🏢 Gestão Dedicada de Polos (<?php echo count($polos_list); ?> cadastrados)
+                                            </div>
+                                            <div style="font-size: 13px; color: #64748b; line-height: 1.4;">
+                                                Cadastre cada polo separadamente, visualize a lista completa e edite ou exclua qualquer unidade a qualquer momento.
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-polos')); ?>" class="button button-primary li-btn-faveni" style="display: inline-flex; align-items: center; gap: 6px; padding: 4px 14px; height: auto;">
+                                                <span>Acessar Polos WhatsApp</span> &rarr;
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                         <tr>

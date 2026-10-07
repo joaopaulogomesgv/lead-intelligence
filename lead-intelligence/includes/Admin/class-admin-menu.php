@@ -6,6 +6,7 @@ use LeadIntelligence\Admin\Controllers\LeadsController;
 use LeadIntelligence\Admin\Controllers\LogsController;
 use LeadIntelligence\Admin\Controllers\ImportController;
 use LeadIntelligence\Admin\Controllers\WhatsAppController;
+use LeadIntelligence\Admin\Controllers\PolosController;
 use LeadIntelligence\Admin\Controllers\MetaController;
 use LeadIntelligence\Admin\Settings;
 
@@ -76,6 +77,15 @@ class AdminMenu {
             $capability,
             'lead-intelligence-whatsapp',
             [WhatsAppController::class, 'render']
+        );
+
+        add_submenu_page(
+            'lead-intelligence',
+            'Polos WhatsApp - Lead Intelligence',
+            'Polos WhatsApp',
+            $capability,
+            'lead-intelligence-polos',
+            [PolosController::class, 'render']
         );
 
         add_submenu_page(

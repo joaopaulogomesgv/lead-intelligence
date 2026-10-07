@@ -27,43 +27,86 @@ class GoogleSheetsSync {
         // Ação executada pelo WP-Cron
         add_action(self::CRON_HOOK, [__CLASS__, 'run_cron_sync']);
 
-        // Intercepta callback do OAuth no admin_init
+        // Intercepta callback do OAuth no admin_init (modo admin.php)
         if (is_admin()) {
             add_action('admin_init', [__CLASS__, 'handle_oauth_callback']);
         }
+
+        // Endpoint REST oficial para callback do Google OAuth (evita bloqueios de ModSecurity em /wp-admin/)
+        add_action('rest_api_init', [__CLASS__, 'register_rest_routes']);
     }
 
     /**
-     * Adiciona intervalos de agendamento extras
+     * Registra o endpoint REST de callback do OAuth
      */
-    public static function register_cron_intervals($schedules) {
-        if (!isset($schedules['six_hours'])) {
-            $schedules['six_hours'] = [
-                'interval' => 6 * HOUR_IN_SECONDS,
-                'display'  => 'A cada 6 Horas',
-            ];
-        }
-        return $schedules;
+    public static function register_rest_routes() {
+        register_rest_route('lead-intelligence/v1', '/google/callback', [
+            'methods'             => \WP_REST_Server::READABLE,
+            'callback'            => [__CLASS__, 'handle_rest_oauth_callback'],
+            'permission_callback' => '__return_true',
+        ]);
     }
 
     /**
-     * Intercepta o redirecionamento de autorização da Conta Google
+     * Processa retorno do Google via REST API
+     */
+    public static function handle_rest_oauth_callback(\WP_REST_Request $request) {
+        $code = sanitize_text_field(wp_unslash($request->get_param('code') ?? ''));
+        $state_val = sanitize_text_field(wp_unslash($request->get_param('state') ?? ''));
+
+        if (empty($code) || empty($state_val)) {
+            wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&google_error=" . urlencode('Código ou estado de autorização ausente.')));
+            exit;
+        }
+
+        if (!self::verify_oauth_nonce($state_val)) {
+            wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&google_error=" . urlencode('Sessão expirou durante a autorização. Por favor, tente conectar novamente.')));
+            exit;
+        }
+
+        $rest_uri = GoogleSheetsClient::get_redirect_uri('rest');
+        $result = GoogleSheetsClient::exchange_code($code, $rest_uri);
+
+        if (is_wp_error($result)) {
+            $error_msg = urlencode($result->get_error_message());
+            wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&google_error={$error_msg}"));
+            exit;
+        }
+
+        wp_safe_redirect(admin_url('admin.php?page=lead-intelligence-import&tab=google_sheets&google_connected=1'));
+        exit;
+    }
+
+    /**
+     * Valida o nonce do state tanto no formato novo limpo (li_nonce) quanto no legado (base64 JSON)
+     */
+    private static function verify_oauth_nonce($state_val) {
+        $nonce = '';
+        if (strpos($state_val, 'li_') === 0) {
+            $nonce = substr($state_val, 3);
+        } else {
+            $state_raw = base64_decode($state_val);
+            $state_json = json_decode($state_raw, true);
+            if (is_array($state_json) && ($state_json['action'] ?? '') === 'li_google_auth' && !empty($state_json['nonce'])) {
+                $nonce = $state_json['nonce'];
+            }
+        }
+
+        return !empty($nonce) && wp_verify_nonce($nonce, 'li_google_auth_nonce');
+    }
+
+    /**
+     * Intercepta o redirecionamento de autorização da Conta Google via admin.php
      */
     public static function handle_oauth_callback() {
         if (empty($_GET['code']) || empty($_GET['state'])) {
             return;
         }
 
-        $state_raw = base64_decode((string) $_GET['state']);
-        $state = json_decode($state_raw, true);
+        $state_val = sanitize_text_field(wp_unslash($_GET['state']));
 
-        if (!is_array($state) || ($state['action'] ?? '') !== 'li_google_auth') {
+        if (!self::verify_oauth_nonce($state_val)) {
             return;
-        }
-
-        if (!wp_verify_nonce($state['nonce'] ?? '', 'li_google_auth_nonce')) {
-            wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&google_error=" . urlencode('Sessão expirou durante a autorização. Por favor, tente conectar novamente.')));
-            exit;
         }
 
         if (!current_user_can('manage_options')) {
@@ -72,7 +115,8 @@ class GoogleSheetsSync {
         }
 
         $code = sanitize_text_field(wp_unslash($_GET['code']));
-        $result = GoogleSheetsClient::exchange_code($code);
+        $admin_uri = GoogleSheetsClient::get_redirect_uri('admin');
+        $result = GoogleSheetsClient::exchange_code($code, $admin_uri);
 
         if (is_wp_error($result)) {
             $error_msg = urlencode($result->get_error_message());
@@ -343,10 +387,14 @@ class GoogleSheetsSync {
             'status'                => 'concluido',
         ], ['id' => $import_id]);
 
+        // Unificação e enriquecimento inteligente por telefone pós-sincronização
+        $unified_count = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+        $unify_suffix = $unified_count > 0 ? " ({$unified_count} unificados com formulários Elementor)" : "";
+
         $summary = [
             'status'     => 'concluido',
             'channel'    => $channel,
-            'message'    => "Sincronização [{$channel_label}] concluída em {$elapsed}s ({$mem_peak} MB RAM)! {$total_rows} linhas lidas: {$total_matched} cruzadas e {$total_created} novos leads cadastrados.",
+            'message'    => "Sincronização [{$channel_label}] concluída em {$elapsed}s ({$mem_peak} MB RAM)! {$total_rows} linhas lidas: {$total_matched} cruzadas e {$total_created} novos leads cadastrados.{$unify_suffix}",
             'total'      => $total_rows,
             'matched'    => $total_matched,
             'created'    => $total_created,

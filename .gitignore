@@ -11,3 +11,8 @@ Desktop.ini
 # IDE / Editor
 .vscode/
 .idea/
+
+# Spreadsheets and lead data
+*.csv
+*.xlsx
+*.xls

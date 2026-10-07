@@ -20,17 +20,25 @@ class WabaClient {
      *
      * @return array ['success' => bool, 'message' => string, 'data' => array]
      */
-    public static function test_connection() {
+    public static function test_connection($phone_number_id = null) {
         $settings = Settings::get_settings();
 
-        $token           = $settings['meta_access_token'];
-        $phone_number_id = $settings['meta_phone_number_id'];
-        $version         = $settings['meta_graph_version'] ?: 'v26.0';
+        $polo = !empty($phone_number_id) ? PoloRepository::find_by_phone_number_id($phone_number_id) : PoloRepository::get_default();
+
+        if ($polo) {
+            $phone_number_id = $polo['phone_number_id'];
+            $token           = PoloRepository::get_access_token_for_polo($polo);
+        } else {
+            $token           = $settings['meta_access_token'];
+            $phone_number_id = !empty($phone_number_id) ? $phone_number_id : $settings['meta_phone_number_id'];
+        }
+
+        $version = $settings['meta_graph_version'] ?: 'v26.0';
 
         if (empty($token)) {
             return [
                 'success' => false,
-                'message' => 'Access Token da Meta não configurado. Por favor, insira nas configurações.',
+                'message' => 'Access Token da Meta não configurado. Por favor, insira nas configurações ou no polo.',
                 'data'    => [],
             ];
         }
@@ -38,7 +46,7 @@ class WabaClient {
         if (empty($phone_number_id)) {
             return [
                 'success' => false,
-                'message' => 'Phone Number ID não configurado.',
+                'message' => 'Nenhum Phone Number ID configurado para teste.',
                 'data'    => [],
             ];
         }
@@ -65,9 +73,11 @@ class WabaClient {
         $body = json_decode(wp_remote_retrieve_body($response), true);
 
         if ($code === 200 && !empty($body['id'])) {
+            $polo_info = PoloRepository::find_by_phone_number_id($phone_number_id);
+            $polo_label = $polo_info && !empty($polo_info['nome']) ? " [{$polo_info['nome']}]" : "";
             return [
                 'success' => true,
-                'message' => 'Conexão validada com sucesso! Número: ' . ($body['display_phone_number'] ?? $phone_number_id),
+                'message' => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id),
                 'data'    => $body,
             ];
         }
@@ -83,12 +93,20 @@ class WabaClient {
     /**
      * Envia mensagem de texto via WhatsApp Cloud API
      */
-    public static function send_text_message($to_phone, $message) {
+    public static function send_text_message($to_phone, $message, $phone_number_id = null) {
         $settings = Settings::get_settings();
 
-        $token           = $settings['meta_access_token'];
-        $phone_number_id = $settings['meta_phone_number_id'];
-        $version         = $settings['meta_graph_version'] ?: 'v26.0';
+        $polo = !empty($phone_number_id) ? PoloRepository::find_by_phone_number_id($phone_number_id) : PoloRepository::get_default();
+
+        if ($polo) {
+            $phone_number_id = $polo['phone_number_id'];
+            $token           = PoloRepository::get_access_token_for_polo($polo);
+        } else {
+            $token           = $settings['meta_access_token'];
+            $phone_number_id = !empty($phone_number_id) ? $phone_number_id : $settings['meta_phone_number_id'];
+        }
+
+        $version = $settings['meta_graph_version'] ?: 'v26.0';
 
         if (empty($token) || empty($phone_number_id)) {
             return false;
@@ -378,7 +396,7 @@ class WabaClient {
         if (empty($ad_id)) {
             $whatsapp_table = DbSchema::get_whatsapp_table();
             $msg = $wpdb->get_row($wpdb->prepare(
-                "SELECT payload_bruto FROM {$whatsapp_table} WHERE lead_id = %d AND payload_bruto LIKE '%source_id%' ORDER BY id DESC LIMIT 1",
+                "SELECT payload_bruto FROM {$whatsapp_table} WHERE lead_id = %d AND INSTR(payload_bruto, 'source_id') > 0 ORDER BY id DESC LIMIT 1",
                 $lead_id
             ));
             if ($msg && !empty($msg->payload_bruto)) {

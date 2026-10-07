@@ -138,6 +138,7 @@ class ElementorListener {
             'telefone'        => $extracted['telefone'],
             'tipo_curso'      => $extracted['tipo_curso'],
             'area_interesse'  => $extracted['area_interesse'],
+            'polo'            => $extracted['polo'] ?? '',
             'formulario_id'   => $form_id,
             'formulario_nome' => $form_name,
             'pagina_origem'   => $page_url_candidate,
@@ -181,7 +182,7 @@ class ElementorListener {
      * Mapeia os campos do formulário para o modelo do Lead Intelligence
      */
     private static function extract_fields($raw_fields) {
-        $settings = get_option('lead_intelligence_settings', []);
+        $settings = \LeadIntelligence\Admin\Settings::get_settings();
         $config_mapping = isset($settings['field_mapping']) ? $settings['field_mapping'] : [];
 
         $result = [
@@ -190,6 +191,7 @@ class ElementorListener {
             'telefone'       => '',
             'tipo_curso'     => '',
             'area_interesse' => '',
+            'polo'           => '',
         ];
 
         if (empty($raw_fields) || !is_array($raw_fields)) {
@@ -217,8 +219,16 @@ class ElementorListener {
                 continue;
             }
 
+            // Heurística direta para Nome pelo ID ou Título comum
+            if (empty($result['nome']) && ($id === 'name' || $id === 'nome' || $title === 'nome' || $title === 'name' || strpos($title, 'nome') !== false || strpos($title, 'name') !== false)) {
+                if (!is_email($value) && !preg_match('/^[\d\s\+\-\(\)]{8,}$/', $value)) {
+                    $result['nome'] = sanitize_text_field($value);
+                    continue;
+                }
+            }
+
             // Verifica se casa com mapeamento das configurações
-            foreach (['nome', 'email', 'telefone', 'tipo_curso', 'area_interesse'] as $target_key) {
+            foreach (['nome', 'email', 'telefone', 'tipo_curso', 'area_interesse', 'polo'] as $target_key) {
                 if (!empty($result[$target_key])) {
                     continue; // Já preenchido
                 }
@@ -260,6 +270,28 @@ class ElementorListener {
                 // Número brasileiro válido tem 10 ou 11 dígitos (ou 12/13 com 55)
                 if (in_array(strlen($digits), [10, 11, 12, 13]) && !is_email($val)) {
                     $result['telefone'] = sanitize_text_field($val);
+                    break;
+                }
+            }
+        }
+
+        // Se ainda não encontrou Nome, varre campos que não sejam e-mail nem telefone
+        if (empty($result['nome'])) {
+            foreach ($raw_fields as $field_info) {
+                $val = isset($field_info['value']) ? trim((string) $field_info['value']) : '';
+                if ($val === '' || is_email($val)) {
+                    continue;
+                }
+                $digits = preg_replace('/\D/', '', $val);
+                if (in_array(strlen($digits), [10, 11, 12, 13])) {
+                    continue;
+                }
+
+                $title = isset($field_info['title']) ? strtolower(trim((string) $field_info['title'])) : '';
+                $id    = isset($field_info['id']) ? strtolower(trim((string) $field_info['id'])) : '';
+
+                if (strpos($title, 'nome') !== false || strpos($id, 'nome') !== false || strpos($title, 'name') !== false || strpos($id, 'name') !== false) {
+                    $result['nome'] = sanitize_text_field($val);
                     break;
                 }
             }

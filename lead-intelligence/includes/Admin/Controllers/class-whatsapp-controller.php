@@ -30,7 +30,8 @@ class WhatsAppController {
         // Ação 1: Testar Conexão com Graph API WhatsApp
         if (isset($_POST['li_test_waba_conn'])) {
             check_admin_referer('li_waba_test_verify', 'li_nonce');
-            $test_result = WabaClient::test_connection();
+            $target_phone_id = sanitize_text_field(wp_unslash($_POST['test_phone_number_id'] ?? ''));
+            $test_result = WabaClient::test_connection($target_phone_id);
         }
 
         // Ação 1.1: Testar Consulta de Anúncio Meta (Marketing API)
@@ -51,8 +52,16 @@ class WhatsAppController {
         if (isset($_POST['li_simulate_inbound'])) {
             check_admin_referer('li_waba_sim_verify', 'li_nonce');
 
-            $sim_phone = sanitize_text_field(wp_unslash($_POST['sim_phone'] ?? ''));
-            $sim_text  = sanitize_text_field(wp_unslash($_POST['sim_text'] ?? 'Olá, gostaria de saber mais sobre a pós!'));
+            $sim_phone   = sanitize_text_field(wp_unslash($_POST['sim_phone'] ?? ''));
+            $sim_text    = sanitize_text_field(wp_unslash($_POST['sim_text'] ?? 'Olá, gostaria de saber mais sobre a pós!'));
+            $sim_phone_id = sanitize_text_field(wp_unslash($_POST['sim_phone_number_id'] ?? ''));
+
+            if (empty($sim_phone_id)) {
+                $sim_phone_id = $settings['meta_phone_number_id'] ?: 'mock_phone_123';
+            }
+
+            $polo_info = Settings::find_polo_by_phone_number_id($sim_phone_id);
+            $sim_display_phone = !empty($polo_info['display_phone']) ? preg_replace('/\D/', '', $polo_info['display_phone']) : '5534999999999';
 
             if (!empty($sim_phone)) {
                 $norm = PhoneNormalizer::normalize($sim_phone);
@@ -66,8 +75,8 @@ class WhatsAppController {
                                     'value' => [
                                         'messaging_product' => 'whatsapp',
                                         'metadata'          => [
-                                            'display_phone_number' => '5534999999999',
-                                            'phone_number_id'      => $settings['meta_phone_number_id'] ?: 'mock_phone_123',
+                                            'display_phone_number' => $sim_display_phone,
+                                            'phone_number_id'      => $sim_phone_id,
                                         ],
                                         'contacts' => [
                                             [
@@ -93,7 +102,8 @@ class WhatsAppController {
                 ];
 
                 MessageHandler::process_payload($mock_payload);
-                $sim_result = "Simulação enviada com sucesso para o número <strong>{$norm}</strong>. Verifique o registro consolidado na tabela abaixo e o status no Lead correspondente!";
+                $polo_lbl = !empty($polo_info['nome']) ? " [{$polo_info['nome']}]" : "";
+                $sim_result = "Simulação enviada com sucesso para o polo<strong>{$polo_lbl}</strong> com o número <strong>{$norm}</strong>. Verifique o registro na tabela abaixo e o status no Lead!";
             }
         }
 
@@ -169,8 +179,18 @@ class WhatsAppController {
                         <code style="font-weight: 700;"><?php echo esc_html($settings['meta_verify_token']); ?></code>
                     </div>
                     <div>
-                        <form method="post" action="" style="display: inline;">
+                        <form method="post" action="" style="display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                             <?php wp_nonce_field('li_waba_test_verify', 'li_nonce'); ?>
+                            <?php $all_polos = Settings::get_phone_numbers(); ?>
+                            <?php if (count($all_polos) > 1): ?>
+                                <select name="test_phone_number_id" style="font-size: 13px; height: 32px; max-width: 260px;">
+                                    <?php foreach ($all_polos as $p): ?>
+                                        <option value="<?php echo esc_attr($p['phone_number_id']); ?>">
+                                            <?php echo esc_html($p['nome']); ?> (<?php echo esc_html($p['display_phone'] ?: $p['phone_number_id']); ?>)
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            <?php endif; ?>
                             <button type="submit" name="li_test_waba_conn" class="button button-secondary">
                                 ⚡ Testar Conexão com Graph API WhatsApp
                             </button>
@@ -282,12 +302,25 @@ class WhatsAppController {
 
                 <form method="post" action="">
                     <?php wp_nonce_field('li_waba_sim_verify', 'li_nonce'); ?>
+                    <?php $sim_polos = Settings::get_phone_numbers(); ?>
                     <div style="display: flex; gap: 15px; flex-wrap: wrap; align-items: flex-end;">
-                        <div style="flex: 1; min-width: 220px;">
-                            <label for="sim_phone" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Telefone do Lead (ex: 34984200518 ou +55 34 98420-0518)</label>
+                        <?php if (!empty($sim_polos)): ?>
+                            <div style="flex: 1; min-width: 180px;">
+                                <label for="sim_phone_number_id" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Polo Destino</label>
+                                <select id="sim_phone_number_id" name="sim_phone_number_id" style="width: 100%; height: 36px;">
+                                    <?php foreach ($sim_polos as $p): ?>
+                                        <option value="<?php echo esc_attr($p['phone_number_id']); ?>" <?php selected(!empty($p['is_default'])); ?>>
+                                            <?php echo esc_html($p['nome']); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                        <?php endif; ?>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label for="sim_phone" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Telefone do Lead (ex: 34984200518)</label>
                             <input type="text" id="sim_phone" name="sim_phone" placeholder="DDD + Telefone" required class="regular-text" style="width: 100%;">
                         </div>
-                        <div style="flex: 2; min-width: 300px;">
+                        <div style="flex: 2; min-width: 260px;">
                             <label for="sim_text" style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Conteúdo da Mensagem</label>
                             <input type="text" id="sim_text" name="sim_text" value="Olá! Preenchi o formulário no site e quero informações sobre a pós-graduação." class="regular-text" style="width: 100%;">
                         </div>
@@ -354,6 +387,13 @@ class WhatsAppController {
                                             </div>
                                         <?php else: ?>
                                             <span style="font-size: 11px; color: #94a3b8;">Lead avulso</span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($m->polo)): ?>
+                                            <div style="margin-top: 4px;">
+                                                <span class="li-badge" style="background: #eff6ff; color: #1d4ed8; font-size: 11px; border: 1px solid #bfdbfe;">
+                                                    🏢 <?php echo esc_html($m->polo); ?>
+                                                </span>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
                                     <td>

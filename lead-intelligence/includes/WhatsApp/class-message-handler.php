@@ -100,6 +100,22 @@ class MessageHandler {
 
         $contact_name = $contacts_map[$from_raw] ?? '';
 
+        // Extrai metadados da linha/número receptor da Meta (Multi-Polo)
+        $metadata               = $change_value['metadata'] ?? [];
+        $received_phone_id      = sanitize_text_field($metadata['phone_number_id'] ?? '');
+        $received_display_phone = sanitize_text_field($metadata['display_phone_number'] ?? '');
+
+        // Identifica o Polo associado a este Phone Number ID
+        $polo_nome = '';
+        if (!empty($received_phone_id)) {
+            $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
+            if ($polo_info && !empty($polo_info['nome'])) {
+                $polo_nome = $polo_info['nome'];
+            } elseif (!empty($received_display_phone)) {
+                $polo_nome = 'Polo ' . $received_display_phone;
+            }
+        }
+
         // 1. Extração de Metadados de Anúncio Meta (Click-to-WhatsApp Referral)
         $referral    = $msg['referral'] ?? [];
         $ctwa_clid   = $referral['ctwa_clid'] ?? '';
@@ -220,16 +236,25 @@ class MessageHandler {
                 $update_lead['utm_term'] = $utm_term;
             }
 
+            // Atualiza polo e phone_number_id se o lead ainda não tiver
+            if (empty($lead->polo) && !empty($polo_nome)) {
+                $update_lead['polo'] = $polo_nome;
+            }
+            if (empty($lead->phone_number_id) && !empty($received_phone_id)) {
+                $update_lead['phone_number_id'] = $received_phone_id;
+            }
+
             $wpdb->update($leads_table, $update_lead, ['id' => $lead_id]);
 
             // Auditoria (registra apenas no início da conversa pelo WhatsApp para evitar sobrecarregar o histórico)
             $is_first_interaction = empty($lead->primeira_mensagem) || $lead->primeira_mensagem === '0000-00-00 00:00:00' || ((int) $lead->mensagens_recebidas) <= 1;
             if ($is_first_interaction) {
+                $polo_txt = !empty($polo_nome) ? " ({$polo_nome})" : "";
                 $wpdb->insert($history_table, [
                     'lead_id'        => $lead_id,
                     'campo'          => 'whatsapp_conversa_iniciada',
                     'valor_anterior' => $lead->whatsapp_status,
-                    'valor_novo'     => 'Início de conversa no WhatsApp: ' . wp_trim_words($body, 10),
+                    'valor_novo'     => "Início de conversa no WhatsApp{$polo_txt}: " . wp_trim_words($body, 10),
                     'origem'         => 'whatsapp',
                     'usuario_id'     => 0,
                     'created_at'     => current_time('mysql'),
@@ -238,6 +263,7 @@ class MessageHandler {
 
             Logger::info('WhatsApp', "Mensagem vinculada ao Lead existente #{$lead_id} ({$phone_norm}).", [
                 'lead_id'  => $lead_id,
+                'polo'     => $polo_nome,
                 'telefone' => $phone_norm,
                 'preview'  => wp_trim_words($body, 8),
             ]);
@@ -252,6 +278,8 @@ class MessageHandler {
                 'formulario_nome'      => $form_origem,
                 'tipo_curso'           => $inferred_tipo_curso,
                 'area_interesse'       => $inferred_area,
+                'polo'                 => $polo_nome,
+                'phone_number_id'      => $received_phone_id,
                 'fbclid'               => sanitize_text_field($ctwa_clid),
                 'campaign_id'          => sanitize_text_field($campaign_id),
                 'campaign_name'        => sanitize_text_field($campaign_name),
@@ -277,11 +305,12 @@ class MessageHandler {
             $wpdb->insert($leads_table, $insert_lead);
             $lead_id = $wpdb->insert_id;
 
+            $polo_info_txt = !empty($polo_nome) ? " via {$polo_nome}" : "";
             $wpdb->insert($history_table, [
                 'lead_id'        => $lead_id,
                 'campo'          => 'criacao',
                 'valor_anterior' => '',
-                'valor_novo'     => "Lead criado a partir de mensagem no WhatsApp ({$form_origem})",
+                'valor_novo'     => "Lead criado a partir de mensagem no WhatsApp ({$form_origem}{$polo_info_txt})",
                 'origem'         => 'whatsapp',
                 'usuario_id'     => 0,
                 'created_at'     => current_time('mysql'),
@@ -289,6 +318,7 @@ class MessageHandler {
 
             Logger::info('WhatsApp', "Novo lead #{$lead_id} criado via WhatsApp Cloud ({$phone_norm}).", [
                 'origem'     => $form_origem,
+                'polo'       => $polo_nome,
                 'curso'      => $inferred_tipo_curso,
                 'area'       => $inferred_area,
                 'ctwa_clid'  => $ctwa_clid,
@@ -304,13 +334,15 @@ class MessageHandler {
 
         if ($existing_msg) {
             $update_msg_data = [
-                'lead_id'        => $lead_id,
-                'message_id'     => sanitize_text_field($msg_id),
-                'direcao'        => 'inbound',
-                'tipo_mensagem'  => sanitize_text_field($type),
-                'conteudo'       => $body,
-                'status_entrega' => 'received',
-                'created_at'     => $msg_date,
+                'lead_id'         => $lead_id,
+                'message_id'      => sanitize_text_field($msg_id),
+                'direcao'         => 'inbound',
+                'tipo_mensagem'   => sanitize_text_field($type),
+                'conteudo'        => $body,
+                'status_entrega'  => 'received',
+                'polo'            => $polo_nome,
+                'phone_number_id' => $received_phone_id,
+                'created_at'      => $msg_date,
             ];
             // Se esta nova mensagem trouxer dados de anúncio Meta (referral), atualiza payload bruto
             if (!empty($referral)) {
@@ -326,6 +358,8 @@ class MessageHandler {
                 'tipo_mensagem'        => sanitize_text_field($type),
                 'conteudo'             => $body,
                 'status_entrega'       => 'received',
+                'polo'                 => $polo_nome,
+                'phone_number_id'      => $received_phone_id,
                 'payload_bruto'        => wp_json_encode($msg, JSON_UNESCAPED_UNICODE),
                 'created_at'           => $msg_date,
             ]);

@@ -18,13 +18,26 @@ class GoogleSheetsClient {
     const SHEETS_API_URL  = 'https://sheets.googleapis.com/v4/spreadsheets';
     const USERINFO_URL    = 'https://www.googleapis.com/oauth2/v2/userinfo';
     const OPTION_NAME     = 'lead_intelligence_google_auth';
-
     /**
      * Retorna a URI de redirecionamento oficial registrada no Google Cloud Console
-     * Usa admin.php limpo sem query string para respeitar estritamente as regras de URI do Google.
+     * Suporta a rota REST API nativa (recomendada, imune a bloqueios de ModSecurity em /wp-admin/)
+     * e o modo admin.php clássico.
      */
-    public static function get_redirect_uri() {
-        return admin_url('admin.php');
+    public static function get_redirect_uri($mode = '') {
+        $saved_mode = get_option('lead_intelligence_google_redirect_mode', 'rest');
+        $active_mode = !empty($mode) ? $mode : $saved_mode;
+
+        if ($active_mode === 'admin') {
+            $uri = admin_url('admin.php');
+        } else {
+            $uri = get_rest_url(null, 'lead-intelligence/v1/google/callback');
+        }
+
+        // Se o site opera em HTTPS ou está atrás de proxy/load balancer/Cloudflare com SSL, força https para evitar divergência com o Google Cloud Console
+        if (is_ssl() || (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower((string) $_SERVER['HTTP_X_FORWARDED_PROTO']) === 'https') || (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on')) {
+            $uri = set_url_scheme($uri, 'https');
+        }
+        return apply_filters('lead_intelligence_google_redirect_uri', $uri, $active_mode);
     }
 
     /**
@@ -32,6 +45,7 @@ class GoogleSheetsClient {
      */
     public static function get_auth_data() {
         $defaults = [
+            'auth_type'       => 'oauth', // 'oauth' | 'service_account'
             'client_id'       => '',
             'client_secret'   => '',
             'access_token'    => '',
@@ -39,6 +53,9 @@ class GoogleSheetsClient {
             'expires_at'      => 0,
             'connected_email' => '',
             'connected_at'    => '',
+            'sa_client_email' => '',
+            'sa_private_key'  => '',
+            'sa_project_id'   => '',
         ];
         $saved = get_option(self::OPTION_NAME, []);
         return wp_parse_args($saved, $defaults);
@@ -54,11 +71,22 @@ class GoogleSheetsClient {
     }
 
     /**
-     * Verifica se o plugin está autenticado no Google
+     * Verifica se o plugin está autenticado no Google (via Service Account ou OAuth)
      */
     public static function is_connected() {
         $data = self::get_auth_data();
+        if (($data['auth_type'] ?? '') === 'service_account') {
+            return !empty($data['sa_client_email']) && !empty($data['sa_private_key']);
+        }
         return !empty($data['refresh_token']) && !empty($data['client_id']);
+    }
+
+    /**
+     * Retorna o tipo de autenticação ativo ('service_account' ou 'oauth')
+     */
+    public static function get_auth_type() {
+        $data = self::get_auth_data();
+        return $data['auth_type'] ?? 'oauth';
     }
 
     /**
@@ -66,13 +94,119 @@ class GoogleSheetsClient {
      */
     public static function disconnect() {
         $data = self::get_auth_data();
+        $data['auth_type']       = 'oauth';
         $data['access_token']    = '';
         $data['refresh_token']   = '';
         $data['expires_at']      = 0;
         $data['connected_email'] = '';
         $data['connected_at']    = '';
+        $data['sa_client_email'] = '';
+        $data['sa_private_key']  = '';
+        $data['sa_project_id']   = '';
         update_option(self::OPTION_NAME, $data);
         Logger::info('GoogleSheets', 'Conta Google desconectada com sucesso.');
+    }
+
+    /**
+     * Codificador base64 seguro para URL (JWT standard)
+     */
+    public static function base64url_encode($data) {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+
+    /**
+     * Salva e valida credenciais da Conta de Serviço (arquivo JSON do Google Cloud)
+     */
+    public static function save_service_account_credentials($json_raw) {
+        $json = json_decode(trim($json_raw), true);
+        if (!is_array($json)) {
+            return new \WP_Error('invalid_json', 'O conteúdo enviado não é um JSON válido.');
+        }
+
+        if (empty($json['client_email']) || empty($json['private_key'])) {
+            return new \WP_Error('missing_sa_fields', 'O arquivo JSON precisa conter "client_email" e "private_key". Certifique-se de ter baixado a chave da Conta de Serviço.');
+        }
+
+        // Testa imediatamente a geração do token para validar a chave
+        $token_test = self::generate_service_account_token($json['client_email'], $json['private_key']);
+        if (is_wp_error($token_test)) {
+            return $token_test;
+        }
+
+        self::save_auth_data([
+            'auth_type'       => 'service_account',
+            'sa_client_email' => sanitize_email($json['client_email']),
+            'sa_private_key'  => trim($json['private_key']),
+            'sa_project_id'   => sanitize_text_field($json['project_id'] ?? ''),
+            'access_token'    => $token_test['access_token'],
+            'expires_at'      => $token_test['expires_at'],
+            'connected_email' => sanitize_email($json['client_email']),
+            'connected_at'    => current_time('mysql'),
+        ]);
+
+        Logger::info('GoogleSheets', 'Conta de Serviço Google conectada: ' . $json['client_email']);
+        return true;
+    }
+
+    /**
+     * Gera um token de acesso para a Conta de Serviço via JWT RS256 assinado
+     */
+    public static function generate_service_account_token($client_email, $private_key) {
+        if (!function_exists('openssl_sign')) {
+            return new \WP_Error('openssl_missing', 'A extensão OpenSSL do PHP não está disponível no servidor.');
+        }
+
+        $now = time();
+        $header = [
+            'alg' => 'RS256',
+            'typ' => 'JWT',
+        ];
+        $claims = [
+            'iss'   => $client_email,
+            'scope' => 'https://www.googleapis.com/auth/spreadsheets.readonly',
+            'aud'   => self::OAUTH_TOKEN_URL,
+            'exp'   => $now + 3600,
+            'iat'   => $now,
+        ];
+
+        $jwt_input = self::base64url_encode(wp_json_encode($header)) . '.' . self::base64url_encode(wp_json_encode($claims));
+
+        $signature = '';
+        $success = @openssl_sign($jwt_input, $signature, $private_key, OPENSSL_ALGO_SHA256);
+        if (!$success) {
+            $ossl_err = openssl_error_string() ?: 'chave privada inválida ou malformada';
+            return new \WP_Error('jwt_sign_failed', 'Falha na assinatura criptográfica RS256 da chave privada: ' . $ossl_err);
+        }
+
+        $jwt = $jwt_input . '.' . self::base64url_encode($signature);
+
+        $response = wp_remote_post(self::OAUTH_TOKEN_URL, [
+            'timeout' => 20,
+            'body'    => [
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion'  => $jwt,
+            ],
+        ]);
+
+        if (is_wp_error($response)) {
+            return new \WP_Error('google_conn_failed', 'Falha ao conectar aos servidores do Google: ' . $response->get_error_message());
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code !== 200 || empty($body['access_token'])) {
+            $err_desc = $body['error_description'] ?? ($body['error'] ?? 'Erro desconhecido');
+            return new \WP_Error('sa_token_error', 'O Google rejeitou a Conta de Serviço: ' . $err_desc);
+        }
+
+        $access_token = $body['access_token'];
+        $expires_in   = (int) ($body['expires_in'] ?? 3600);
+
+        return [
+            'access_token' => $access_token,
+            'expires_at'   => $now + $expires_in - 60,
+        ];
     }
 
     /**
@@ -85,11 +219,9 @@ class GoogleSheetsClient {
             return '';
         }
 
-        $state_data = [
-            'action' => 'li_google_auth',
-            'nonce'  => wp_create_nonce('li_google_auth_nonce'),
-        ];
-        $state = base64_encode(wp_json_encode($state_data));
+        // Token alfanumérico limpo (evita falsos-positivos de base64 e JSON em WAF / ModSecurity)
+        $nonce = wp_create_nonce('li_google_auth_nonce');
+        $state = 'li_' . $nonce;
 
         $params = [
             'client_id'             => $client_id,
@@ -108,11 +240,13 @@ class GoogleSheetsClient {
     /**
      * Troca o código retornado pelo Google por access_token e refresh_token
      */
-    public static function exchange_code($code) {
+    public static function exchange_code($code, $custom_redirect_uri = '') {
         $data = self::get_auth_data();
         if (empty($data['client_id']) || empty($data['client_secret'])) {
             return new \WP_Error('missing_credentials', 'Client ID ou Client Secret do Google não informados.');
         }
+
+        $redirect_uri = !empty($custom_redirect_uri) ? $custom_redirect_uri : self::get_redirect_uri();
 
         $response = wp_remote_post(self::OAUTH_TOKEN_URL, [
             'timeout' => 20,
@@ -120,7 +254,7 @@ class GoogleSheetsClient {
                 'code'          => trim($code),
                 'client_id'     => trim($data['client_id']),
                 'client_secret' => trim($data['client_secret']),
-                'redirect_uri'  => self::get_redirect_uri(),
+                'redirect_uri'  => $redirect_uri,
                 'grant_type'    => 'authorization_code',
             ],
         ]);
@@ -164,6 +298,32 @@ class GoogleSheetsClient {
     public static function get_valid_access_token() {
         $data = self::get_auth_data();
 
+        // 1. Modo Conta de Serviço (Server-to-Server via JWT assinado RS256)
+        if (($data['auth_type'] ?? '') === 'service_account') {
+            if (empty($data['sa_client_email']) || empty($data['sa_private_key'])) {
+                return new \WP_Error('not_connected', 'Conta de Serviço do Google não configurada.');
+            }
+
+            // Se o token em cache ainda for válido por mais de 60 segundos, reutiliza
+            if (!empty($data['access_token']) && ($data['expires_at'] ?? 0) > (time() + 60)) {
+                return $data['access_token'];
+            }
+
+            // Gera novo token via JWT assinado
+            $token_data = self::generate_service_account_token($data['sa_client_email'], $data['sa_private_key']);
+            if (is_wp_error($token_data)) {
+                return $token_data;
+            }
+
+            self::save_auth_data([
+                'access_token' => $token_data['access_token'],
+                'expires_at'   => $token_data['expires_at'],
+            ]);
+
+            return $token_data['access_token'];
+        }
+
+        // 2. Modo OAuth 2.0 Clássico
         if (empty($data['refresh_token'])) {
             return new \WP_Error('not_connected', 'Conta Google não conectada.');
         }

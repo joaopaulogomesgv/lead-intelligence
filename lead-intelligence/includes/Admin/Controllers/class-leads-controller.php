@@ -41,13 +41,82 @@ class LeadsController {
         $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence-leads';
         $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');
 
-        $sync_message = null;
-        $sync_success = true;
+        $sync_message  = null;
+        $sync_success  = true;
+        $unify_message = null;
+        $action_message = null;
+        $action_type    = 'success';
+
+        // 1. Exclusão individual de lead
+        if (isset($_POST['li_delete_single_lead'])) {
+            check_admin_referer('li_leads_bulk_verify', 'li_nonce');
+            $lead_id = (int) $_POST['li_delete_single_lead'];
+            if ($lead_id > 0) {
+                $deleted = LeadRepository::delete_leads_by_ids([$lead_id]);
+                if ($deleted > 0) {
+                    $action_message = "Lead #{$lead_id} foi excluído com sucesso.";
+                    $action_type = 'success';
+                }
+            }
+        }
+
+        // 2. Exclusão em massa de leads selecionados (checkbox)
+        if (isset($_POST['li_bulk_action']) && $_POST['li_bulk_action'] === 'delete') {
+            check_admin_referer('li_leads_bulk_verify', 'li_nonce');
+            $selected = isset($_POST['selected_leads']) && is_array($_POST['selected_leads']) ? $_POST['selected_leads'] : [];
+            if (!empty($selected)) {
+                $deleted_count = LeadRepository::delete_leads_by_ids($selected);
+                $action_message = "{$deleted_count} lead(s) selecionado(s) foram excluídos com sucesso.";
+                $action_type = 'success';
+            } else {
+                $action_message = "Nenhum lead foi selecionado para exclusão.";
+                $action_type = 'warning';
+            }
+        }
+
+        // 3. Exclusão de todos os leads correspondentes ao filtro atual
+        if (isset($_POST['li_delete_all_filtered'])) {
+            check_admin_referer('li_leads_bulk_verify', 'li_nonce');
+            $filter_search  = sanitize_text_field(wp_unslash($_POST['filter_search'] ?? ''));
+            $filter_status  = sanitize_text_field(wp_unslash($_POST['filter_status'] ?? ''));
+            $filter_channel = sanitize_key(wp_unslash($_POST['filter_channel'] ?? ''));
+
+            $deleted_count = LeadRepository::delete_all_by_filters([
+                'search'  => $filter_search,
+                'status'  => $filter_status,
+                'channel' => $filter_channel,
+            ]);
+            $action_message = "{$deleted_count} lead(s) do filtro atual foram excluídos com sucesso.";
+            $action_type = 'success';
+        }
+
+        // 4. Reparo de nomes ausentes a partir das planilhas do Elementor
+        if (isset($_POST['li_repair_missing_names'])) {
+            check_admin_referer('li_leads_bulk_verify', 'li_nonce');
+            $repair_res = LeadRepository::repair_missing_names_from_elementor_files();
+            if ($repair_res['repaired'] > 0) {
+                $action_message = "Sucesso! {$repair_res['repaired']} lead(s) tiveram seus nomes recuperados e preenchidos com base nas planilhas do Elementor.";
+                $action_type = 'success';
+            } elseif ($repair_res['files_scanned'] === 0) {
+                $action_message = "Nenhum arquivo de submissão do Elementor foi localizado automaticamente na pasta. Utilize a aba 'Cruzamento Elementor' em Importar & Qualificar.";
+                $action_type = 'warning';
+            } else {
+                $action_message = "Varredura concluída nas planilhas do Elementor ({$repair_res['files_scanned']} arquivo(s)). Nenhum nome adicional precisou ser alterado.";
+                $action_type = 'info';
+            }
+        }
+
         if (isset($_POST['li_sync_all_ads'])) {
             check_admin_referer('li_sync_all_ads_verify', 'li_nonce');
             $sync_res = WabaClient::sync_all_pending_leads();
             $sync_message = $sync_res['message'];
             $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
+        }
+
+        if (isset($_POST['li_unify_all_leads'])) {
+            check_admin_referer('li_unify_all_leads_verify', 'li_nonce');
+            $merged = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+            $unify_message = "Unificação concluída com sucesso! {$merged} registros foram mesclados e enriquecidos com as UTMs dos formulários.";
         }
 
         $search    = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
@@ -88,15 +157,33 @@ class LeadsController {
                     <h2>Lead Intelligence &bull; <?php echo esc_html($page_title); ?></h2>
                     <p class="li-subtitle"><?php echo esc_html($page_sub); ?></p>
                 </div>
-                <div>
+                <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <form method="post" action="" style="display:inline;">
+                        <?php wp_nonce_field('li_unify_all_leads_verify', 'li_nonce'); ?>
+                        <button type="submit" name="li_unify_all_leads" class="button button-primary li-btn-faveni" style="display:inline-flex; align-items:center; gap:6px;" title="Cruza registros da Planilha com o Elementor pelo telefone e unifica UTMs e tempo de fechamento">
+                            <span class="dashicons dashicons-randomize" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Unificar Planilha & Formulários
+                        </button>
+                    </form>
                     <form method="post" action="" style="display:inline;">
                         <?php wp_nonce_field('li_sync_all_ads_verify', 'li_nonce'); ?>
                         <button type="submit" name="li_sync_all_ads" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px;">
-                            <span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Sincronizar Campanhas Meta (WhatsApp)
+                            <span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Sincronizar Meta (WhatsApp)
                         </button>
                     </form>
                 </div>
             </div>
+
+            <?php if ($action_message): ?>
+                <div class="notice notice-<?php echo esc_attr($action_type); ?> is-dismissible" style="margin-bottom: 20px;">
+                    <p><strong><?php echo $action_type === 'success' ? '✔' : '⚠️'; ?></strong> <?php echo esc_html($action_message); ?></p>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($unify_message): ?>
+                <div class="notice notice-success is-dismissible" style="margin-bottom: 20px;">
+                    <p><strong>✔</strong> <?php echo esc_html($unify_message); ?></p>
+                </div>
+            <?php endif; ?>
 
             <?php if ($sync_message): ?>
                 <div class="notice <?php echo $sync_success ? 'notice-success' : 'notice-warning'; ?> is-dismissible" style="margin-bottom: 20px;">
@@ -167,24 +254,56 @@ class LeadsController {
                 </form>
             </div>
 
-            <!-- TABELA DE LEADS -->
-            <div class="li-card" style="padding: 0; overflow-x: auto;">
-                <table class="wp-list-table widefat fixed striped li-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">ID</th>
-                            <th style="width: 130px;">Data</th>
-                            <th>Lead / Contato</th>
-                            <th>Curso / Interesse</th>
-                            <th style="width: 230px;">Canal / Origem</th>
-                            <th style="width: 130px;">Status</th>
-                            <th style="width: 100px;">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody>
+            <!-- TABELA DE LEADS COM FORMULÁRIO DE AÇÕES EM MASSA -->
+            <form method="post" action="" id="liLeadsBulkForm">
+                <?php wp_nonce_field('li_leads_bulk_verify', 'li_nonce'); ?>
+
+                <div class="li-card" style="padding: 0; overflow-x: auto;">
+                    <!-- BARRA DE AÇÕES EM MASSA -->
+                    <div style="padding: 12px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <span style="font-size: 13px; font-weight: 600; color: #475569;">Ações em Massa:</span>
+                            <button type="submit" name="li_bulk_action" value="delete" id="li_bulk_delete_btn" class="button" disabled style="color: #b91c1c; border-color: #fca5a5; background: #fff5f5; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;" onclick="return confirm('ATENÇÃO: Deseja realmente excluir permanentemente os leads selecionados?');">
+                                <span class="dashicons dashicons-trash" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px; color: #dc2626;"></span>
+                                Excluir Selecionados (<span id="li_selected_count">0</span>)
+                            </button>
+
+                            <?php if ($total_leads > 0): ?>
+                                <button type="button" class="button button-link-delete" onclick="openDeleteFilteredModal()" style="color: #dc2626; font-size: 12px; margin-left: 8px;">
+                                    Excluir todos os <?php echo number_format_i18n($total_leads); ?> leads deste filtro...
+                                </button>
+                            <?php endif; ?>
+
+                            <button type="submit" name="li_repair_missing_names" value="1" class="button" style="color: #0369a1; border-color: #bae6fd; background: #f0f9ff; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; margin-left: 12px;" title="Varre as planilhas do Elementor e preenche o nome real dos leads cadastrados como 'Sem nome'">
+                                <span class="dashicons dashicons-admin-users" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px; color: #0284c7;"></span>
+                                Reparar Nomes das Planilhas
+                            </button>
+                        </div>
+
+                        <div style="font-size: 12px; color: #64748b;">
+                            Total: <strong><?php echo number_format_i18n($total_leads); ?></strong> leads encontrados
+                        </div>
+                    </div>
+
+                    <table class="wp-list-table widefat fixed striped li-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40px; text-align: center;">
+                                    <input type="checkbox" id="li_select_all" title="Selecionar Todos na Página">
+                                </th>
+                                <th style="width: 60px;">ID</th>
+                                <th style="width: 130px;">Data</th>
+                                <th>Lead / Contato</th>
+                                <th>Curso / Interesse</th>
+                                <th style="width: 230px;">Canal / Origem</th>
+                                <th style="width: 130px;">Status</th>
+                                <th style="width: 130px;">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="7" style="text-align: center; padding: 40px 20px; color: #64748b;">
+                                <td colspan="8" style="text-align: center; padding: 40px 20px; color: #64748b;">
                                     <span class="dashicons dashicons-id-alt" style="font-size: 36px; width: 36px; height: 36px; color: #94a3b8; margin-bottom: 10px;"></span>
                                     <p style="font-size: 15px; margin: 0;">Nenhum lead encontrado com os filtros selecionados.</p>
                                     <p style="font-size: 13px; margin: 5px 0 0;">Verifique os filtros de canal ou importe novas planilhas.</p>
@@ -196,7 +315,10 @@ class LeadsController {
                                 $lead_channel = LeadRepository::get_channel($lead);
                                 $chan_info    = LeadRepository::get_channel_info($lead_channel);
                                 ?>
-                                <tr>
+                                <tr id="li-row-<?php echo esc_attr($lead->id); ?>">
+                                    <td style="text-align: center; vertical-align: middle;">
+                                        <input type="checkbox" name="selected_leads[]" value="<?php echo esc_attr($lead->id); ?>" class="li-lead-check" style="margin: 0;">
+                                    </td>
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
                                         <div style="font-size: 12px; font-weight: 500;">
@@ -218,6 +340,13 @@ class LeadsController {
                                         <?php if (!empty($lead->email)): ?>
                                             <div style="font-size: 12px; color: #64748b;">
                                                 ✉️ <?php echo esc_html($lead->email); ?>
+                                            </div>
+                                        <?php endif; ?>
+                                        <?php if (!empty($lead->polo)): ?>
+                                            <div style="margin-top: 3px;">
+                                                <span class="li-badge" style="background: #eff6ff; color: #1d4ed8; font-size: 11px; border: 1px solid #bfdbfe;">
+                                                    🏢 <?php echo esc_html($lead->polo); ?>
+                                                </span>
                                             </div>
                                         <?php endif; ?>
                                     </td>
@@ -279,9 +408,14 @@ class LeadsController {
                                         </span>
                                     </td>
                                     <td>
-                                        <button type="button" class="button button-small li-open-modal-btn" data-lead="<?php echo esc_attr(wp_json_encode($lead)); ?>">
-                                            Ver Detalhes
-                                        </button>
+                                        <div style="display: inline-flex; align-items: center; gap: 5px;">
+                                            <button type="button" class="button button-small li-open-modal-btn" data-lead="<?php echo esc_attr(wp_json_encode($lead)); ?>">
+                                                Ver Detalhes
+                                            </button>
+                                            <button type="submit" name="li_delete_single_lead" value="<?php echo esc_attr($lead->id); ?>" class="button button-small" style="color: #b91c1c; border-color: #fecaca; background: #fff5f5; padding: 0 6px; height: 26px; line-height: 24px;" title="Excluir Permanentemente Lead #<?php echo esc_attr($lead->id); ?>" onclick="return confirm('ATENÇÃO: Deseja realmente excluir permanentemente o lead #<?php echo esc_attr($lead->id); ?>? Esta ação não pode ser desfeita.');">
+                                                <span class="dashicons dashicons-trash" style="font-size: 14px; width: 14px; height: 14px; line-height: 24px; vertical-align: middle;"></span>
+                                            </button>
+                                        </div>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -289,6 +423,7 @@ class LeadsController {
                     </tbody>
                 </table>
             </div>
+            </form>
 
             <!-- PAGINAÇÃO -->
             <?php if ($total_pages > 1): ?>
@@ -298,9 +433,10 @@ class LeadsController {
                         <?php for ($i = 1; $i <= $total_pages; $i++): ?>
                             <?php
                             $link = add_query_arg([
-                                'paged'  => $i,
-                                's'      => $search,
-                                'status' => $status,
+                                'paged'   => $i,
+                                's'       => $search,
+                                'status'  => $status,
+                                'channel' => $channel,
                             ], $current_url);
                             ?>
                             <a href="<?php echo esc_url($link); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">
@@ -310,6 +446,58 @@ class LeadsController {
                     </div>
                 </div>
             <?php endif; ?>
+
+            <!-- MODAL DE EXCLUSÃO EM MASSA POR FILTRO -->
+            <div id="liDeleteFilteredModal" class="li-modal-backdrop" style="display:none;">
+                <div class="li-modal-container" style="max-width: 520px;">
+                    <div class="li-modal-header" style="background: #fff1f2; border-bottom: 1px solid #fecdd3;">
+                        <h3 style="color: #9f1239; display: flex; align-items: center; gap: 8px;">
+                            <span class="dashicons dashicons-warning" style="font-size: 22px;"></span>
+                            Exclusão Permanente por Filtro
+                        </h3>
+                        <button type="button" class="li-modal-close" onclick="closeDeleteFilteredModal()">&times;</button>
+                    </div>
+                    <form method="post" action="" id="liFormDeleteFiltered">
+                        <?php wp_nonce_field('li_leads_bulk_verify', 'li_nonce'); ?>
+                        <input type="hidden" name="filter_search" value="<?php echo esc_attr($search); ?>">
+                        <input type="hidden" name="filter_status" value="<?php echo esc_attr($status); ?>">
+                        <input type="hidden" name="filter_channel" value="<?php echo esc_attr($channel); ?>">
+
+                        <div class="li-modal-body" style="padding: 20px;">
+                            <div style="background: #fff5f5; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
+                                <p style="margin: 0 0 8px; font-weight: 700; color: #991b1b; font-size: 14px;">
+                                    ⚠️ AÇÃO IRREVERSÍVEL!
+                                </p>
+                                <p style="margin: 0; font-size: 13px; color: #7f1d1d; line-height: 1.5;">
+                                    Você está prestes a excluir permanentemente <strong><?php echo number_format_i18n($total_leads); ?></strong> lead(s) e todos os seus históricos associados.
+                                </p>
+                            </div>
+
+                            <div style="font-size: 13px; color: #334155; margin-bottom: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
+                                <div style="font-weight: 600; margin-bottom: 6px; color: #0f172a;">Critérios do Filtro Atual:</div>
+                                <div>• <strong>Busca:</strong> <?php echo !empty($search) ? esc_html($search) : '<em>(Sem termo de busca)</em>'; ?></div>
+                                <div>• <strong>Status:</strong> <?php echo !empty($status) ? esc_html(ucfirst(str_replace('_', ' ', $status))) : '<em>Todos os status</em>'; ?></div>
+                                <div>• <strong>Canal:</strong> <?php echo !empty($channel) ? esc_html($channel) : '<em>Todos os canais</em>'; ?></div>
+                            </div>
+
+                            <div style="margin-bottom: 16px;">
+                                <label style="display: block; font-size: 12px; font-weight: 600; color: #475569; margin-bottom: 6px;">
+                                    Para confirmar a exclusão, digite <strong>EXCLUIR</strong> abaixo:
+                                </label>
+                                <input type="text" id="liConfirmDeleteWord" class="regular-text" style="width: 100%; border: 2px solid #cbd5e1; border-radius: 4px; padding: 8px;" placeholder="Digite EXCLUIR para liberar o botão" autocomplete="off">
+                            </div>
+
+                            <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                                <button type="button" class="button" onclick="closeDeleteFilteredModal()">Cancelar</button>
+                                <button type="submit" name="li_delete_all_filtered" value="1" id="liBtnConfirmDeleteFiltered" class="button" disabled style="background: #dc2626; color: #fff; border-color: #b91c1c; font-weight: 700; display: inline-flex; align-items: center; gap: 6px;">
+                                    <span class="dashicons dashicons-trash" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px;"></span>
+                                    Confirmar Exclusão de <?php echo number_format_i18n($total_leads); ?> Leads
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
 
             <!-- MODAL DE DETALHES DO LEAD -->
             <div id="liLeadModal" class="li-modal-backdrop" style="display:none;">
@@ -349,6 +537,7 @@ class LeadsController {
                     html += '<p><strong>E-mail:</strong> ' + (lead.email || '-') + '</p>';
                     html += '<p><strong>Tipo de Curso:</strong> ' + (lead.tipo_curso || '-') + '</p>';
                     html += '<p><strong>Área de Interesse:</strong> ' + (lead.area_interesse || '-') + '</p>';
+                    html += '<p><strong>Polo / Unidade:</strong> ' + (lead.polo ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">🏢 ' + lead.polo + '</span>' : '-') + '</p>';
                     html += '</div>';
 
                     // Seção 2: UTMs e Atribuição Meta Ads / Google Ads
@@ -467,11 +656,92 @@ class LeadsController {
                 });
             });
 
+            // Controle de Seleção em Massa de Leads
+            var selectAllCheckbox = document.getElementById('li_select_all');
+            var leadCheckboxes = document.querySelectorAll('.li-lead-check');
+            var bulkDeleteBtn = document.getElementById('li_bulk_delete_btn');
+            var selectedCountSpan = document.getElementById('li_selected_count');
+
+            function updateBulkDeleteState() {
+                var checked = document.querySelectorAll('.li-lead-check:checked');
+                var count = checked.length;
+                if (selectedCountSpan) {
+                    selectedCountSpan.innerText = count;
+                }
+                if (bulkDeleteBtn) {
+                    bulkDeleteBtn.disabled = (count === 0);
+                    bulkDeleteBtn.style.opacity = (count > 0) ? '1' : '0.6';
+                    bulkDeleteBtn.style.cursor = (count > 0) ? 'pointer' : 'not-allowed';
+                }
+
+                leadCheckboxes.forEach(function(cb) {
+                    var row = cb.closest('tr');
+                    if (row) {
+                        row.style.backgroundColor = cb.checked ? '#fef2f2' : '';
+                    }
+                });
+
+                if (selectAllCheckbox && leadCheckboxes.length > 0) {
+                    selectAllCheckbox.checked = (count === leadCheckboxes.length);
+                    selectAllCheckbox.indeterminate = (count > 0 && count < leadCheckboxes.length);
+                }
+            }
+
+            if (selectAllCheckbox) {
+                selectAllCheckbox.addEventListener('change', function() {
+                    var isChecked = this.checked;
+                    leadCheckboxes.forEach(function(cb) {
+                        cb.checked = isChecked;
+                    });
+                    updateBulkDeleteState();
+                });
+            }
+
+            leadCheckboxes.forEach(function(cb) {
+                cb.addEventListener('change', updateBulkDeleteState);
+            });
+
+            // Modal de Exclusão por Filtro
+            window.openDeleteFilteredModal = function() {
+                var modal = document.getElementById('liDeleteFilteredModal');
+                if (modal) {
+                    modal.style.display = 'flex';
+                    var input = document.getElementById('liConfirmDeleteWord');
+                    if (input) {
+                        input.value = '';
+                        setTimeout(function() { input.focus(); }, 100);
+                    }
+                    var btn = document.getElementById('liBtnConfirmDeleteFiltered');
+                    if (btn) btn.disabled = true;
+                }
+            };
+
+            window.closeDeleteFilteredModal = function() {
+                var modal = document.getElementById('liDeleteFilteredModal');
+                if (modal) {
+                    modal.style.display = 'none';
+                }
+            };
+
+            var confirmWordInput = document.getElementById('liConfirmDeleteWord');
+            if (confirmWordInput) {
+                confirmWordInput.addEventListener('input', function() {
+                    var btn = document.getElementById('liBtnConfirmDeleteFiltered');
+                    if (btn) {
+                        btn.disabled = (this.value.trim().toUpperCase() !== 'EXCLUIR');
+                    }
+                });
+            }
+
             // Fecha ao clicar fora
             window.addEventListener('click', function(e) {
                 var modal = document.getElementById('liLeadModal');
                 if (e.target === modal) {
                     modal.style.display = 'none';
+                }
+                var filterModal = document.getElementById('liDeleteFilteredModal');
+                if (e.target === filterModal) {
+                    filterModal.style.display = 'none';
                 }
             });
             </script>

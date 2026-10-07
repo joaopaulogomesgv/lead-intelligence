@@ -48,24 +48,38 @@ class DashboardController {
         $logo_compact    = !empty($options['logo_compact']) ? esc_url_raw($options['logo_compact']) : ($plugin_settings['logo_compact'] ?? '');
 
         // 1. Filtros
-        $custom_from     = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
-        $custom_to       = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
 
-        // Se datas personalizadas foram enviadas via GET, define o período como 'custom' automaticamente
-        if (!empty($custom_from) || !empty($custom_to)) {
+        // Respeita a seleção explícita de período (today, 7d, 30d, month, last_month, all, custom)
+        $get_periodo = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : '';
+        if (!empty($get_periodo)) {
+            $periodo = $get_periodo;
+            // Se o usuário selecionou um atalho predefinido (diferente de custom), descarta datas manuais residuais
+            if ($periodo !== 'custom') {
+                $custom_from = '';
+                $custom_to   = '';
+            }
+        } elseif (!empty($custom_from) || !empty($custom_to)) {
             $periodo = 'custom';
         } else {
-            $periodo = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : $default_period;
+            $periodo = $default_period;
         }
 
-        $filter_channel  = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
-        $filter_campaign = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
-        $filter_curso    = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
-        $filter_area     = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
+        $filter_channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
+        $filter_channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
+        $filter_campaign  = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
+        $filter_curso     = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
+        $filter_area      = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
+
+        // Filtros específicos e independentes da tabela de leads
+        $tbl_nome = isset($_GET['tbl_nome']) ? sanitize_text_field(wp_unslash($_GET['tbl_nome'])) : (isset($_GET['lead_nome']) ? sanitize_text_field(wp_unslash($_GET['lead_nome'])) : '');
+        $tbl_data = isset($_GET['tbl_data']) ? sanitize_text_field(wp_unslash($_GET['tbl_data'])) : (isset($_GET['lead_data']) ? sanitize_text_field(wp_unslash($_GET['lead_data'])) : '');
+        $tbl_utm  = isset($_GET['tbl_utm']) ? sanitize_text_field(wp_unslash($_GET['tbl_utm'])) : (isset($_GET['lead_utm']) ? sanitize_text_field(wp_unslash($_GET['lead_utm'])) : '');
 
         // URLs de formulário e reset
         if ($is_frontend) {
-            $form_action = remove_query_arg(['periodo', 'canal', 'campanha', 'curso', 'area', 'from', 'to']);
+            $form_action = remove_query_arg(['periodo', 'canal', 'campanha', 'curso', 'area', 'from', 'to', 'tbl_nome', 'tbl_data', 'tbl_utm', 'lead_nome', 'lead_utm', 'lead_data']);
             $reset_url   = $form_action;
         } else {
             $form_action = '';
@@ -115,6 +129,7 @@ class DashboardController {
             case 'all':
             default:
                 $date_start = '';
+                $date_end   = '';
                 break;
         }
 
@@ -122,7 +137,7 @@ class DashboardController {
         $input_from = !empty($custom_from) ? $custom_from : (!empty($date_start) ? substr($date_start, 0, 10) : '');
         $input_to   = !empty($custom_to) ? $custom_to : (!empty($date_end) ? substr($date_end, 0, 10) : '');
 
-        // Construção da cláusula WHERE base (filtros universais: datas, campanhas, cursos, áreas)
+        // Construção da cláusula WHERE base (filtros universais do Dashboard: datas, campanhas, cursos, áreas)
         $where_base = ['1=1'];
         $params_base = [];
 
@@ -233,11 +248,17 @@ class DashboardController {
             $daily_query = $wpdb->prepare($daily_query, $params);
         }
         $daily_evolution = $wpdb->get_results($daily_query);
+        $daily_evolution = is_array($daily_evolution) ? $daily_evolution : [];
+        $campaigns       = is_array($campaigns) ? $campaigns : [];
+        $ads             = is_array($ads) ? $ads : [];
 
         // Listas para os filtros dropdown
         $all_campaigns = $wpdb->get_col("SELECT DISTINCT utm_campaign FROM {$table} WHERE utm_campaign != '' ORDER BY utm_campaign ASC");
         $all_cursos    = $wpdb->get_col("SELECT DISTINCT tipo_curso FROM {$table} WHERE tipo_curso != '' ORDER BY tipo_curso ASC");
         $all_areas     = $wpdb->get_col("SELECT DISTINCT area_interesse FROM {$table} WHERE area_interesse != '' ORDER BY area_interesse ASC");
+        $all_campaigns = is_array($all_campaigns) ? $all_campaigns : [];
+        $all_cursos    = is_array($all_cursos) ? $all_cursos : [];
+        $all_areas     = is_array($all_areas) ? $all_areas : [];
 
         $max_daily = 1;
         foreach ($daily_evolution as $d) {
@@ -292,6 +313,7 @@ class DashboardController {
             ORDER BY qualificados DESC, leads DESC 
             LIMIT 15";
         $campaigns_meta = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($camp_meta_query, $params_base)) : $wpdb->get_results($camp_meta_query);
+        $campaigns_meta = is_array($campaigns_meta) ? $campaigns_meta : [];
 
         $ad_meta_query = "SELECT 
             COALESCE(NULLIF(ad_name, ''), NULLIF(utm_content, ''), 'Sem Anúncio Identificado') as anuncio,
@@ -304,6 +326,7 @@ class DashboardController {
             ORDER BY qualificados DESC, leads DESC 
             LIMIT 15";
         $ads_meta = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($ad_meta_query, $params_base)) : $wpdb->get_results($ad_meta_query);
+        $ads_meta = is_array($ads_meta) ? $ads_meta : [];
 
         $daily_meta_query = "SELECT 
             DATE(data_cadastro) as dia,
@@ -315,6 +338,7 @@ class DashboardController {
             ORDER BY dia ASC 
             LIMIT 31";
         $daily_evolution_meta = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($daily_meta_query, $params_base)) : $wpdb->get_results($daily_meta_query);
+        $daily_evolution_meta = is_array($daily_evolution_meta) ? $daily_evolution_meta : [];
 
         $max_daily_meta = 1;
         if (!empty($daily_evolution_meta)) {
@@ -365,6 +389,7 @@ class DashboardController {
             ORDER BY qualificados DESC, leads DESC 
             LIMIT 15";
         $campaigns_google = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($camp_google_query, $params_base)) : $wpdb->get_results($camp_google_query);
+        $campaigns_google = is_array($campaigns_google) ? $campaigns_google : [];
 
         $ad_google_query = "SELECT 
             COALESCE(NULLIF(utm_term, ''), NULLIF(utm_content, ''), 'Palavra-chave Geral') as anuncio,
@@ -377,6 +402,7 @@ class DashboardController {
             ORDER BY qualificados DESC, leads DESC 
             LIMIT 15";
         $ads_google = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($ad_google_query, $params_base)) : $wpdb->get_results($ad_google_query);
+        $ads_google = is_array($ads_google) ? $ads_google : [];
 
         $daily_google_query = "SELECT 
             DATE(data_cadastro) as dia,
@@ -388,6 +414,7 @@ class DashboardController {
             ORDER BY dia ASC 
             LIMIT 31";
         $daily_evolution_google = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($daily_google_query, $params_base)) : $wpdb->get_results($daily_google_query);
+        $daily_evolution_google = is_array($daily_evolution_google) ? $daily_evolution_google : [];
 
         $max_daily_google = 1;
         if (!empty($daily_evolution_google)) {
@@ -398,8 +425,59 @@ class DashboardController {
             }
         }
 
+        // Totais históricos gerais por canal (sem restrição de datas, para avisos de contexto)
+        $g_total_geral = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$google_condition}");
+        $m_total_geral = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$meta_condition}");
+
+        // Cláusulas independentes para a tabela de leads (Google Ads e Meta Ads)
+        $where_google_leads  = $where_google;
+        $params_google_leads = $params_base;
+
+        $where_meta_leads    = $where_meta;
+        $params_meta_leads   = $params_base;
+
+        if (!empty($tbl_nome)) {
+            $like_n = '%' . $wpdb->esc_like(trim($tbl_nome)) . '%';
+            $sql_n = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s)";
+            $where_google_leads[]  = $sql_n;
+            $params_google_leads   = array_merge($params_google_leads, [$like_n, $like_n, $like_n, $like_n]);
+            $where_meta_leads[]    = $sql_n;
+            $params_meta_leads     = array_merge($params_meta_leads, [$like_n, $like_n, $like_n, $like_n]);
+        }
+        if (!empty($tbl_data)) {
+            $where_google_leads[]  = "DATE(data_cadastro) = %s";
+            $params_google_leads[] = $tbl_data;
+            $where_meta_leads[]    = "DATE(data_cadastro) = %s";
+            $params_meta_leads[]   = $tbl_data;
+        }
+        if (!empty($tbl_utm)) {
+            $like_u = '%' . $wpdb->esc_like(trim($tbl_utm)) . '%';
+            $sql_u = "(utm_campaign LIKE %s OR utm_source LIKE %s OR utm_medium LIKE %s OR utm_term LIKE %s OR utm_content LIKE %s OR campaign_name LIKE %s OR ad_name LIKE %s OR pagina_origem LIKE %s)";
+            $where_google_leads[]  = $sql_u;
+            $params_google_leads   = array_merge($params_google_leads, [$like_u, $like_u, $like_u, $like_u, $like_u, $like_u, $like_u, $like_u]);
+            $where_meta_leads[]    = $sql_u;
+            $params_meta_leads     = array_merge($params_meta_leads, [$like_u, $like_u, $like_u, $like_u, $like_u, $like_u, $like_u, $like_u]);
+        }
+
+        $where_google_leads_sql = implode(' AND ', $where_google_leads);
+        $where_meta_leads_sql   = implode(' AND ', $where_meta_leads);
+
+        // Lista de leads exclusivos Google Ads (filtrada de forma independente para a tabela)
+        $leads_google_query = "SELECT * FROM {$table} WHERE {$where_google_leads_sql} ORDER BY id DESC LIMIT 150";
+        $leads_google_list  = !empty($params_google_leads) ? $wpdb->get_results($wpdb->prepare($leads_google_query, $params_google_leads)) : $wpdb->get_results($leads_google_query);
+        $leads_google_list  = is_array($leads_google_list) ? $leads_google_list : [];
+
+        // Lista de leads exclusivos Meta Ads (filtrada de forma independente para a tabela)
+        $leads_meta_query = "SELECT * FROM {$table} WHERE {$where_meta_leads_sql} ORDER BY id DESC LIMIT 150";
+        $leads_meta_list  = !empty($params_meta_leads) ? $wpdb->get_results($wpdb->prepare($leads_meta_query, $params_meta_leads)) : $wpdb->get_results($leads_meta_query);
+        $leads_meta_list  = is_array($leads_meta_list) ? $leads_meta_list : [];
+
         $active_tab = isset($_GET['tab']) && in_array($_GET['tab'], ['dashboard', 'leads-meta', 'leads-google'], true) ? sanitize_text_field($_GET['tab']) : 'dashboard';
         ?>
+        <?php if ($is_frontend): ?>
+            <!-- Injeção prioritária garantindo integridade de estilos em qualquer modelo de página -->
+            <link rel="stylesheet" id="li-admin-css-direct" href="<?php echo esc_url(LEAD_INTELLIGENCE_PLUGIN_URL . 'assets/css/admin-common.css?ver=' . LEAD_INTELLIGENCE_VERSION); ?>" />
+        <?php endif; ?>
         <div class="wrap li-wrap li-wrap-dashboard <?php echo $is_frontend ? 'li-frontend-wrap' : ''; ?> <?php echo $is_full_width ? 'li-full-width' : ''; ?>" data-theme="light">
             <div class="li-app-layout">
                 <!-- ========================================================
@@ -410,13 +488,13 @@ class DashboardController {
                         <div class="li-sidebar-header-top">
                             <div class="li-brand-logos li-brand-toggle" onclick="liToggleSidebarCollapse()" role="button" tabindex="0" title="Clique para recolher ou expandir o menu">
                                 <?php if (!empty($logo)): ?>
-                                    <img src="<?php echo esc_url($logo); ?>" alt="Logo Faveni" class="li-logo-img li-logo-expanded" />
+                                    <img src="<?php echo esc_url($logo); ?>" alt="Logo Faveni" class="li-logo-img li-logo-expanded" style="max-height: 44px; max-width: 240px; width: auto; object-fit: contain; display: block;" />
                                 <?php else: ?>
                                     <div class="li-sidebar-brand-text li-logo-expanded">FAVENI</div>
                                 <?php endif; ?>
 
                                 <?php if (!empty($logo_compact)): ?>
-                                    <img src="<?php echo esc_url($logo_compact); ?>" alt="Logo Faveni" class="li-logo-img li-logo-compact" />
+                                    <img src="<?php echo esc_url($logo_compact); ?>" alt="Logo Faveni" class="li-logo-img li-logo-compact" style="max-height: 40px; max-width: 40px; object-fit: contain;" />
                                 <?php else: ?>
                                     <div class="li-logo-compact-fallback li-logo-compact" title="FAVENI">
                                         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="var(--li-gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -550,9 +628,10 @@ class DashboardController {
                                     <?php endif; ?>
                                     <input type="hidden" name="tab" id="liActiveTabInput" value="<?php echo esc_attr($active_tab); ?>">
 
-                                    <div class="li-filter-row">
+                                    <!-- LINHA 1: FILTROS DE MACRO SEGMENTAÇÃO -->
+                                    <div class="li-filter-row-primary">
                                         <!-- PERÍODO -->
-                                        <div class="li-filter-col">
+                                        <div class="li-filter-col li-filter-col-periodo">
                                             <label class="li-filter-lbl" for="liPeriodoSelect">Período</label>
                                             <select name="periodo" id="liPeriodoSelect" class="li-select" onchange="liOnPeriodoChange(this.value)">
                                                 <option value="today" <?php selected($periodo, 'today'); ?>>Hoje</option>
@@ -567,7 +646,7 @@ class DashboardController {
                                         </div>
 
                                         <!-- INTERVALO DE DATAS (SEMPRE VISÍVEL) -->
-                                        <div id="liCustomDateBox" class="li-filter-col li-filter-dates-col">
+                                        <div id="liCustomDateBox" class="li-filter-col li-filter-col-dates">
                                             <label class="li-filter-lbl">Intervalo de Datas</label>
                                             <div class="li-dates-capsule">
                                                 <span class="li-date-tag">De</span>
@@ -578,20 +657,26 @@ class DashboardController {
                                             </div>
                                         </div>
 
-                                        <!-- CANAL -->
-                                        <div class="li-filter-col">
+                                        <!-- CANAL DE ORIGEM -->
+                                        <div class="li-filter-col li-filter-col-canal" id="liFilterColCanal">
                                             <label class="li-filter-lbl">Canal de Origem</label>
-                                            <select name="canal" class="li-select">
+                                            <select name="canal" id="liSelectCanal" class="li-select" style="<?php echo ($active_tab === 'leads-google' || $active_tab === 'leads-meta') ? 'display: none;' : ''; ?>">
                                                 <option value="">Todos os Canais</option>
                                                 <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
                                                 <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
                                                 <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
                                             </select>
+                                            <div id="liCanalBadgeGoogle" class="li-canal-fixed-pill li-pill-google" style="display: <?php echo $active_tab === 'leads-google' ? 'inline-flex' : 'none'; ?>;">
+                                                <span>🟢 Google Ads</span> <span class="li-fixed-tag">Fixo</span>
+                                            </div>
+                                            <div id="liCanalBadgeMeta" class="li-canal-fixed-pill li-pill-meta" style="display: <?php echo $active_tab === 'leads-meta' ? 'inline-flex' : 'none'; ?>;">
+                                                <span>🔵 Meta Ads</span> <span class="li-fixed-tag">Fixo</span>
+                                            </div>
                                         </div>
 
                                         <!-- CAMPANHA -->
                                         <?php if (!empty($all_campaigns)): ?>
-                                            <div class="li-filter-col">
+                                            <div class="li-filter-col li-filter-col-campanha">
                                                 <label class="li-filter-lbl">Campanha</label>
                                                 <select name="campanha" class="li-select">
                                                     <option value="">Todas as Campanhas</option>
@@ -606,7 +691,7 @@ class DashboardController {
 
                                         <!-- CURSO -->
                                         <?php if (!empty($all_cursos)): ?>
-                                            <div class="li-filter-col">
+                                            <div class="li-filter-col li-filter-col-curso">
                                                 <label class="li-filter-lbl">Curso</label>
                                                 <select name="curso" class="li-select">
                                                     <option value="">Todos os Cursos</option>
@@ -619,15 +704,15 @@ class DashboardController {
                                             </div>
                                         <?php endif; ?>
 
-                                        <!-- AÇÕES -->
-                                        <div class="li-filter-col li-filter-actions-col">
+                                        <!-- BOTÕES DE AÇÃO DO TOPO -->
+                                        <div class="li-filter-col li-filter-col-actions">
                                             <label class="li-filter-lbl">&nbsp;</label>
-                                            <div class="li-filter-btns">
-                                                <button type="submit" class="button button-primary li-btn li-btn-faveni" style="display: inline-flex; align-items: center; gap: 6px;">
+                                            <div class="li-filter-btns-group">
+                                                <button type="submit" class="li-btn-filter-run">
                                                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                                                     Filtrar
                                                 </button>
-                                                <a href="<?php echo esc_url($reset_url); ?>" class="button li-btn li-btn-ghost" title="Limpar todos os filtros" style="display: inline-flex; align-items: center; gap: 6px;">
+                                                <a href="<?php echo esc_url($reset_url); ?>" class="li-btn-filter-reset" title="Limpar todos os filtros">
                                                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
                                                     Resetar
                                                 </a>
@@ -917,6 +1002,21 @@ class DashboardController {
                              ABA 2: LEADS META ADS
                              ========================================================================= -->
                         <div id="li-panel-leads-meta" class="li-tab-panel <?php echo $active_tab === 'leads-meta' ? 'is-active' : ''; ?>">
+                            <?php if ($m_total === 0 && $m_total_geral > 0): ?>
+                                <div class="li-card" style="background: rgba(197, 160, 89, 0.08); border: 1px solid var(--li-gold); padding: 18px 24px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 14px;">
+                                        <span style="font-size: 28px; line-height: 1;">💡</span>
+                                        <div>
+                                            <strong style="color: var(--li-text-main); font-size: 14px;">Você possui <?php echo number_format_i18n($m_total_geral); ?> leads da Meta Ads registrados no banco de dados.</strong>
+                                            <p style="margin: 4px 0 0; font-size: 13px; color: var(--li-text-muted);">Como o filtro de período acima está em <strong><?php echo esc_html($periodo === 'today' ? 'Hoje' : ($periodo === 'yesterday' ? 'Ontem' : $periodo)); ?></strong>, os contatos de outras datas não estão aparecendo.</p>
+                                        </div>
+                                    </div>
+                                    <a href="<?php echo esc_url(add_query_arg(['periodo' => 'all', 'from' => '', 'to' => ''])); ?>" class="button button-primary li-btn li-btn-faveni" style="font-size: 13px; font-weight: 600; padding: 6px 18px; text-decoration: none;">
+                                        Ver Todo o Período (<?php echo number_format_i18n($m_total_geral); ?> Leads)
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+
                             <!-- HERO HIGHLIGHTS META -->
                             <div class="li-hero-highlights">
                                 <!-- CARD 1: DOURADO META -->
@@ -1166,12 +1266,248 @@ class DashboardController {
                                     </div>
                                 </div>
                             <?php endif; ?>
+
+                            <!-- TABELA 3: LEADS RECENTES META ADS -->
+                            <div class="li-card" style="padding: 0; overflow-x: auto; margin-top: 24px;">
+                                <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                    <div>
+                                        <h3 class="li-card-title" style="display: flex; align-items: center; gap: 8px; margin: 0;">
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--li-brand); flex-shrink: 0;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                            Leads Capturados via Meta Ads
+                                        </h3>
+                                        <p class="li-card-desc" style="margin: 4px 0 0;">Contatos identificados com origem de Facebook, Instagram ou campanhas Meta.</p>
+                                    </div>
+                                    <span class="li-badge" id="liBadgeCountMeta" style="background: rgba(24, 119, 242, 0.15); color: #1d4ed8; font-weight: 700;">
+                                        <?php echo count($leads_meta_list); ?> leads exibidos
+                                    </span>
+                                </div>
+
+                                <!-- BARRA DE FILTROS DEDICADA DA TABELA: NOME, DATA E UTM -->
+                                <div class="li-table-filter-bar">
+                                    <div class="li-table-filter-group">
+                                        <!-- Filtro Nome -->
+                                        <div class="li-table-filter-item">
+                                            <span class="li-table-filter-icon">🔍</span>
+                                            <input type="text" id="liFilterLeadNameMeta" class="li-table-filter-input" placeholder="Filtrar por nome, e-mail ou tel..." value="<?php echo esc_attr($tbl_nome); ?>" oninput="liFilterLeadsTable('meta')" onkeydown="if(event.key==='Enter'){liApplyServerTableFilter('meta');}" />
+                                            <button type="button" id="liClearNameMeta" class="li-table-filter-clear" onclick="liClearField('liFilterLeadNameMeta', 'meta')" title="Limpar campo">✕</button>
+                                        </div>
+
+                                        <!-- Filtro Data -->
+                                        <div class="li-table-filter-item" style="flex: 1 1 150px; min-width: 140px;">
+                                            <span class="li-table-filter-icon">📅</span>
+                                            <input type="date" id="liFilterLeadDateMeta" class="li-table-filter-input" value="<?php echo esc_attr($tbl_data); ?>" onchange="liFilterLeadsTable('meta')" />
+                                            <button type="button" id="liClearDateMeta" class="li-table-filter-clear" onclick="liClearField('liFilterLeadDateMeta', 'meta')" title="Limpar campo">✕</button>
+                                        </div>
+
+                                        <!-- Filtro UTM -->
+                                        <div class="li-table-filter-item">
+                                            <span class="li-table-filter-icon">🏷️</span>
+                                            <input type="text" id="liFilterLeadUtmMeta" class="li-table-filter-input" placeholder="Filtrar por UTM, anúncio..." value="<?php echo esc_attr($tbl_utm); ?>" oninput="liFilterLeadsTable('meta')" onkeydown="if(event.key==='Enter'){liApplyServerTableFilter('meta');}" />
+                                            <button type="button" id="liClearUtmMeta" class="li-table-filter-clear" onclick="liClearField('liFilterLeadUtmMeta', 'meta')" title="Limpar campo">✕</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Ações da Tabela -->
+                                    <div class="li-table-filter-actions">
+                                        <button type="button" class="button button-secondary li-btn-table-action" onclick="liResetTableFilter('meta')" title="Limpar filtros rápidos da tabela">
+                                            Limpar
+                                        </button>
+                                        <button type="button" class="button button-primary li-btn-table-action li-btn-faveni" onclick="liApplyServerTableFilter('meta')" title="Buscar na base inteira via banco de dados">
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                            Buscar no Banco
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <table class="wp-list-table widefat fixed striped li-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 60px;">ID</th>
+                                            <th style="width: 110px;">Data</th>
+                                            <th>Nome / Lead</th>
+                                            <th>Telefone / WhatsApp</th>
+                                            <th>Campanha / Anúncio</th>
+                                            <th>Curso / Interesse</th>
+                                            <th style="min-width: 190px;">UTM</th>
+                                            <th style="width: 130px; text-align: center;">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- LINHA DE RESULTADO VAZIO FILTRADO VIA JS -->
+                                        <tr id="liNoMatchRowMeta" style="display: none;">
+                                            <td colspan="8" style="text-align: center; padding: 35px 20px; color: #64748b;">
+                                                <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
+                                                <div style="font-weight: 600; color: #334155; margin-bottom: 4px;">Nenhum lead encontrado com os filtros aplicados</div>
+                                                <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Tente ajustar o nome, a data ou a UTM pesquisada.</div>
+                                                <button type="button" class="button button-secondary" onclick="liResetTableFilter('meta')" style="font-size: 12px;">Limpar Filtros da Tabela</button>
+                                            </td>
+                                        </tr>
+                                        <?php if (empty($leads_meta_list)): ?>
+                                            <tr>
+                                                <td colspan="8" style="text-align: center; padding: 35px; color: #64748b;">
+                                                    Nenhum lead Meta Ads identificado no período selecionado.
+                                                </td>
+                                            </tr>
+                                        <?php else: ?>
+                                            <?php foreach ($leads_meta_list as $lead): ?>
+                                                <tr class="li-lead-row li-lead-row-meta" 
+                                                    data-lead-name="<?php echo esc_attr(strtolower(($lead->nome ?? '') . ' ' . ($lead->email ?? '') . ' ' . ($lead->telefone ?? '') . ' ' . ($lead->telefone_normalizado ?? ''))); ?>"
+                                                    data-lead-date="<?php echo esc_attr(substr($lead->data_cadastro, 0, 10)); ?>"
+                                                    data-lead-date-br="<?php echo esc_attr(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?>"
+                                                    data-lead-utm="<?php echo esc_attr(strtolower(($lead->utm_source ?? '') . ' ' . ($lead->utm_campaign ?? '') . ' ' . ($lead->utm_medium ?? '') . ' ' . ($lead->utm_term ?? '') . ' ' . ($lead->utm_content ?? '') . ' ' . ($lead->campaign_name ?? '') . ' ' . ($lead->ad_name ?? '') . ' ' . ($lead->fbclid ?? '') . ' ' . ($lead->pagina_origem ?? ''))); ?>"
+                                                >
+                                                    <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
+                                                    <td>
+                                                        <div style="font-size: 12px; font-weight: 600;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
+                                                        <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
+                                                    </td>
+                                                    <td>
+                                                        <strong><?php echo !empty($lead->nome) ? esc_html($lead->nome) : '<span style="color:#94a3b8">Sem nome</span>'; ?></strong>
+                                                        <?php if (!empty($lead->email)): ?>
+                                                            <div style="font-size: 11px; color: #64748b;"><?php echo esc_html($lead->email); ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <?php if (!empty($lead->telefone)): ?>
+                                                            <a href="https://wa.me/<?php echo esc_attr($lead->telefone_normalizado ?: preg_replace('/\D/', '', $lead->telefone)); ?>" target="_blank" style="color: #059669; font-weight: 600; text-decoration: none;">
+                                                                💬 <?php echo esc_html(\LeadIntelligence\PhoneNormalizer::format_display($lead->telefone)); ?>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <span style="color: #94a3b8;">-</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <div style="font-weight: 600; font-size: 12px;"><?php echo esc_html(!empty($lead->campaign_name) ? $lead->campaign_name : (!empty($lead->utm_campaign) ? $lead->utm_campaign : 'Direto')); ?></div>
+                                                        <?php if (!empty($lead->ad_name) || !empty($lead->utm_content)): ?>
+                                                            <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(!empty($lead->ad_name) ? $lead->ad_name : $lead->utm_content); ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead->tipo_curso ?: ($lead->area_interesse ?: '-')); ?></span>
+                                                    </td>
+                                                    <td>
+                                                        <?php
+                                                        // Fallback por telefone: se o lead veio da planilha sem UTM rica, puxa do registro do Elementor com mesmo telefone
+                                                        $is_generic = empty($lead->utm_source) || in_array($lead->utm_source, ['google', 'meta', 'planilha']);
+                                                        if ($is_generic && !empty($lead->telefone_normalizado)) {
+                                                            static $phone_utm_cache_meta = [];
+                                                            if (!isset($phone_utm_cache_meta[$lead->telefone_normalizado])) {
+                                                                global $wpdb;
+                                                                $t_leads = \LeadIntelligence\Database\DbSchema::get_leads_table();
+                                                                $other_l = $wpdb->get_row($wpdb->prepare(
+                                                                    "SELECT utm_source, utm_campaign, utm_medium, utm_term, utm_content, gclid, fbclid, pagina_origem, data_cadastro 
+                                                                     FROM {$t_leads} 
+                                                                     WHERE telefone_normalizado = %s AND utm_source != '' AND utm_source NOT IN ('google', 'meta', 'planilha') 
+                                                                     ORDER BY id DESC LIMIT 1",
+                                                                    $lead->telefone_normalizado
+                                                                ));
+                                                                $phone_utm_cache_meta[$lead->telefone_normalizado] = $other_l ?: false;
+                                                            }
+                                                            if (!empty($phone_utm_cache_meta[$lead->telefone_normalizado])) {
+                                                                $ol = $phone_utm_cache_meta[$lead->telefone_normalizado];
+                                                                if (!empty($ol->utm_source))   $lead->utm_source   = $ol->utm_source;
+                                                                if (!empty($ol->utm_campaign)) $lead->utm_campaign = $ol->utm_campaign;
+                                                                if (!empty($ol->utm_medium))   $lead->utm_medium   = $ol->utm_medium;
+                                                                if (!empty($ol->utm_term))     $lead->utm_term     = $ol->utm_term;
+                                                                if (!empty($ol->utm_content))  $lead->utm_content  = $ol->utm_content;
+                                                                if (!empty($ol->fbclid) && empty($lead->fbclid)) $lead->fbclid = $ol->fbclid;
+                                                                if (empty($lead->dias_para_conversao) && !empty($ol->data_cadastro) && !empty($lead->qualificacao_data)) {
+                                                                    $t_c = strtotime($ol->data_cadastro);
+                                                                    $t_q = strtotime($lead->qualificacao_data);
+                                                                    if ($t_q >= $t_c) {
+                                                                        $lead->dias_para_conversao = (int) floor(($t_q - $t_c) / 86400);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        $lead_utms = [];
+                                                        if (!empty($lead->utm_source))   $lead_utms['utm_source']   = $lead->utm_source;
+                                                        if (!empty($lead->utm_campaign)) $lead_utms['utm_campaign'] = $lead->utm_campaign;
+                                                        if (!empty($lead->utm_medium))   $lead_utms['utm_medium']   = $lead->utm_medium;
+                                                        if (!empty($lead->utm_term))     $lead_utms['utm_term']     = $lead->utm_term;
+                                                        if (!empty($lead->utm_content))  $lead_utms['utm_content']  = $lead->utm_content;
+
+                                                        if (!empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'utm_') !== false) {
+                                                            $parsed_q = parse_url($lead->pagina_origem, PHP_URL_QUERY);
+                                                            if (!empty($parsed_q)) {
+                                                                parse_str($parsed_q, $q_params);
+                                                                foreach (['utm_source', 'utm_campaign', 'utm_medium', 'utm_term', 'utm_content'] as $uk) {
+                                                                    if (empty($lead_utms[$uk]) && !empty($q_params[$uk])) {
+                                                                        $lead_utms[$uk] = sanitize_text_field($q_params[$uk]);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        ?>
+                                                        <?php if (!empty($lead_utms)): ?>
+                                                            <div class="li-utm-badge-list">
+                                                                <?php foreach ($lead_utms as $utm_key => $utm_val): ?>
+                                                                    <div class="li-utm-item" title="<?php echo esc_attr("{$utm_key} = {$utm_val}"); ?>">
+                                                                        <span class="li-utm-key"><?php echo esc_html($utm_key); ?></span>
+                                                                        <span class="li-utm-val"><?php echo esc_html($utm_val); ?></span>
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                                <?php if (!empty($lead->fbclid)): ?>
+                                                                    <div style="margin-top: 2px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(24, 119, 242, 0.12); color: #1877f2; font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr($lead->fbclid); ?>">FBCLID ✓</span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                <?php if (isset($lead->dias_para_conversao) && $lead->dias_para_conversao !== null && $lead->qualificacao_status === 'qualificado'): ?>
+                                                                    <div style="margin-top: 4px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(16, 185, 129, 0.15); color: #047857; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr("Lead capturado e matriculado após {$lead->dias_para_conversao} dias"); ?>">
+                                                                            ⏱️ Fechou em <?php echo $lead->dias_para_conversao == 0 ? 'mesmo dia' : "{$lead->dias_para_conversao}d"; ?>
+                                                                        </span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($lead->utm_source_first) && !empty($lead->utm_source) && $lead->utm_source_first !== $lead->utm_source): ?>
+                                                                    <div style="margin-top: 2px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(245, 158, 11, 0.15); color: #b45309; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr("Captado inicialmente via utm_source: {$lead->utm_source_first}"); ?>">
+                                                                            🎯 1º Toque: <?php echo esc_html($lead->utm_source_first); ?>
+                                                                        </span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td style="text-align: center;">
+                                                        <?php if ($lead->qualificacao_status === 'qualificado'): ?>
+                                                            <span class="li-badge li-status-qualificado">Qualificado</span>
+                                                        <?php elseif ($lead->qualificacao_status === 'nao_qualificado'): ?>
+                                                            <span class="li-badge li-status-desqualificado">Desqualificado</span>
+                                                        <?php else: ?>
+                                                            <span class="li-badge li-status-pendente">Pendente</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                         <!-- =========================================================================
                              ABA 3: LEADS GOOGLE ADS
                              ========================================================================= -->
                         <div id="li-panel-leads-google" class="li-tab-panel <?php echo $active_tab === 'leads-google' ? 'is-active' : ''; ?>">
+                            <?php if ($g_total === 0 && $g_total_geral > 0): ?>
+                                <div class="li-card" style="background: rgba(197, 160, 89, 0.08); border: 1px solid var(--li-gold); padding: 18px 24px; border-radius: 12px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                                    <div style="display: flex; align-items: center; gap: 14px;">
+                                        <span style="font-size: 28px; line-height: 1;">💡</span>
+                                        <div>
+                                            <strong style="color: var(--li-text-main); font-size: 14px;">Você possui <?php echo number_format_i18n($g_total_geral); ?> leads do Google Ads registrados no banco de dados.</strong>
+                                            <p style="margin: 4px 0 0; font-size: 13px; color: var(--li-text-muted);">Como o filtro de período acima está em <strong><?php echo esc_html($periodo === 'today' ? 'Hoje' : ($periodo === 'yesterday' ? 'Ontem' : $periodo)); ?></strong>, os contatos de outras datas não estão aparecendo.</p>
+                                        </div>
+                                    </div>
+                                    <a href="<?php echo esc_url(add_query_arg(['periodo' => 'all', 'from' => '', 'to' => ''])); ?>" class="button button-primary li-btn li-btn-faveni" style="font-size: 13px; font-weight: 600; padding: 6px 18px; text-decoration: none;">
+                                        Ver Todo o Período (<?php echo number_format_i18n($g_total_geral); ?> Leads)
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+
                             <!-- HERO HIGHLIGHTS GOOGLE -->
                             <div class="li-hero-highlights">
                                 <!-- CARD 1: DOURADO GOOGLE -->
@@ -1422,6 +1758,227 @@ class DashboardController {
                                     </div>
                                 </div>
                             <?php endif; ?>
+
+                            <!-- TABELA 3: LEADS RECENTES GOOGLE ADS -->
+                            <div class="li-card" style="padding: 0; overflow-x: auto; margin-top: 24px;">
+                                <div style="padding: 20px 24px 12px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                                    <div>
+                                        <h3 class="li-card-title" style="display: flex; align-items: center; gap: 8px; margin: 0;">
+                                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--li-brand); flex-shrink: 0;"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                                            Leads Capturados via Google Ads
+                                        </h3>
+                                        <p class="li-card-desc" style="margin: 4px 0 0;">Contatos identificados com origem de Rede de Pesquisa, Display, PMax ou campanhas Google.</p>
+                                    </div>
+                                    <span class="li-badge" id="liBadgeCountGoogle" style="background: rgba(16, 185, 129, 0.15); color: #047857; font-weight: 700;">
+                                        <?php echo count($leads_google_list); ?> leads exibidos
+                                    </span>
+                                </div>
+
+                                <!-- BARRA DE FILTROS DEDICADA DA TABELA: NOME, DATA E UTM -->
+                                <div class="li-table-filter-bar">
+                                    <div class="li-table-filter-group">
+                                        <!-- Filtro Nome -->
+                                        <div class="li-table-filter-item">
+                                            <span class="li-table-filter-icon">🔍</span>
+                                            <input type="text" id="liFilterLeadNameGoogle" class="li-table-filter-input" placeholder="Filtrar por nome, e-mail ou tel..." value="<?php echo esc_attr($tbl_nome); ?>" oninput="liFilterLeadsTable('google')" onkeydown="if(event.key==='Enter'){liApplyServerTableFilter('google');}" />
+                                            <button type="button" id="liClearNameGoogle" class="li-table-filter-clear" onclick="liClearField('liFilterLeadNameGoogle', 'google')" title="Limpar campo">✕</button>
+                                        </div>
+
+                                        <!-- Filtro Data -->
+                                        <div class="li-table-filter-item" style="flex: 1 1 150px; min-width: 140px;">
+                                            <span class="li-table-filter-icon">📅</span>
+                                            <input type="date" id="liFilterLeadDateGoogle" class="li-table-filter-input" value="<?php echo esc_attr($tbl_data); ?>" onchange="liFilterLeadsTable('google')" />
+                                            <button type="button" id="liClearDateGoogle" class="li-table-filter-clear" onclick="liClearField('liFilterLeadDateGoogle', 'google')" title="Limpar campo">✕</button>
+                                        </div>
+
+                                        <!-- Filtro UTM -->
+                                        <div class="li-table-filter-item">
+                                            <span class="li-table-filter-icon">🏷️</span>
+                                            <input type="text" id="liFilterLeadUtmGoogle" class="li-table-filter-input" placeholder="Filtrar por UTM, termo, campanha..." value="<?php echo esc_attr($tbl_utm); ?>" oninput="liFilterLeadsTable('google')" onkeydown="if(event.key==='Enter'){liApplyServerTableFilter('google');}" />
+                                            <button type="button" id="liClearUtmGoogle" class="li-table-filter-clear" onclick="liClearField('liFilterLeadUtmGoogle', 'google')" title="Limpar campo">✕</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Ações da Tabela -->
+                                    <div class="li-table-filter-actions">
+                                        <button type="button" class="button button-secondary li-btn-table-action" onclick="liResetTableFilter('google')" title="Limpar filtros rápidos da tabela">
+                                            Limpar
+                                        </button>
+                                        <button type="button" class="button button-primary li-btn-table-action li-btn-faveni" onclick="liApplyServerTableFilter('google')" title="Buscar na base inteira via banco de dados">
+                                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                            Buscar no Banco
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <table class="wp-list-table widefat fixed striped li-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width: 60px;">ID</th>
+                                            <th style="width: 110px;">Data</th>
+                                            <th>Nome / Lead</th>
+                                            <th>Telefone / WhatsApp</th>
+                                            <th>Campanha / Termo</th>
+                                            <th>Curso / Interesse</th>
+                                            <th style="min-width: 190px;">UTM</th>
+                                            <th style="width: 130px; text-align: center;">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <!-- LINHA DE RESULTADO VAZIO FILTRADO VIA JS -->
+                                        <tr id="liNoMatchRowGoogle" style="display: none;">
+                                            <td colspan="8" style="text-align: center; padding: 35px 20px; color: #64748b;">
+                                                <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
+                                                <div style="font-weight: 600; color: #334155; margin-bottom: 4px;">Nenhum lead encontrado com os filtros aplicados</div>
+                                                <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Tente ajustar o nome, a data ou a UTM pesquisada.</div>
+                                                <button type="button" class="button button-secondary" onclick="liResetTableFilter('google')" style="font-size: 12px;">Limpar Filtros da Tabela</button>
+                                            </td>
+                                        </tr>
+                                        <?php if (empty($leads_google_list)): ?>
+                                            <tr>
+                                                <td colspan="8" style="text-align: center; padding: 35px; color: #64748b;">
+                                                    Nenhum lead Google Ads identificado no período selecionado.
+                                                </td>
+                                            </tr>
+                                        <?php else: ?>
+                                            <?php foreach ($leads_google_list as $lead): ?>
+                                                <tr class="li-lead-row li-lead-row-google" 
+                                                    data-lead-name="<?php echo esc_attr(strtolower(($lead->nome ?? '') . ' ' . ($lead->email ?? '') . ' ' . ($lead->telefone ?? '') . ' ' . ($lead->telefone_normalizado ?? ''))); ?>"
+                                                    data-lead-date="<?php echo esc_attr(substr($lead->data_cadastro, 0, 10)); ?>"
+                                                    data-lead-date-br="<?php echo esc_attr(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?>"
+                                                    data-lead-utm="<?php echo esc_attr(strtolower(($lead->utm_source ?? '') . ' ' . ($lead->utm_campaign ?? '') . ' ' . ($lead->utm_medium ?? '') . ' ' . ($lead->utm_term ?? '') . ' ' . ($lead->utm_content ?? '') . ' ' . ($lead->campaign_name ?? '') . ' ' . ($lead->ad_name ?? '') . ' ' . ($lead->formulario_nome ?? '') . ' ' . ($lead->gclid ?? '') . ' ' . ($lead->pagina_origem ?? ''))); ?>"
+                                                >
+                                                    <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
+                                                    <td>
+                                                        <div style="font-size: 12px; font-weight: 600;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
+                                                        <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
+                                                    </td>
+                                                    <td>
+                                                        <strong><?php echo !empty($lead->nome) ? esc_html($lead->nome) : '<span style="color:#94a3b8">Sem nome</span>'; ?></strong>
+                                                        <?php if (!empty($lead->email)): ?>
+                                                            <div style="font-size: 11px; color: #64748b;"><?php echo esc_html($lead->email); ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <?php if (!empty($lead->telefone)): ?>
+                                                            <a href="https://wa.me/<?php echo esc_attr($lead->telefone_normalizado ?: preg_replace('/\D/', '', $lead->telefone)); ?>" target="_blank" style="color: #059669; font-weight: 600; text-decoration: none;">
+                                                                💬 <?php echo esc_html(\LeadIntelligence\PhoneNormalizer::format_display($lead->telefone)); ?>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <span style="color: #94a3b8;">-</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <div style="font-weight: 600; font-size: 12px;"><?php echo esc_html(!empty($lead->campaign_name) ? $lead->campaign_name : (!empty($lead->utm_campaign) ? $lead->utm_campaign : (!empty($lead->formulario_nome) ? $lead->formulario_nome : 'Direto'))); ?></div>
+                                                        <?php if (!empty($lead->utm_term) || !empty($lead->utm_content)): ?>
+                                                            <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(!empty($lead->utm_term) ? $lead->utm_term : $lead->utm_content); ?></div>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td>
+                                                        <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead->tipo_curso ?: ($lead->area_interesse ?: '-')); ?></span>
+                                                    </td>
+                                                    <td>
+                                                        <?php
+                                                        // Fallback por telefone: se o lead veio da planilha sem UTM rica, puxa do registro do Elementor com mesmo telefone
+                                                        $is_generic = empty($lead->utm_source) || in_array($lead->utm_source, ['google', 'meta', 'planilha']);
+                                                        if ($is_generic && !empty($lead->telefone_normalizado)) {
+                                                            static $phone_utm_cache_google = [];
+                                                            if (!isset($phone_utm_cache_google[$lead->telefone_normalizado])) {
+                                                                global $wpdb;
+                                                                $t_leads = \LeadIntelligence\Database\DbSchema::get_leads_table();
+                                                                $other_l = $wpdb->get_row($wpdb->prepare(
+                                                                    "SELECT utm_source, utm_campaign, utm_medium, utm_term, utm_content, gclid, fbclid, pagina_origem, data_cadastro 
+                                                                     FROM {$t_leads} 
+                                                                     WHERE telefone_normalizado = %s AND utm_source != '' AND utm_source NOT IN ('google', 'meta', 'planilha') 
+                                                                     ORDER BY id DESC LIMIT 1",
+                                                                    $lead->telefone_normalizado
+                                                                ));
+                                                                $phone_utm_cache_google[$lead->telefone_normalizado] = $other_l ?: false;
+                                                            }
+                                                            if (!empty($phone_utm_cache_google[$lead->telefone_normalizado])) {
+                                                                $ol = $phone_utm_cache_google[$lead->telefone_normalizado];
+                                                                if (!empty($ol->utm_source))   $lead->utm_source   = $ol->utm_source;
+                                                                if (!empty($ol->utm_campaign)) $lead->utm_campaign = $ol->utm_campaign;
+                                                                if (!empty($ol->utm_medium))   $lead->utm_medium   = $ol->utm_medium;
+                                                                if (!empty($ol->utm_term))     $lead->utm_term     = $ol->utm_term;
+                                                                if (!empty($ol->utm_content))  $lead->utm_content  = $ol->utm_content;
+                                                                if (!empty($ol->gclid) && empty($lead->gclid)) $lead->gclid = $ol->gclid;
+                                                                if (empty($lead->dias_para_conversao) && !empty($ol->data_cadastro) && !empty($lead->qualificacao_data)) {
+                                                                    $t_c = strtotime($ol->data_cadastro);
+                                                                    $t_q = strtotime($lead->qualificacao_data);
+                                                                    if ($t_q >= $t_c) {
+                                                                        $lead->dias_para_conversao = (int) floor(($t_q - $t_c) / 86400);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+
+                                                        $lead_utms = [];
+                                                        if (!empty($lead->utm_source))   $lead_utms['utm_source']   = $lead->utm_source;
+                                                        if (!empty($lead->utm_campaign)) $lead_utms['utm_campaign'] = $lead->utm_campaign;
+                                                        if (!empty($lead->utm_medium))   $lead_utms['utm_medium']   = $lead->utm_medium;
+                                                        if (!empty($lead->utm_term))     $lead_utms['utm_term']     = $lead->utm_term;
+                                                        if (!empty($lead->utm_content))  $lead_utms['utm_content']  = $lead->utm_content;
+
+                                                        if (!empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'utm_') !== false) {
+                                                            $parsed_q = parse_url($lead->pagina_origem, PHP_URL_QUERY);
+                                                            if (!empty($parsed_q)) {
+                                                                parse_str($parsed_q, $q_params);
+                                                                foreach (['utm_source', 'utm_campaign', 'utm_medium', 'utm_term', 'utm_content'] as $uk) {
+                                                                    if (empty($lead_utms[$uk]) && !empty($q_params[$uk])) {
+                                                                        $lead_utms[$uk] = sanitize_text_field($q_params[$uk]);
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                        ?>
+                                                        <?php if (!empty($lead_utms)): ?>
+                                                            <div class="li-utm-badge-list">
+                                                                <?php foreach ($lead_utms as $utm_key => $utm_val): ?>
+                                                                    <div class="li-utm-item" title="<?php echo esc_attr("{$utm_key} = {$utm_val}"); ?>">
+                                                                        <span class="li-utm-key"><?php echo esc_html($utm_key); ?></span>
+                                                                        <span class="li-utm-val"><?php echo esc_html($utm_val); ?></span>
+                                                                    </div>
+                                                                <?php endforeach; ?>
+                                                                <?php if (!empty($lead->gclid)): ?>
+                                                                    <div style="margin-top: 2px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(66, 133, 244, 0.12); color: #1a73e8; font-size: 9.5px; font-weight: 700; padding: 1px 5px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr($lead->gclid); ?>">GCLID ✓</span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                <?php if (isset($lead->dias_para_conversao) && $lead->dias_para_conversao !== null && $lead->qualificacao_status === 'qualificado'): ?>
+                                                                    <div style="margin-top: 4px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(16, 185, 129, 0.15); color: #047857; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr("Lead capturado e matriculado após {$lead->dias_para_conversao} dias"); ?>">
+                                                                            ⏱️ Fechou em <?php echo $lead->dias_para_conversao == 0 ? 'mesmo dia' : "{$lead->dias_para_conversao}d"; ?>
+                                                                        </span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                                <?php if (!empty($lead->utm_source_first) && !empty($lead->utm_source) && $lead->utm_source_first !== $lead->utm_source): ?>
+                                                                    <div style="margin-top: 2px;">
+                                                                        <span class="li-pill-tag" style="background: rgba(245, 158, 11, 0.15); color: #b45309; font-size: 9.5px; font-weight: 700; padding: 1px 6px; border-radius: 4px; display: inline-block;" title="<?php echo esc_attr("Captado inicialmente via utm_source: {$lead->utm_source_first}"); ?>">
+                                                                            🎯 1º Toque: <?php echo esc_html($lead->utm_source_first); ?>
+                                                                        </span>
+                                                                    </div>
+                                                                <?php endif; ?>
+                                                            </div>
+                                                        <?php else: ?>
+                                                            <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td style="text-align: center;">
+                                                        <?php if ($lead->qualificacao_status === 'qualificado'): ?>
+                                                            <span class="li-badge li-status-qualificado">Qualificado</span>
+                                                        <?php elseif ($lead->qualificacao_status === 'nao_qualificado'): ?>
+                                                            <span class="li-badge li-status-desqualificado">Desqualificado</span>
+                                                        <?php else: ?>
+                                                            <span class="li-badge li-status-pendente">Pendente</span>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        <?php endif; ?>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
 
                     </div> <!-- /li-content-scroll -->
@@ -1471,6 +2028,26 @@ class DashboardController {
                 var activeInput = document.getElementById('liActiveTabInput');
                 if (activeInput) {
                     activeInput.value = tabName;
+                }
+
+                // 3.1. Sincroniza indicador do canal de origem de acordo com a aba
+                var selCanal = document.getElementById('liSelectCanal');
+                var badgeG = document.getElementById('liCanalBadgeGoogle');
+                var badgeM = document.getElementById('liCanalBadgeMeta');
+                if (selCanal && badgeG && badgeM) {
+                    if (tabName === 'leads-google') {
+                        selCanal.style.display = 'none';
+                        badgeG.style.display = 'inline-flex';
+                        badgeM.style.display = 'none';
+                    } else if (tabName === 'leads-meta') {
+                        selCanal.style.display = 'none';
+                        badgeG.style.display = 'none';
+                        badgeM.style.display = 'inline-flex';
+                    } else {
+                        selCanal.style.display = '';
+                        badgeG.style.display = 'none';
+                        badgeM.style.display = 'none';
+                    }
                 }
 
                 // 4. Atualiza hash na URL sem scroll brusco
@@ -1683,16 +2260,169 @@ class DashboardController {
                 liSwitchTab(initialTab);
             }
 
+            // =========================================================================
+            // FILTRAGEM INTELIGENTE DE LEADS (NOME, DATA E UTM) NAS TABELAS
+            // =========================================================================
+            function liUpdateClearBtn(btnId, val) {
+                var btn = document.getElementById(btnId);
+                if (btn) {
+                    btn.style.display = val ? 'inline-block' : 'none';
+                }
+            }
+
+            function liClearField(inputId, channel) {
+                var input = document.getElementById(inputId);
+                if (input) {
+                    input.value = '';
+                    input.focus();
+                    liFilterLeadsTable(channel);
+                }
+            }
+
+            function liFilterLeadsTable(channel) {
+                var isGoogle = (channel === 'google');
+                var inputName = document.getElementById(isGoogle ? 'liFilterLeadNameGoogle' : 'liFilterLeadNameMeta');
+                var inputDate = document.getElementById(isGoogle ? 'liFilterLeadDateGoogle' : 'liFilterLeadDateMeta');
+                var inputUtm  = document.getElementById(isGoogle ? 'liFilterLeadUtmGoogle'  : 'liFilterLeadUtmMeta');
+
+                var nameVal = inputName ? inputName.value.trim().toLowerCase() : '';
+                var dateVal = inputDate ? inputDate.value.trim() : '';
+                var utmVal  = inputUtm  ? inputUtm.value.trim().toLowerCase()  : '';
+
+                liUpdateClearBtn(isGoogle ? 'liClearNameGoogle' : 'liClearNameMeta', nameVal);
+                liUpdateClearBtn(isGoogle ? 'liClearDateGoogle' : 'liClearDateMeta', dateVal);
+                liUpdateClearBtn(isGoogle ? 'liClearUtmGoogle'  : 'liClearUtmMeta',  utmVal);
+
+                var rowClass = isGoogle ? '.li-lead-row-google' : '.li-lead-row-meta';
+                var rows = document.querySelectorAll(rowClass);
+                var visibleCount = 0;
+                var totalCount = rows.length;
+
+                rows.forEach(function(row) {
+                    var rowName   = (row.getAttribute('data-lead-name') || '').toLowerCase();
+                    var rowDate   = row.getAttribute('data-lead-date') || '';
+                    var rowDateBr = row.getAttribute('data-lead-date-br') || '';
+                    var rowUtm    = (row.getAttribute('data-lead-utm') || '').toLowerCase();
+
+                    var matchName = !nameVal || (rowName.indexOf(nameVal) !== -1);
+                    var matchDate = true;
+                    if (dateVal) {
+                        if (dateVal === rowDate || rowDateBr.indexOf(dateVal) !== -1) {
+                            matchDate = true;
+                        } else {
+                            matchDate = false;
+                        }
+                    }
+                    var matchUtm  = !utmVal || (rowUtm.indexOf(utmVal) !== -1);
+
+                    if (matchName && matchDate && matchUtm) {
+                        row.style.display = '';
+                        visibleCount++;
+                    } else {
+                        row.style.display = 'none';
+                    }
+                });
+
+                // Atualiza badge de contagem
+                var badge = document.getElementById(isGoogle ? 'liBadgeCountGoogle' : 'liBadgeCountMeta');
+                if (badge) {
+                    if (!nameVal && !dateVal && !utmVal) {
+                        badge.textContent = totalCount + ' leads exibidos';
+                    } else {
+                        badge.textContent = visibleCount + ' de ' + totalCount + ' leads exibidos';
+                    }
+                }
+
+                // Linha de nenhum resultado encontrado
+                var noMatchRow = document.getElementById(isGoogle ? 'liNoMatchRowGoogle' : 'liNoMatchRowMeta');
+                if (noMatchRow) {
+                    noMatchRow.style.display = (visibleCount === 0 && totalCount > 0) ? '' : 'none';
+                }
+            }
+
+            function liResetTableFilter(channel) {
+                var isGoogle = (channel === 'google');
+                var inputName = document.getElementById(isGoogle ? 'liFilterLeadNameGoogle' : 'liFilterLeadNameMeta');
+                var inputDate = document.getElementById(isGoogle ? 'liFilterLeadDateGoogle' : 'liFilterLeadDateMeta');
+                var inputUtm  = document.getElementById(isGoogle ? 'liFilterLeadUtmGoogle'  : 'liFilterLeadUtmMeta');
+
+                if (inputName) inputName.value = '';
+                if (inputDate) inputDate.value = '';
+                if (inputUtm)  inputUtm.value  = '';
+
+                liFilterLeadsTable(channel);
+
+                // Se houver filtros salvos no servidor na URL, reseta também no servidor
+                var search = window.location.search || '';
+                if (search.indexOf('tbl_nome') !== -1 || search.indexOf('tbl_data') !== -1 || search.indexOf('tbl_utm') !== -1 || search.indexOf('lead_nome') !== -1 || search.indexOf('lead_data') !== -1 || search.indexOf('lead_utm') !== -1) {
+                    var form = document.querySelector('.li-filter-form');
+                    if (form) {
+                        var tabInput = document.getElementById('liActiveTabInput');
+                        if (tabInput) {
+                            tabInput.value = isGoogle ? 'leads-google' : 'leads-meta';
+                        }
+                        liSetOrAppendInput(form, 'tbl_nome', '');
+                        liSetOrAppendInput(form, 'tbl_data', '');
+                        liSetOrAppendInput(form, 'tbl_utm',  '');
+                        liSetOrAppendInput(form, 'lead_nome', '');
+                        liSetOrAppendInput(form, 'lead_data', '');
+                        liSetOrAppendInput(form, 'lead_utm',  '');
+                        form.submit();
+                    }
+                }
+            }
+
+            function liApplyServerTableFilter(channel) {
+                var isGoogle = (channel === 'google');
+                var inputName = document.getElementById(isGoogle ? 'liFilterLeadNameGoogle' : 'liFilterLeadNameMeta');
+                var inputDate = document.getElementById(isGoogle ? 'liFilterLeadDateGoogle' : 'liFilterLeadDateMeta');
+                var inputUtm  = document.getElementById(isGoogle ? 'liFilterLeadUtmGoogle'  : 'liFilterLeadUtmMeta');
+
+                var form = document.querySelector('.li-filter-form');
+                if (!form) return;
+
+                var tabInput = document.getElementById('liActiveTabInput');
+                if (tabInput) {
+                    tabInput.value = isGoogle ? 'leads-google' : 'leads-meta';
+                }
+
+                liSetOrAppendInput(form, 'tbl_nome', inputName ? inputName.value.trim() : '');
+                liSetOrAppendInput(form, 'tbl_data', inputDate ? inputDate.value.trim() : '');
+                liSetOrAppendInput(form, 'tbl_utm',  inputUtm  ? inputUtm.value.trim()  : '');
+
+                // Limpa parâmetros legados
+                liSetOrAppendInput(form, 'lead_nome', '');
+                liSetOrAppendInput(form, 'lead_data', '');
+                liSetOrAppendInput(form, 'lead_utm',  '');
+
+                form.submit();
+            }
+
+            function liSetOrAppendInput(form, name, value) {
+                var input = form.querySelector('input[name="' + name + '"]');
+                if (!input) {
+                    input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = name;
+                    form.appendChild(input);
+                }
+                input.value = value;
+            }
+
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', function() {
                     liInitSidebarCollapse();
                     liInitActiveTab();
                     recalcularCPL();
+                    liFilterLeadsTable('google');
+                    liFilterLeadsTable('meta');
                 });
             } else {
                 liInitSidebarCollapse();
                 liInitActiveTab();
                 recalcularCPL();
+                liFilterLeadsTable('google');
+                liFilterLeadsTable('meta');
             }
             </script>
         </div>

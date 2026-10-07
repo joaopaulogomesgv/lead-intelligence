@@ -116,6 +116,22 @@ class Matcher {
                 $update_data['utm_campaign'] = sanitize_text_field($raw_camp);
             }
 
+            // Preserva e calcula dados de ciclo longo (Lead Time em dias)
+            $date_first = !empty($existing->data_primeira_captura) ? $existing->data_primeira_captura : (!empty($existing->data_cadastro) ? $existing->data_cadastro : '');
+            if (empty($existing->data_primeira_captura) && !empty($date_first)) {
+                $update_data['data_primeira_captura'] = $date_first;
+            }
+            if (empty($existing->utm_source_first) && !empty($existing->utm_source)) {
+                $update_data['utm_source_first'] = $existing->utm_source;
+            }
+            if (!empty($date_first) && !empty($qualificacao_data)) {
+                $t_first = strtotime($date_first);
+                $t_qual  = strtotime($qualificacao_data);
+                if ($t_qual >= $t_first) {
+                    $update_data['dias_para_conversao'] = (int) floor(($t_qual - $t_first) / 86400);
+                }
+            }
+
             // Incrementa score de qualidade
             $new_score = ((int) $existing->score) + 10;
             $update_data['score'] = $new_score;

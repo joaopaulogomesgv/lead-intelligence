@@ -432,50 +432,331 @@
    ========================================================================== */
 
 .li-wrap .li-filter-bar {
-    padding: 22px 26px;
+    padding: 20px 24px;
     background: var(--li-bg-card);
     border: 1px solid var(--li-border);
-    border-radius: 20px;
+    border-radius: 16px;
     margin-bottom: 24px;
-    box-shadow: var(--li-card-shadow);
+    box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05), 0 2px 6px -2px rgba(15, 23, 42, 0.03);
 }
 
 .li-wrap .li-filter-form {
     margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
 }
 
-.li-wrap .li-filter-row {
+/* Linha 1: Filtros de Macro Segmentação */
+.li-wrap .li-filter-row-primary {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     gap: 14px;
 }
 
+/* Linha 2: Busca Específica e Ações */
+.li-wrap .li-filter-row-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+    padding-top: 16px;
+    border-top: 1px dashed rgba(226, 232, 240, 0.9);
+}
+
+/* Colunas Flexíveis */
 .li-wrap .li-filter-col {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    flex: 1 1 140px;
-    min-width: 135px;
+    flex: 1 1 180px;
+    min-width: 150px;
 }
 
-.li-wrap .li-filter-col.li-filter-dates-col {
-    flex: 1.8 1 260px;
-    min-width: 250px;
+.li-wrap .li-filter-col-periodo {
+    flex: 1 1 150px;
+    min-width: 140px;
 }
 
-.li-wrap .li-filter-col.li-filter-actions-col {
+.li-wrap .li-filter-col-dates {
+    flex: 2 1 320px;
+    min-width: 300px;
+}
+
+.li-wrap .li-filter-col-canal {
+    flex: 1 1 170px;
+    min-width: 160px;
+}
+
+.li-wrap .li-filter-col-campanha {
+    flex: 2 1 240px;
+    min-width: 220px;
+}
+
+.li-wrap .li-filter-col-curso {
+    flex: 1.5 1 190px;
+    min-width: 170px;
+}
+
+.li-wrap .li-filter-col-search {
+    flex: 2 1 280px;
+    min-width: 240px;
+}
+
+.li-wrap .li-filter-col-actions {
     flex: 0 0 auto;
     min-width: auto;
+    margin-left: auto;
 }
 
 .li-wrap .li-filter-lbl {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.07em;
     color: var(--li-text-dim);
     margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Inputs de Busca Rápidos com Ícone Embutido */
+.li-wrap .li-search-box-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.li-wrap .li-search-box-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    pointer-events: none;
+    font-size: 13px;
+    line-height: 1;
+}
+
+.li-wrap .li-search-box-input {
+    width: 100%;
+    height: 42px;
+    padding: 8px 14px 8px 36px !important;
+    border: 1px solid var(--li-input-border) !important;
+    border-radius: 10px !important;
+    background-color: var(--li-input-bg) !important;
+    color: var(--li-input-text) !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    box-sizing: border-box !important;
+    transition: all 0.2s ease !important;
+    outline: none !important;
+}
+
+.li-wrap .li-search-box-input:focus {
+    background-color: #ffffff !important;
+    border-color: var(--li-brand) !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
+}
+
+/* Pílula de Canal Fixo (Leads Google / Leads Meta) */
+.li-wrap .li-canal-fixed-pill {
+    height: 42px;
+    padding: 0 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    box-sizing: border-box;
+    cursor: default;
+    user-select: none;
+}
+
+.li-wrap .li-canal-fixed-pill.li-pill-google {
+    background: #ecfdf5;
+    border: 1px solid #10b981;
+    color: #047857;
+}
+
+.li-wrap .li-canal-fixed-pill.li-pill-meta {
+    background: #eff6ff;
+    border: 1px solid #3b82f6;
+    color: #1d4ed8;
+}
+
+.li-wrap .li-fixed-tag {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    background: rgba(0, 0, 0, 0.07);
+    padding: 2px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+}
+
+/* Botões de Ação do Topo */
+.li-wrap .li-filter-btns-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.li-wrap .li-btn-filter-run {
+    height: 42px;
+    line-height: 40px;
+    padding: 0 24px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    color: #ffffff !important;
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(5, 150, 105, 0.25);
+    transition: all 0.2s ease;
+}
+
+.li-wrap .li-btn-filter-run:hover {
+    background: linear-gradient(135deg, #047857 0%, #065f46 100%);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.35);
+    transform: translateY(-1px);
+}
+
+.li-wrap .li-btn-filter-reset {
+    height: 42px;
+    line-height: 40px;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #64748b !important;
+    border: 1px solid #cbd5e1;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.li-wrap .li-btn-filter-reset:hover {
+    background: #f8fafc;
+    color: #0f172a !important;
+    border-color: #94a3b8;
+}
+
+/* Barra de Filtros Dedicada das Tabelas de Leads (Nome, Data e UTM) */
+.li-wrap .li-table-filter-bar {
+    padding: 12px 20px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.li-wrap .li-table-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1 1 auto;
+    flex-wrap: wrap;
+}
+
+.li-wrap .li-table-filter-item {
+    position: relative;
+    flex: 1 1 180px;
+    min-width: 160px;
+}
+
+.li-wrap .li-table-filter-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #94a3b8;
+    pointer-events: none;
+    font-size: 13px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.li-wrap .li-table-filter-input,
+.li-wrap .li-input-compact {
+    width: 100%;
+    height: 38px;
+    line-height: 1.4;
+    padding: 8px 30px 8px 32px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+    font-size: 12px !important;
+    font-weight: 500 !important;
+    font-family: inherit !important;
+    box-sizing: border-box !important;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+    outline: none !important;
+}
+
+.li-wrap .li-table-filter-input:focus,
+.li-wrap .li-input-compact:focus {
+    border-color: var(--li-brand) !important;
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18) !important;
+}
+
+.li-wrap .li-table-filter-clear {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: transparent;
+    border: none;
+    color: #94a3b8;
+    cursor: pointer;
+    padding: 2px 5px;
+    font-size: 12px;
+    line-height: 1;
+    border-radius: 50%;
+    display: none;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.li-wrap .li-table-filter-clear:hover {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.li-wrap .li-table-filter-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.li-wrap .li-btn-table-action {
+    height: 38px;
+    line-height: 36px;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: all 0.15s ease;
 }
 
 /* Select customizado HUD com chevron SVG elegante (sem scrollbar nativa) */
@@ -519,16 +800,19 @@
 
 /* Cápsula de Datas De/Até */
 .li-wrap .li-dates-capsule {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    justify-content: space-between;
+    gap: 8px;
     background: var(--li-input-bg);
     border: 1px solid var(--li-input-border);
     border-radius: 8px;
-    padding: 0 10px;
+    padding: 0 12px;
     height: 42px;
     box-sizing: border-box;
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    width: 100%;
+    min-width: 320px;
 }
 
 .li-wrap .li-dates-capsule:focus-within {
@@ -541,7 +825,7 @@
     font-weight: 700;
     color: var(--li-text-dim);
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.05em;
     user-select: none;
     flex-shrink: 0;
 }
@@ -552,6 +836,7 @@
     font-weight: 800;
     user-select: none;
     flex-shrink: 0;
+    margin: 0 2px;
 }
 
 .li-wrap .li-date-input {
@@ -564,15 +849,23 @@
     font-size: 13px !important;
     font-family: inherit !important;
     outline: none !important;
-    flex: 1;
-    min-width: 100px;
+    flex: 1 1 125px;
+    min-width: 118px;
     cursor: pointer;
 }
 
 /* Indicador de calendário */
 .li-wrap input[type="date"]::-webkit-calendar-picker-indicator {
-    filter: invert(0.3);
+    filter: invert(0.35);
     cursor: pointer;
+    opacity: 0.75;
+    transition: opacity 0.15s ease;
+    padding: 2px;
+    margin-left: 2px;
+}
+
+.li-wrap input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
 }
 
 .li-wrap .li-filter-btns {
@@ -1156,6 +1449,17 @@
 
     .li-wrap .li-metric-grid {
         grid-template-columns: 1fr;
+    }
+
+    .li-wrap .li-dates-capsule {
+        min-width: 0;
+        padding: 0 8px;
+        gap: 4px;
+    }
+
+    .li-wrap .li-date-input {
+        min-width: 105px;
+        font-size: 12px !important;
     }
 }
 
@@ -2348,5 +2652,47 @@ body.admin-bar .li-wrap .li-main-wrapper {
     font-weight: 800;
     color: #ffffff;
 }
+
+/* ==========================================================================
+   19. Tags de UTM Técnicas e Literais
+   ========================================================================== */
+.li-utm-badge-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+}
+
+.li-utm-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    line-height: 1.35;
+    word-break: break-all;
+}
+
+.li-utm-key {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight: 700;
+    color: #475569;
+    font-size: 10.5px;
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
+}
+
+.li-utm-val {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    font-weight: 700;
+    color: #0369a1;
+    background: #e0f2fe;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid #bae6fd;
+    word-break: break-all;
+}
+
 
 

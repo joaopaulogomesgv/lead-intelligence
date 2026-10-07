@@ -55,6 +55,12 @@ class SpreadsheetParser {
         $handle = fopen($file_path, 'r');
         if (!$handle) return ',';
 
+        // Pula BOM se presente no início do arquivo
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
         $first_line = fgets($handle);
         fclose($handle);
 
@@ -83,21 +89,27 @@ class SpreadsheetParser {
             throw new \Exception('Não foi possível abrir o arquivo CSV.');
         }
 
+        // Remove BOM UTF-8 se presente no início do arquivo antes de invocar fgetcsv
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
         $headers = [];
         $rows = [];
         $line_count = 0;
 
         while (($data = fgetcsv($handle, 8192, $delimiter)) !== false) {
-            // Remove BOM de UTF-8 se presente no primeiro campo
-            if ($line_count === 0 && !empty($data[0])) {
-                $data[0] = preg_replace('/^\xEF\xBB\xBF/', '', $data[0]);
-            }
-
             // Converte encoding se necessário
             $data = array_map([__CLASS__, 'ensure_utf8'], $data);
 
             if ($line_count === 0) {
-                $headers = array_map('trim', $data);
+                $headers = [];
+                foreach ($data as $h) {
+                    $cleaned = preg_replace('/^\xEF\xBB\xBF/', '', (string) $h);
+                    $cleaned = trim($cleaned, " \t\n\r\0\x0B\"'“”«»");
+                    $headers[] = $cleaned;
+                }
             } else {
                 if (count($rows) < $max_rows) {
                     $rows[] = $data;
@@ -126,22 +138,29 @@ class SpreadsheetParser {
             throw new \Exception('Não foi possível abrir o arquivo CSV.');
         }
 
+        // Remove BOM UTF-8 se presente no início do arquivo antes de invocar fgetcsv
+        $bom = fread($handle, 3);
+        if ($bom !== "\xEF\xBB\xBF") {
+            rewind($handle);
+        }
+
         $headers = [];
         $row_index = 0;
 
         while (($data = fgetcsv($handle, 8192, $delimiter)) !== false) {
-            if ($row_index === 0 && !empty($data[0])) {
-                $data[0] = preg_replace('/^\xEF\xBB\xBF/', '', $data[0]);
-            }
-
             $data = array_map([__CLASS__, 'ensure_utf8'], $data);
 
             if ($row_index === 0) {
-                $headers = array_map('trim', $data);
+                $headers = [];
+                foreach ($data as $h) {
+                    $cleaned = preg_replace('/^\xEF\xBB\xBF/', '', (string) $h);
+                    $cleaned = trim($cleaned, " \t\n\r\0\x0B\"'“”«»");
+                    $headers[] = $cleaned;
+                }
             } else {
                 $row_assoc = [];
                 foreach ($headers as $idx => $header_name) {
-                    $row_assoc[$header_name] = isset($data[$idx]) ? trim($data[$idx]) : '';
+                    $row_assoc[$header_name] = isset($data[$idx]) ? trim((string) $data[$idx]) : '';
                 }
                 call_user_func($callback, $row_assoc, $row_index);
             }
