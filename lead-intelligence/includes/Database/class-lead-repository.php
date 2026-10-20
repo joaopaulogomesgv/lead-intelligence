@@ -306,40 +306,47 @@ class LeadRepository {
     public static function get_channel_sql_condition($channel) {
         $chan = sanitize_key($channel);
 
+        $google_condition = "(
+            (gclid IS NOT NULL AND TRIM(gclid) != '') OR
+            (gad_source IS NOT NULL AND TRIM(gad_source) != '') OR
+            (gbraid IS NOT NULL AND TRIM(gbraid) != '') OR
+            (wbraid IS NOT NULL AND TRIM(wbraid) != '') OR
+            LOWER(COALESCE(utm_source, '')) IN ('google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads', 'google_cpc', 'google_search') OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'gads') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'clique') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'aba-') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'search') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'pesquisa') > 0 OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'pmax') > 0 OR
+            INSTR(LOWER(COALESCE(utm_medium, '')), 'google') > 0 OR
+            (LOWER(COALESCE(utm_medium, '')) IN ('cpc', 'ppc', 'search', 'pmax', 'display') AND INSTR(LOWER(COALESCE(utm_source, '')), 'meta') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'face') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'insta') = 0) OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'gads') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR
+            INSTR(LOWER(COALESCE(qualificacao_origem, '')), 'google') > 0 OR
+            INSTR(LOWER(COALESCE(motivo_qualificacao, '')), 'google') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'gclid=') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'gbraid=') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'wbraid=') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'gad_source=') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'gad_campaignid=') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=google') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=institucional-clique') > 0 OR
+            INSTR(LOWER(COALESCE(referrer, '')), 'google.') > 0
+        )";
+
         if ($chan === 'google_ads') {
-            return "(
-                (gclid IS NOT NULL AND TRIM(gclid) != '') OR
-                (gad_source IS NOT NULL AND TRIM(gad_source) != '') OR
-                (gbraid IS NOT NULL AND TRIM(gbraid) != '') OR
-                (wbraid IS NOT NULL AND TRIM(wbraid) != '') OR
-                LOWER(COALESCE(utm_source, '')) IN ('google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads', 'google_cpc', 'google_search') OR
-                INSTR(LOWER(COALESCE(utm_source, '')), 'google') > 0 OR
-                INSTR(LOWER(COALESCE(utm_source, '')), 'gads') > 0 OR
-                INSTR(LOWER(COALESCE(utm_medium, '')), 'google') > 0 OR
-                (LOWER(COALESCE(utm_medium, '')) IN ('cpc', 'ppc', 'search', 'pmax', 'display') AND INSTR(LOWER(COALESCE(utm_source, '')), 'meta') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'face') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'insta') = 0) OR
-                INSTR(LOWER(COALESCE(utm_campaign, '')), 'google') > 0 OR
-                INSTR(LOWER(COALESCE(utm_campaign, '')), 'gads') > 0 OR
-                INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR
-                INSTR(LOWER(COALESCE(qualificacao_origem, '')), 'google') > 0 OR
-                INSTR(LOWER(COALESCE(motivo_qualificacao, '')), 'google') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'gclid=') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'gbraid=') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'wbraid=') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'gad_source=') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=google') > 0 OR
-                INSTR(LOWER(COALESCE(referrer, '')), 'google.') > 0
-            )";
+            return $google_condition;
         }
 
         if ($chan === 'meta_ads') {
-            return "(
+            $meta_raw = "(
                 (fbclid IS NOT NULL AND TRIM(fbclid) != '') OR
-                (fbc IS NOT NULL AND TRIM(fbc) != '') OR
-                (fbp IS NOT NULL AND TRIM(fbp) != '') OR
-                (campaign_id IS NOT NULL AND TRIM(campaign_id) != '') OR
-                (adset_id IS NOT NULL AND TRIM(adset_id) != '') OR
+                (fbc IS NOT NULL AND TRIM(fbc) != '' AND fbc LIKE 'fb.%') OR
                 (ad_id IS NOT NULL AND TRIM(ad_id) != '') OR
-                LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories') OR
+                (adset_id IS NOT NULL AND TRIM(adset_id) != '') OR
+                LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels') OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'facebook') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'instagram') > 0 OR
@@ -357,6 +364,8 @@ class LeadRepository {
                 INSTR(LOWER(COALESCE(referrer, '')), 'facebook.com') > 0 OR
                 INSTR(LOWER(COALESCE(referrer, '')), 'instagram.com') > 0
             )";
+            // Exclusão mútua rigorosa: um lead identificado como Google Ads NUNCA cai em Meta Ads
+            return "({$meta_raw} AND NOT {$google_condition})";
         }
 
         if ($chan === 'whatsapp') {
@@ -393,40 +402,55 @@ class LeadRepository {
         $utm_camp = strtolower(trim((string) ($lead->utm_campaign ?? '')));
         $gclid    = trim((string) ($lead->gclid ?? ''));
         $gad_src  = trim((string) ($lead->gad_source ?? ''));
+        $gbraid   = trim((string) ($lead->gbraid ?? ''));
+        $wbraid   = trim((string) ($lead->wbraid ?? ''));
         $fbclid   = trim((string) ($lead->fbclid ?? ''));
         $fbc      = trim((string) ($lead->fbc ?? ''));
-        $fbp      = trim((string) ($lead->fbp ?? ''));
-        $camp_id  = trim((string) ($lead->campaign_id ?? ''));
         $ad_id    = trim((string) ($lead->ad_id ?? ''));
+        $adset_id = trim((string) ($lead->adset_id ?? ''));
         $form     = strtolower(trim((string) ($lead->formulario_nome ?? '')));
         $origem   = strtolower(trim((string) ($lead->pagina_origem ?? '')));
         $referrer = strtolower(trim((string) ($lead->referrer ?? '')));
         $wa_stat  = trim((string) ($lead->whatsapp_status ?? ''));
         $conv_id  = trim((string) ($lead->conversation_id ?? ''));
 
-        // 1. Google Ads: Tem gclid, gad_source, utm_source google ou indicativos de mídia de busca/pmax
+        // 1. Google Ads: Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
         if (
             !empty($gclid) ||
             !empty($gad_src) ||
-            in_array($utm_src, ['google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads']) ||
+            !empty($gbraid) ||
+            !empty($wbraid) ||
+            in_array($utm_src, ['google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads', 'google_cpc', 'google_search']) ||
             strpos($utm_src, 'google') !== false ||
-            (in_array($utm_med, ['cpc', 'ppc', 'search', 'pmax']) && strpos($utm_src, 'face') === false && strpos($utm_src, 'meta') === false && strpos($utm_src, 'insta') === false) ||
+            strpos($utm_src, 'gads') !== false ||
+            strpos($utm_src, 'clique') !== false ||
+            strpos($utm_src, 'aba-') !== false ||
+            strpos($utm_src, 'search') !== false ||
+            strpos($utm_src, 'pesquisa') !== false ||
+            strpos($utm_src, 'pmax') !== false ||
+            (in_array($utm_med, ['cpc', 'ppc', 'search', 'pmax', 'display']) && strpos($utm_src, 'face') === false && strpos($utm_src, 'meta') === false && strpos($utm_src, 'insta') === false) ||
+            strpos($utm_camp, 'google') !== false ||
+            strpos($utm_camp, 'gads') !== false ||
             strpos($form, 'google') !== false ||
             strpos($origem, 'gclid=') !== false ||
+            strpos($origem, 'gbraid=') !== false ||
+            strpos($origem, 'wbraid=') !== false ||
+            strpos($origem, 'gad_source=') !== false ||
+            strpos($origem, 'gad_campaignid=') !== false ||
             strpos($origem, 'utm_source=google') !== false ||
+            strpos($origem, 'utm_source=institucional-clique') !== false ||
             strpos($referrer, 'google.') !== false
         ) {
             return 'google_ads';
         }
 
-        // 2. Meta Ads: Tem fbclid, fbc, fbp, campaign_id, ad_id ou indicativos de Facebook/Instagram
+        // 2. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram (nunca fbp nem campaign_id genérico)
         if (
             !empty($fbclid) ||
-            !empty($fbc) ||
-            !empty($fbp) ||
-            !empty($camp_id) ||
+            (!empty($fbc) && strpos($fbc, 'fb.') !== false) ||
             !empty($ad_id) ||
-            in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories']) ||
+            !empty($adset_id) ||
+            in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels']) ||
             strpos($utm_src, 'meta') !== false ||
             strpos($utm_src, 'facebook') !== false ||
             strpos($utm_src, 'instagram') !== false ||
@@ -504,12 +528,13 @@ class LeadRepository {
     }
 
     /**
-     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal)
+     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal e período de data)
      */
-    public static function get_status_counts($channel = '') {
+    public static function get_status_counts($channel = '', $date_start = '', $date_end = '') {
         global $wpdb;
         $table = DbSchema::get_leads_table();
         $where = ['1=1'];
+        $params = [];
 
         if (!empty($channel)) {
             $chan_sql = self::get_channel_sql_condition($channel);
@@ -518,19 +543,34 @@ class LeadRepository {
             }
         }
 
+        if (!empty($date_start)) {
+            $where[] = "data_cadastro >= %s";
+            $params[] = $date_start;
+        }
+
+        if (!empty($date_end)) {
+            $where[] = "data_cadastro <= %s";
+            $params[] = $date_end;
+        }
+
         $where_sql = implode(' AND ', $where);
 
-        $results = $wpdb->get_results(
-            "SELECT qualificacao_status, COUNT(*) as total FROM {$table} WHERE {$where_sql} GROUP BY qualificacao_status",
-            OBJECT_K
-        );
+        $query = "SELECT qualificacao_status, COUNT(*) as total FROM {$table} WHERE {$where_sql} GROUP BY qualificacao_status";
+        $results = !empty($params) 
+            ? $wpdb->get_results($wpdb->prepare($query, $params), OBJECT_K)
+            : $wpdb->get_results($query, OBJECT_K);
+
+        $total_query = "SELECT COUNT(*) FROM {$table} WHERE {$where_sql}";
+        $total = !empty($params) 
+            ? (int) $wpdb->get_var($wpdb->prepare($total_query, $params))
+            : (int) $wpdb->get_var($total_query);
 
         return [
-            'total'              => (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$where_sql}"),
-            'qualificado'        => isset($results['qualificado']) ? (int) $results['qualificado']->total : 0,
-            'nao_qualificado'    => isset($results['nao_qualificado']) ? (int) $results['nao_qualificado']->total : 0,
-            'pendente'           => isset($results['pendente']) ? (int) $results['pendente']->total : 0,
-            'sem_correspondencia'=> isset($results['sem_correspondencia']) ? (int) $results['sem_correspondencia']->total : 0,
+            'total'               => $total,
+            'qualificado'         => isset($results['qualificado']) ? (int) $results['qualificado']->total : 0,
+            'nao_qualificado'     => isset($results['nao_qualificado']) ? (int) $results['nao_qualificado']->total : 0,
+            'pendente'            => isset($results['pendente']) ? (int) $results['pendente']->total : 0,
+            'sem_correspondencia' => isset($results['sem_correspondencia']) ? (int) $results['sem_correspondencia']->total : 0,
         ];
     }
 
@@ -683,6 +723,16 @@ class LeadRepository {
             if (!empty($chan_sql)) {
                 $where[] = $chan_sql;
             }
+        }
+
+        if (!empty($args['date_from'])) {
+            $where[] = "data_cadastro >= %s";
+            $params[] = $args['date_from'] . (strlen($args['date_from']) === 10 ? ' 00:00:00' : '');
+        }
+
+        if (!empty($args['date_to'])) {
+            $where[] = "data_cadastro <= %s";
+            $params[] = $args['date_to'] . (strlen($args['date_to']) === 10 ? ' 23:59:59' : '');
         }
 
         $where_sql = implode(' AND ', $where);
@@ -859,5 +909,117 @@ class LeadRepository {
             'total_missing' => count($missing_leads),
             'files_scanned' => count($files),
         ];
+    }
+
+    /**
+     * Registra ou atualiza o gasto diário de uma campanha (Upsert seguro)
+     */
+    public static function record_campaign_cost($data) {
+        global $wpdb;
+        $table = DbSchema::get_costs_table();
+
+        $canal         = sanitize_key($data['canal'] ?? 'google_ads');
+        $campaign_id   = sanitize_text_field($data['campaign_id'] ?? '');
+        $campaign_name = sanitize_text_field($data['campaign_name'] ?? '');
+        $date          = sanitize_text_field($data['date'] ?? current_time('Y-m-d'));
+        $cost          = (float) ($data['cost'] ?? 0.00);
+        $clicks        = (int) ($data['clicks'] ?? 0);
+        $impressions   = (int) ($data['impressions'] ?? 0);
+        $cpc           = (float) ($data['cpc'] ?? ($clicks > 0 ? round($cost / $clicks, 2) : 0.00));
+        $ctr           = (float) ($data['ctr'] ?? ($impressions > 0 ? round(($clicks / $impressions) * 100, 2) : 0.00));
+        $conversions   = (float) ($data['conversions'] ?? 0.00);
+
+        if (empty($campaign_id) && empty($campaign_name)) {
+            return false;
+        }
+
+        if (empty($campaign_id)) {
+            $campaign_id = md5($campaign_name);
+        }
+
+        $sql = "INSERT INTO {$table} 
+            (canal, campaign_id, campaign_name, date, cost, clicks, impressions, cpc, ctr, conversions, synced_at)
+            VALUES (%s, %s, %s, %s, %f, %d, %d, %f, %f, %f, %s)
+            ON DUPLICATE KEY UPDATE 
+                campaign_name = VALUES(campaign_name),
+                cost = VALUES(cost),
+                clicks = VALUES(clicks),
+                impressions = VALUES(impressions),
+                cpc = VALUES(cpc),
+                ctr = VALUES(ctr),
+                conversions = VALUES(conversions),
+                synced_at = VALUES(synced_at)";
+
+        return $wpdb->query($wpdb->prepare(
+            $sql,
+            $canal,
+            $campaign_id,
+            $campaign_name,
+            $date,
+            $cost,
+            $clicks,
+            $impressions,
+            $cpc,
+            $ctr,
+            $conversions,
+            current_time('mysql')
+        ));
+    }
+
+    /**
+     * Retorna o investimento total no canal para um determinado período
+     */
+    public static function get_total_cost($canal = 'google_ads', $date_start = '', $date_end = '') {
+        global $wpdb;
+        $table = DbSchema::get_costs_table();
+        $where = ['canal = %s'];
+        $params = [$canal];
+
+        if (!empty($date_start)) {
+            $where[] = "date >= %s";
+            $params[] = substr($date_start, 0, 10);
+        }
+        if (!empty($date_end)) {
+            $where[] = "date <= %s";
+            $params[] = substr($date_end, 0, 10);
+        }
+
+        $where_sql = implode(' AND ', $where);
+        $sql = "SELECT COALESCE(SUM(cost), 0) FROM {$table} WHERE {$where_sql}";
+        return (float) $wpdb->get_var($wpdb->prepare($sql, $params));
+    }
+
+    /**
+     * Retorna o consolidado de gastos agrupado por campanha
+     */
+    public static function get_campaign_costs_summary($canal = 'google_ads', $date_start = '', $date_end = '') {
+        global $wpdb;
+        $table = DbSchema::get_costs_table();
+        $where = ['canal = %s'];
+        $params = [$canal];
+
+        if (!empty($date_start)) {
+            $where[] = "date >= %s";
+            $params[] = substr($date_start, 0, 10);
+        }
+        if (!empty($date_end)) {
+            $where[] = "date <= %s";
+            $params[] = substr($date_end, 0, 10);
+        }
+
+        $where_sql = implode(' AND ', $where);
+        $sql = "SELECT 
+                    campaign_name,
+                    campaign_id,
+                    SUM(cost) as total_cost,
+                    SUM(clicks) as total_clicks,
+                    SUM(impressions) as total_impressions,
+                    MAX(synced_at) as last_sync
+                FROM {$table} 
+                WHERE {$where_sql} 
+                GROUP BY campaign_name, campaign_id 
+                ORDER BY total_cost DESC";
+
+        return $wpdb->get_results($wpdb->prepare($sql, $params));
     }
 }

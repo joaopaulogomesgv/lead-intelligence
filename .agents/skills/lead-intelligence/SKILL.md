@@ -17,6 +17,7 @@ Esta skill orienta o agente em como inspecionar, desenvolver e empacotar qualque
 4. **Empacotamento Seguro (ZIP/WinRAR)**: Sempre execute `python build/package.py` para gerar o `.zip` com barras Unix (`/`) e salvar na Área de Trabalho.
 5. **Meta Graph API**: Padrão `v26.0`.
 6. **Normalização de Telefones**: Sempre usar `\LeadIntelligence\PhoneNormalizer::normalize($phone)` (+55 DDD 9 dígitos).
+7. **Prevenção de Timeout e Erro Crítico (Zero Bloqueio HTTP)**: `DbSchema::maybe_update()` deve executar estritamente `create_tables()` via `dbDelta` em milissegundos. NUNCA execute loops de retro-enriquecimento, recalibrações ou varreduras pesadas de dados no ciclo de vida de requisição HTTP (evita o Fatal error: Maximum execution time of 30 seconds exceeded). Crons nunca devem ser agendados a cada pageview.
 
 ## Módulos Principais
 

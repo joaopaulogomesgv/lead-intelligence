@@ -31,7 +31,7 @@ class Matcher {
         $leads_table = DbSchema::get_leads_table();
         $history_table = DbSchema::get_history_table();
 
-        // 1. Extração dos campos mapeados
+        // 1. Extração dos campos mapeados com auto-detecção inteligente
         $raw_phone   = self::get_mapped_value($row_data, $mapping, 'telefone');
         $raw_email   = self::get_mapped_value($row_data, $mapping, 'email');
         $raw_name    = self::get_mapped_value($row_data, $mapping, 'nome');
@@ -39,6 +39,13 @@ class Matcher {
         $raw_course  = self::get_mapped_value($row_data, $mapping, 'curso');
         $raw_area    = self::get_mapped_value($row_data, $mapping, 'area');
         $raw_status  = self::get_mapped_value($row_data, $mapping, 'status');
+        $raw_etapa   = self::get_mapped_value($row_data, $mapping, 'etapa');
+        
+        // Se a etapa estiver vazia mas status tiver sido preenchido
+        if (empty($raw_etapa) && !empty($raw_status)) {
+            $raw_etapa = $raw_status;
+        }
+
         $raw_gclid   = self::get_mapped_value($row_data, $mapping, 'gclid');
         $raw_fbclid  = self::get_mapped_value($row_data, $mapping, 'fbclid');
         $raw_ad_id   = self::get_mapped_value($row_data, $mapping, 'ad_id');
@@ -56,9 +63,15 @@ class Matcher {
             ];
         }
 
-        // Determina o status da qualificação (valor mapeado ou default da planilha)
+        // Determina o status da qualificação priorizando a etapa do funil (se informada)
         $default_status = !empty($mapping['default_status']) ? $mapping['default_status'] : 'qualificado';
-        $qualificacao_status = !empty($raw_status) ? self::normalize_status($raw_status) : $default_status;
+        if (!empty($raw_etapa)) {
+            $qualificacao_status = self::normalize_status($raw_etapa);
+        } elseif (!empty($raw_status)) {
+            $qualificacao_status = self::normalize_status($raw_status);
+        } else {
+            $qualificacao_status = $default_status;
+        }
 
         $qualificacao_data = !empty($raw_date) ? self::parse_date($raw_date) : current_time('mysql');
         $json_dados = wp_json_encode($row_data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
@@ -83,6 +96,7 @@ class Matcher {
 
             $update_data = [
                 'qualificacao_status' => $qualificacao_status,
+                'etapa_funil'         => !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : ($qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : 'Formulário Enviado'),
                 'qualificacao_data'   => $qualificacao_data,
                 'qualificacao_origem' => 'planilha: ' . sanitize_text_field($filename),
                 'qualificacao_dados'  => $json_dados,
@@ -196,6 +210,7 @@ class Matcher {
             'formulario_nome'      => $form_label,
             'pagina_origem'        => 'Planilha: ' . sanitize_text_field($filename),
             'qualificacao_status'  => $qualificacao_status,
+            'etapa_funil'          => !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : ($qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : 'Formulário Enviado'),
             'qualificacao_data'    => $qualificacao_data,
             'qualificacao_origem'  => 'planilha: ' . sanitize_text_field($filename),
             'qualificacao_dados'   => $json_dados,
@@ -232,33 +247,79 @@ class Matcher {
     }
 
     /**
-     * Extrai valor da coluna mapeada
+     * Extrai valor da coluna mapeada com auto-detecção resiliente
      */
     private static function get_mapped_value($row_data, $mapping, $key) {
-        if (empty($mapping[$key])) {
-            return '';
+        // 1. Tenta pelo mapeamento explícito
+        if (!empty($mapping[$key])) {
+            $col_name = $mapping[$key];
+            if (isset($row_data[$col_name]) && trim((string) $row_data[$col_name]) !== '') {
+                return trim((string) $row_data[$col_name]);
+            }
         }
-        $col_name = $mapping[$key];
-        return isset($row_data[$col_name]) ? trim((string) $row_data[$col_name]) : '';
+
+        // 2. Auto-detecção inteligente de colunas comuns da planilha
+        $alias_map = [
+            'etapa'    => ['etapa_funil', 'etapafunil', 'etapa', 'fase', 'funil', 'estagio', 'situacao_lead'],
+            'telefone' => ['telefone', 'whatsapp', 'celular', 'phone', 'tel', 'contato'],
+            'email'    => ['email', 'e-mail', 'e_mail'],
+            'nome'     => ['nome', 'name', 'cliente', 'aluno', 'lead_nome'],
+            'status'   => ['status', 'situacao', 'estado'],
+            'data'     => ['datacriação', 'datacriacao', 'data_criacao', 'data', 'date', 'data_cadastro'],
+            'gclid'    => ['gclid', 'google_click_id', 'google_click'],
+            'fbclid'   => ['fbclid', 'meta_click_id', 'fb_click'],
+            'ad_id'    => ['adid', 'ad_id', 'id_anuncio', 'anuncio_id'],
+            'campanha' => ['campanha', 'campaign', 'utm_campaign', 'nome_campanha'],
+            'curso'    => ['curso', 'tipo_curso', 'modalidade'],
+            'area'     => ['instancia', 'polo', 'unidade', 'area', 'area_interesse'],
+        ];
+
+        $candidates = $alias_map[$key] ?? [];
+        if (!empty($candidates)) {
+            foreach ($row_data as $col => $val) {
+                $clean_col = strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $col)));
+                $clean_col = str_replace(['-', ' ', '_'], '', $clean_col);
+
+                foreach ($candidates as $cand) {
+                    $clean_cand = str_replace(['-', ' ', '_'], '', strtolower($cand));
+                    if ($clean_col === $clean_cand || strpos($clean_col, $clean_cand) !== false) {
+                        $val_str = trim((string) $val);
+                        if ($val_str !== '') {
+                            return $val_str;
+                        }
+                    }
+                }
+            }
+        }
+
+        return '';
     }
 
     /**
-     * Normaliza termos variados de status para os padrões do sistema
+     * Normaliza termos variados de status e etapas do funil para os padrões do sistema
      */
     public static function normalize_status($status_str) {
-        $clean = strtolower(trim((string) $status_str));
+        $clean = mb_strtolower(trim((string) $status_str), 'UTF-8');
+        $unaccented = function_exists('remove_accents') ? remove_accents($clean) : $clean;
 
-        if (preg_match('/(qualificad|matriculad|aprovad|pago|sim|ganho|fechado|aluno|vendid)/i', $clean)) {
-            return 'qualificado';
-        }
-        if (preg_match('/(desqualificad|nao|no|cancelad|perdido|recusad|invalido|reprovad)/i', $clean)) {
+        // 1. Desqualificados / Perdas / Não convertidos
+        if (
+            preg_match('/(desqualificad|nao[ _-]?convertid|não[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|reprovad|sem[ _-]?perfil)/iu', $clean) ||
+            preg_match('/(desqualificad|nao[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|reprovad|sem[ _-]?perfil)/i', $unaccented)
+        ) {
             return 'nao_qualificado';
         }
-        if (preg_match('/(pendente|aguardando|em analise|negociacao|ativo|em andamento)/i', $clean)) {
-            return 'pendente';
+
+        // 2. Qualificados / Matrículas / Vendas Confirmadas
+        if (
+            preg_match('/(venda|vendid|matricul|aluno|fechado|ganho|pago|aprovad)/iu', $clean) ||
+            preg_match('/(venda|vendid|matricul|aluno|fechado|ganho|pago|aprovad)/i', $unaccented)
+        ) {
+            return 'qualificado';
         }
 
-        return 'qualificado';
+        // 3. Qualquer outra etapa do pipeline (Lead Atribuído, Tentativa de Contato, Negociação, Remarketing, Ativo, etc.) é PENDENTE
+        return 'pendente';
     }
 
     /**

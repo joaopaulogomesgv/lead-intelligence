@@ -127,6 +127,7 @@ class ImportController {
                 'email'          => sanitize_text_field(wp_unslash($_POST['map_email'] ?? '')),
                 'nome'           => sanitize_text_field(wp_unslash($_POST['map_nome'] ?? '')),
                 'status'         => sanitize_text_field(wp_unslash($_POST['map_status'] ?? '')),
+                'etapa'          => sanitize_text_field(wp_unslash($_POST['map_etapa'] ?? 'etapa_funil')),
                 'data'           => sanitize_text_field(wp_unslash($_POST['map_data'] ?? '')),
                 'campanha'       => sanitize_text_field(wp_unslash($_POST['map_campanha'] ?? '')),
                 'curso'          => sanitize_text_field(wp_unslash($_POST['map_curso'] ?? '')),
@@ -408,6 +409,7 @@ class ImportController {
                     'email'          => sanitize_text_field(wp_unslash($_POST['map_email'] ?? '')),
                     'nome'           => sanitize_text_field(wp_unslash($_POST['map_nome'] ?? '')),
                     'status'         => sanitize_text_field(wp_unslash($_POST['map_status'] ?? '')),
+                    'etapa'          => sanitize_text_field(wp_unslash($_POST['map_etapa'] ?? 'etapa_funil')),
                     'data'           => sanitize_text_field(wp_unslash($_POST['map_data'] ?? '')),
                     'curso'          => sanitize_text_field(wp_unslash($_POST['map_curso'] ?? '')),
                     'area'           => sanitize_text_field(wp_unslash($_POST['map_area'] ?? '')),
@@ -891,8 +893,18 @@ class ImportController {
                                         <label for="map_status"><strong>Coluna de Status de Venda / Matrícula</strong></label>
                                     </th>
                                     <td>
-                                        <?php echo self::render_select('map_status', $headers_list, ['status', 'situacao', 'qualificacao', 'etapa'], $mapping['status'] ?? 'status'); ?>
-                                        <p class="description">Mapeia automaticamente: <code>Vendido/Matriculado</code> &rarr; Qualificado, <code>Perdido</code> &rarr; Não Qualificado, <code>Ativo</code> &rarr; Pendente.</p>
+                                        <?php echo self::render_select('map_status', $headers_list, ['status', 'situacao', 'qualificacao'], $mapping['status'] ?? 'status'); ?>
+                                        <p class="description">Mapeia automaticamente: <code>Vendido/Matriculado</code> &rarr; Qualificado, <code>Perdido/Perda</code> &rarr; Não Qualificado, <code>Ativo</code> &rarr; Pendente.</p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row">
+                                        <label for="map_etapa"><strong>Coluna de Etapa do Funil</strong></label>
+                                    </th>
+                                    <td>
+                                        <?php echo self::render_select('map_etapa', $headers_list, ['etapa_funil', 'etapa', 'fase', 'funil', 'estagio'], $mapping['etapa'] ?? 'etapa_funil'); ?>
+                                        <p class="description">Identifica a fase real no CRM / Funil (ex: <code>Tentativa de Contato</code>, <code>Desqualificado</code>, <code>Analisando/Negociação</code>, <code>Matrícula Realizada</code>).</p>
                                     </td>
                                 </tr>
 
@@ -1089,6 +1101,13 @@ class ImportController {
                                     <th scope="row"><label for="map_status">Coluna de Status (Opcional)</label></th>
                                     <td>
                                         <?php echo self::render_select('map_status', $preview_data['headers'], ['status', 'situacao', 'qualificacao', 'matriculado', 'pago']); ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="map_etapa">Coluna de Etapa do Funil (Opcional)</label></th>
+                                    <td>
+                                        <?php echo self::render_select('map_etapa', $preview_data['headers'], ['etapa_funil', 'etapa', 'fase', 'funil', 'estagio']); ?>
+                                        <p class="description">Identifica a fase real no CRM / Funil (ex: <code>Tentativa de Contato</code>, <code>Desqualificado</code>, <code>Analisando/Negociação</code>, <code>Matrícula Realizada</code>).</p>
                                     </td>
                                 </tr>
                                 <tr>

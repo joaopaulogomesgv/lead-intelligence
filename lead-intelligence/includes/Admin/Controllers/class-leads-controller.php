@@ -38,7 +38,7 @@ class LeadsController {
     }
 
     public static function render() {
-        $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence-leads';
+        $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence';
         $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');
 
         $sync_message  = null;
@@ -77,16 +77,20 @@ class LeadsController {
         // 3. Exclusão de todos os leads correspondentes ao filtro atual
         if (isset($_POST['li_delete_all_filtered'])) {
             check_admin_referer('li_leads_bulk_verify', 'li_nonce');
-            $filter_search  = sanitize_text_field(wp_unslash($_POST['filter_search'] ?? ''));
-            $filter_status  = sanitize_text_field(wp_unslash($_POST['filter_status'] ?? ''));
-            $filter_channel = sanitize_key(wp_unslash($_POST['filter_channel'] ?? ''));
+            $filter_search    = sanitize_text_field(wp_unslash($_POST['filter_search'] ?? ''));
+            $filter_status    = sanitize_text_field(wp_unslash($_POST['filter_status'] ?? ''));
+            $filter_channel   = sanitize_key(wp_unslash($_POST['filter_channel'] ?? ''));
+            $filter_date_from = sanitize_text_field(wp_unslash($_POST['filter_date_from'] ?? ''));
+            $filter_date_to   = sanitize_text_field(wp_unslash($_POST['filter_date_to'] ?? ''));
 
             $deleted_count = LeadRepository::delete_all_by_filters([
-                'search'  => $filter_search,
-                'status'  => $filter_status,
-                'channel' => $filter_channel,
+                'search'    => $filter_search,
+                'status'    => $filter_status,
+                'channel'   => $filter_channel,
+                'date_from' => $filter_date_from,
+                'date_to'   => $filter_date_to,
             ]);
-            $action_message = "{$deleted_count} lead(s) do filtro atual foram excluídos com sucesso.";
+            $action_message = "{$deleted_count} lead(s) do filtro e período selecionados foram excluídos com sucesso.";
             $action_type = 'success';
         }
 
@@ -119,22 +123,71 @@ class LeadsController {
             $unify_message = "Unificação concluída com sucesso! {$merged} registros foram mesclados e enriquecidos com as UTMs dos formulários.";
         }
 
+        // Tratamento de Período (Padrão: Hoje)
+        $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $periodo     = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : 'today';
+
+        if ($periodo !== 'custom') {
+            $custom_from = '';
+            $custom_to   = '';
+        } elseif (empty($custom_from) && empty($custom_to)) {
+            $periodo = 'today';
+        }
+
+        $date_start = '';
+        $date_end   = '';
+
+        switch ($periodo) {
+            case 'today':
+                $date_start = wp_date('Y-m-d 00:00:00');
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'yesterday':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-1 day'));
+                $date_end   = wp_date('Y-m-d 23:59:59', strtotime('-1 day'));
+                break;
+            case '7d':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-7 days'));
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case '30d':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-30 days'));
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'month':
+                $date_start = wp_date('Y-m-01 00:00:00');
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'custom':
+                if (!empty($custom_from)) $date_start = $custom_from . ' 00:00:00';
+                if (!empty($custom_to))   $date_end   = $custom_to . ' 23:59:59';
+                break;
+            case 'all':
+            default:
+                $date_start = '';
+                $date_end   = '';
+                break;
+        }
+
         $search    = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
         $channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
         $page      = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
         $per_page  = 20;
 
-        $counts = LeadRepository::get_status_counts($channel);
+        $counts = LeadRepository::get_status_counts($channel, $date_start, $date_end);
 
         $leads_data = LeadRepository::get_leads([
-            'search'   => $search,
-            'status'   => $status,
-            'channel'  => $channel,
-            'page'     => $page,
-            'per_page' => $per_page,
-            'orderby'  => 'id',
-            'order'    => 'DESC',
+            'search'    => $search,
+            'status'    => $status,
+            'channel'   => $channel,
+            'date_from' => !empty($date_start) ? substr($date_start, 0, 10) : '',
+            'date_to'   => !empty($date_end) ? substr($date_end, 0, 10) : '',
+            'page'      => $page,
+            'per_page'  => $per_page,
+            'orderby'   => 'id',
+            'order'     => 'DESC',
         ]);
 
         $leads = $leads_data['items'];
@@ -152,7 +205,7 @@ class LeadsController {
             : 'Monitoramento em tempo real dos leads capturados via formulários Elementor Pro e planilhas.';
         ?>
         <div class="wrap li-wrap">
-            <div class="li-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:15px;">
+            <div class="li-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:15px; margin-bottom: 20px;">
                 <div>
                     <h2>Lead Intelligence &bull; <?php echo esc_html($page_title); ?></h2>
                     <p class="li-subtitle"><?php echo esc_html($page_sub); ?></p>
@@ -192,11 +245,11 @@ class LeadsController {
             <?php endif; ?>
 
             <!-- CARDS DE MÉTRICAS -->
-            <div class="li-metric-grid">
+            <div class="li-metric-grid" style="margin-bottom: 20px;">
                 <div class="li-metric-card">
                     <span class="li-metric-label">Total de Leads</span>
                     <span class="li-metric-value"><?php echo number_format_i18n($counts['total']); ?></span>
-                    <span class="li-metric-sub">Capturados no banco próprio</span>
+                    <span class="li-metric-sub">Capturados no período</span>
                 </div>
                 <div class="li-metric-card li-card-success">
                     <span class="li-metric-label">Qualificados</span>
@@ -220,36 +273,87 @@ class LeadsController {
                 </div>
             </div>
 
-            <!-- BARRA DE BUSCA E FILTROS -->
-            <div class="li-card li-filter-bar">
-                <form method="get" action="">
+            <!-- CARD DE FILTRO LIMPO EM LINHA ÚNICA (PADRÃO NATIVO WORDPRESS) -->
+            <div class="li-card" style="margin-bottom: 20px; padding: 16px 20px;">
+                <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
                     <input type="hidden" name="page" value="<?php echo esc_attr($current_page); ?>">
 
-                    <div class="li-filter-row">
-                        <div class="li-search-box">
-                            <input type="text" name="s" value="<?php echo esc_attr($search); ?>" placeholder="Buscar por nome, e-mail, telefone ou curso...">
+                    <!-- Seletor de Período -->
+                    <div>
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Período</label>
+                        <div style="display: inline-flex; background: #f1f5f9; padding: 3px; border-radius: 6px; border: 1px solid #cbd5e1;">
+                            <?php 
+                            $periods = [
+                                'today'     => 'Hoje',
+                                'yesterday' => 'Ontem',
+                                '7d'        => '7 Dias',
+                                '30d'       => '30 Dias',
+                                'month'     => 'Este Mês',
+                                'all'       => 'Todo',
+                                'custom'    => 'Personalizado'
+                            ];
+                            foreach ($periods as $k => $label): ?>
+                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'canal' => $channel, 'status' => $status, 's' => $search], remove_query_arg(['from', 'to']))); ?>" 
+                                   class="button-link" 
+                                   style="padding: 4px 10px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 4px; <?php echo $periodo === $k ? 'background: #0073aa; color: #fff;' : 'color: #334155;'; ?>">
+                                    <?php echo esc_html($label); ?>
+                                </a>
+                            <?php endforeach; ?>
                         </div>
+                    </div>
 
-                        <select name="canal">
+                    <!-- Datas Customizadas -->
+                    <?php if ($periodo === 'custom'): ?>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <div>
+                                <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">De</label>
+                                <input type="date" name="from" value="<?php echo esc_attr($custom_from); ?>" style="height: 32px; font-size: 13px;">
+                            </div>
+                            <div>
+                                <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Até</label>
+                                <input type="date" name="to" value="<?php echo esc_attr($custom_to); ?>" style="height: 32px; font-size: 13px;">
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <!-- Campo de Pesquisa Fluido -->
+                    <div style="flex: 1 1 220px; min-width: 180px;">
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Pesquisar</label>
+                        <input type="text" name="s" value="<?php echo esc_attr($search); ?>" placeholder="Buscar por nome, e-mail, telefone..." style="width: 100%; height: 32px; font-size: 13px;">
+                    </div>
+
+                    <!-- Select de Canal -->
+                    <div style="min-width: 150px;">
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Canal</label>
+                        <select name="canal" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Canais</option>
                             <option value="google_ads" <?php selected($channel, 'google_ads'); ?>>🟢 Google Ads</option>
                             <option value="meta_ads" <?php selected($channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
                             <option value="whatsapp" <?php selected($channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
                             <option value="organico" <?php selected($channel, 'organico'); ?>>⚪ Direto / Site</option>
                         </select>
+                    </div>
 
-                        <select name="status">
+                    <!-- Select de Status -->
+                    <div style="min-width: 140px;">
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Status</label>
+                        <select name="status" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Status</option>
                             <option value="pendente" <?php selected($status, 'pendente'); ?>>Pendentes</option>
-                            <option value="qualificado" <?php selected($status, 'qualificado'); ?>>Qualificados</option>
+                            <option value="qualificado" <?php selected($status, 'qualificado'); ?>>Qualificados / Vendas</option>
                             <option value="nao_qualificado" <?php selected($status, 'nao_qualificado'); ?>>Não Qualificados</option>
                             <option value="sem_correspondencia" <?php selected($status, 'sem_correspondencia'); ?>>Sem Correspondência</option>
                         </select>
+                    </div>
 
-                        <button type="submit" class="button button-primary">Filtrar</button>
-                        <?php if (!empty($search) || !empty($status) || !empty($channel)): ?>
-                            <a href="<?php echo esc_url($current_url); ?>" class="button">Limpar Filtros</a>
-                        <?php endif; ?>
+                    <!-- Botões Filtrar e Limpar -->
+                    <div style="display: flex; gap: 8px;">
+                        <button type="submit" class="button button-primary" style="height: 32px; display: inline-flex; align-items: center; gap: 5px;">
+                            🔍 Filtrar
+                        </button>
+                        <a href="<?php echo esc_url($current_url); ?>" class="button button-secondary" style="height: 32px; line-height: 30px;">
+                            Limpar
+                        </a>
                     </div>
                 </form>
             </div>
@@ -292,36 +396,52 @@ class LeadsController {
                                     <input type="checkbox" id="li_select_all" title="Selecionar Todos na Página">
                                 </th>
                                 <th style="width: 60px;">ID</th>
-                                <th style="width: 130px;">Data</th>
-                                <th>Lead / Contato</th>
+                                <th style="width: 120px;">Data</th>
+                                <th>Nome / Contato</th>
                                 <th>Curso / Interesse</th>
-                                <th style="width: 230px;">Canal / Origem</th>
-                                <th style="width: 130px;">Status</th>
-                                <th style="width: 130px;">Ações</th>
+                                <th style="width: 150px;">Canal</th>
+                                <th style="width: 170px;">UTM</th>
+                                <th style="width: 150px; text-align: center;">Etapa do Funil</th>
+                                <th style="width: 120px; text-align: center;">Status</th>
+                                <th style="width: 110px; text-align: center;">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="8" style="text-align: center; padding: 40px 20px; color: #64748b;">
+                                <td colspan="10" style="text-align: center; padding: 40px 20px; color: #64748b;">
                                     <span class="dashicons dashicons-id-alt" style="font-size: 36px; width: 36px; height: 36px; color: #94a3b8; margin-bottom: 10px;"></span>
                                     <p style="font-size: 15px; margin: 0;">Nenhum lead encontrado com os filtros selecionados.</p>
-                                    <p style="font-size: 13px; margin: 5px 0 0;">Verifique os filtros de canal ou importe novas planilhas.</p>
+                                    <p style="font-size: 13px; margin: 5px 0 0;">Verifique os filtros de canal, período ou importe novas planilhas.</p>
                                 </td>
                             </tr>
                         <?php else: ?>
-                            <?php foreach ($leads as $lead): ?>
-                                <?php
+                            <?php foreach ($leads as $lead): 
                                 $lead_channel = LeadRepository::get_channel($lead);
                                 $chan_info    = LeadRepository::get_channel_info($lead_channel);
-                                ?>
+                                $etapa_raw = !empty($lead->etapa_funil) ? $lead->etapa_funil : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+                                $lead_course = $lead->tipo_curso ?: ($lead->area_interesse ?: '-');
+                                $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
+                                
+                                // Extrai apenas a utm_source limpa
+                                $source_display = $lead->utm_source;
+                                if (empty($source_display) && !empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'utm_source=') !== false) {
+                                    $parsed_q = parse_url($lead->pagina_origem, PHP_URL_QUERY);
+                                    if (!empty($parsed_q)) {
+                                        parse_str($parsed_q, $q_params);
+                                        if (!empty($q_params['utm_source'])) {
+                                            $source_display = sanitize_text_field($q_params['utm_source']);
+                                        }
+                                    }
+                                }
+                            ?>
                                 <tr id="li-row-<?php echo esc_attr($lead->id); ?>">
                                     <td style="text-align: center; vertical-align: middle;">
                                         <input type="checkbox" name="selected_leads[]" value="<?php echo esc_attr($lead->id); ?>" class="li-lead-check" style="margin: 0;">
                                     </td>
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
-                                        <div style="font-size: 12px; font-weight: 500;">
+                                        <div style="font-size: 12px; font-weight: 600;">
                                             <?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?>
                                         </div>
                                         <div style="font-size: 11px; color: #64748b;">
@@ -332,90 +452,59 @@ class LeadsController {
                                         <div style="font-weight: 600; color: #1e293b;">
                                             <?php echo !empty($lead->nome) ? esc_html($lead->nome) : '<span style="color:#94a3b8">Sem nome</span>'; ?>
                                         </div>
-                                        <div style="font-size: 12px; color: #0284c7; margin-top: 2px;">
-                                            <?php if (!empty($lead->telefone)): ?>
-                                                <span>📞 <?php echo esc_html(PhoneNormalizer::format_display($lead->telefone)); ?></span>
-                                            <?php endif; ?>
-                                        </div>
+                                        <?php if (!empty($lead_phone_clean)): ?>
+                                            <div style="margin-top: 2px;">
+                                                <a href="https://wa.me/<?php echo esc_attr($lead_phone_clean); ?>" target="_blank" style="color: #059669; font-weight: 600; text-decoration: none; font-size: 12px;">
+                                                    💬 <?php echo esc_html(PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado)); ?>
+                                                </a>
+                                            </div>
+                                        <?php endif; ?>
                                         <?php if (!empty($lead->email)): ?>
-                                            <div style="font-size: 12px; color: #64748b;">
-                                                ✉️ <?php echo esc_html($lead->email); ?>
-                                            </div>
-                                        <?php endif; ?>
-                                        <?php if (!empty($lead->polo)): ?>
-                                            <div style="margin-top: 3px;">
-                                                <span class="li-badge" style="background: #eff6ff; color: #1d4ed8; font-size: 11px; border: 1px solid #bfdbfe;">
-                                                    🏢 <?php echo esc_html($lead->polo); ?>
-                                                </span>
+                                            <div style="font-size: 11px; color: #64748b;">
+                                                <?php echo esc_html($lead->email); ?>
                                             </div>
                                         <?php endif; ?>
                                     </td>
                                     <td>
-                                        <?php if (!empty($lead->tipo_curso)): ?>
-                                            <div class="li-tag li-tag-blue"><?php echo esc_html($lead->tipo_curso); ?></div>
-                                        <?php endif; ?>
-                                        <?php if (!empty($lead->area_interesse)): ?>
-                                            <div style="font-size: 12px; color: #334155; margin-top: 4px;">
-                                                <strong>Área:</strong> <?php echo esc_html($lead->area_interesse); ?>
-                                            </div>
-                                        <?php endif; ?>
+                                        <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead_course); ?></span>
                                     </td>
                                     <td>
-                                        <!-- BADGE DE CANAL CLARO E CERTEIRO -->
-                                        <div style="margin-bottom: 4px;">
-                                            <span class="li-badge <?php echo esc_attr($chan_info['badge_class']); ?>" style="display:inline-flex; align-items:center; gap:5px; font-weight:600; font-size:11px; padding:3px 8px;">
-                                                <span><?php echo esc_html($chan_info['dot']); ?></span>
-                                                <span><?php echo esc_html($chan_info['label']); ?></span>
-                                            </span>
-                                        </div>
-                                        <div style="font-size: 12px; color: #334155; font-weight: 500;">
-                                            <?php echo esc_html(!empty($lead->formulario_nome) ? $lead->formulario_nome : 'Formulário'); ?>
-                                        </div>
-                                        <?php if (!empty($lead->utm_campaign)): ?>
-                                            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">
-                                                <span title="Campanha">🎯 <?php echo esc_html($lead->utm_campaign); ?></span>
-                                            </div>
-                                        <?php endif; ?>
-                                        <div style="margin-top: 4px; display: flex; gap: 4px; flex-wrap: wrap;">
-                                            <?php if (!empty($lead->gclid)): ?>
-                                                <span class="li-badge-mini" style="background:#e0f2fe; color:#0369a1; border-color:#bae6fd;" title="Google Click ID">gclid</span>
-                                            <?php endif; ?>
-                                            <?php if (!empty($lead->fbclid)): ?>
-                                                <span class="li-badge-mini" style="background:#e7f3ff; color:#0866ff; border-color:#d0e7ff;" title="Meta Click ID">fbclid</span>
-                                            <?php endif; ?>
-                                            <?php if (!empty($lead->ad_id)): ?>
-                                                <span class="li-badge-mini" title="Meta Ad ID">Ad #<?php echo esc_html(substr($lead->ad_id, -6)); ?></span>
-                                            <?php endif; ?>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <?php
-                                        $badge_class = 'li-status-pendente';
-                                        $label = 'Pendente';
-                                        if ($lead->qualificacao_status === 'qualificado') {
-                                            $badge_class = 'li-status-qualificado';
-                                            $label = 'Qualificado';
-                                        } elseif ($lead->qualificacao_status === 'nao_qualificado') {
-                                            $badge_class = 'li-status-desqualificado';
-                                            $label = 'Desqualificado';
-                                        } elseif ($lead->qualificacao_status === 'sem_correspondencia') {
-                                            $badge_class = 'li-status-cinza';
-                                            $label = 'Sem Match';
-                                        }
-                                        ?>
-                                        <span class="li-badge <?php echo esc_attr($badge_class); ?>">
-                                            <?php echo esc_html($label); ?>
+                                        <span class="li-badge <?php echo esc_attr($chan_info['badge_class']); ?>" style="display:inline-flex; align-items:center; gap:5px; font-weight:600; font-size:11px; padding:3px 8px;">
+                                            <span><?php echo esc_html($chan_info['dot']); ?></span>
+                                            <span><?php echo esc_html($chan_info['label']); ?></span>
                                         </span>
                                     </td>
                                     <td>
-                                        <div style="display: inline-flex; align-items: center; gap: 5px;">
-                                            <button type="button" class="button button-small li-open-modal-btn" data-lead="<?php echo esc_attr(wp_json_encode($lead)); ?>">
-                                                Ver Detalhes
-                                            </button>
-                                            <button type="submit" name="li_delete_single_lead" value="<?php echo esc_attr($lead->id); ?>" class="button button-small" style="color: #b91c1c; border-color: #fecaca; background: #fff5f5; padding: 0 6px; height: 26px; line-height: 24px;" title="Excluir Permanentemente Lead #<?php echo esc_attr($lead->id); ?>" onclick="return confirm('ATENÇÃO: Deseja realmente excluir permanentemente o lead #<?php echo esc_attr($lead->id); ?>? Esta ação não pode ser desfeita.');">
-                                                <span class="dashicons dashicons-trash" style="font-size: 14px; width: 14px; height: 14px; line-height: 24px; vertical-align: middle;"></span>
-                                            </button>
-                                        </div>
+                                        <?php if (!empty($source_display)): ?>
+                                            <code style="background: #e0f2fe; color: #0369a1; padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">
+                                                <?php echo esc_html($source_display); ?>
+                                            </code>
+                                        <?php else: ?>
+                                            <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="li-badge <?php echo $lead->qualificacao_status === 'qualificado' ? 'li-status-qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'li-status-desqualificado' : 'li-status-cinza'); ?>" style="font-size: 11px;">
+                                            <?php echo esc_html($etapa_raw); ?>
+                                        </span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <span class="li-badge <?php echo $lead->qualificacao_status === 'qualificado' ? 'li-status-qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'li-status-desqualificado' : 'li-status-cinza'); ?>" style="font-weight: 600;">
+                                            <?php 
+                                            if ($lead->qualificacao_status === 'qualificado') {
+                                                echo 'Venda';
+                                            } elseif ($lead->qualificacao_status === 'nao_qualificado') {
+                                                echo 'Não Qualificado';
+                                            } else {
+                                                echo 'Pendente';
+                                            }
+                                            ?>
+                                        </span>
+                                    </td>
+                                    <td style="text-align: center;">
+                                        <button type="button" class="button button-small li-open-modal-btn" data-lead="<?php echo esc_attr(wp_json_encode($lead)); ?>" style="height: 28px; line-height: 26px;">
+                                            Detalhes
+                                        </button>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -427,16 +516,19 @@ class LeadsController {
 
             <!-- PAGINAÇÃO -->
             <?php if ($total_pages > 1): ?>
-                <div class="li-pagination">
-                    <span>Página <?php echo $page; ?> de <?php echo $total_pages; ?> (<?php echo $total_leads; ?> leads no total)</span>
-                    <div class="li-pagination-links">
+                <div class="li-pagination" style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <span style="font-size: 13px; color: #64748b;">Página <?php echo $page; ?> de <?php echo $total_pages; ?> (<?php echo $total_leads; ?> leads no total)</span>
+                    <div class="li-pagination-links" style="display: flex; gap: 4px;">
                         <?php for ($i = 1; $i <= $total_pages; $i++): ?>
                             <?php
                             $link = add_query_arg([
                                 'paged'   => $i,
+                                'periodo' => $periodo,
+                                'from'    => $custom_from,
+                                'to'      => $custom_to,
                                 's'       => $search,
                                 'status'  => $status,
-                                'channel' => $channel,
+                                'canal'   => $channel,
                             ], $current_url);
                             ?>
                             <a href="<?php echo esc_url($link); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">
@@ -462,6 +554,8 @@ class LeadsController {
                         <input type="hidden" name="filter_search" value="<?php echo esc_attr($search); ?>">
                         <input type="hidden" name="filter_status" value="<?php echo esc_attr($status); ?>">
                         <input type="hidden" name="filter_channel" value="<?php echo esc_attr($channel); ?>">
+                        <input type="hidden" name="filter_date_from" value="<?php echo esc_attr(!empty($date_start) ? substr($date_start, 0, 10) : ''); ?>">
+                        <input type="hidden" name="filter_date_to" value="<?php echo esc_attr(!empty($date_end) ? substr($date_end, 0, 10) : ''); ?>">
 
                         <div class="li-modal-body" style="padding: 20px;">
                             <div style="background: #fff5f5; border: 1px solid #fecaca; border-radius: 6px; padding: 12px; margin-bottom: 16px;">
@@ -475,6 +569,18 @@ class LeadsController {
 
                             <div style="font-size: 13px; color: #334155; margin-bottom: 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px;">
                                 <div style="font-weight: 600; margin-bottom: 6px; color: #0f172a;">Critérios do Filtro Atual:</div>
+                                <div>• <strong>Período:</strong> <?php 
+                                    $p_labels = [
+                                        'today'     => 'Hoje (' . wp_date('d/m/Y') . ')',
+                                        'yesterday' => 'Ontem (' . wp_date('d/m/Y', strtotime('-1 day')) . ')',
+                                        '7d'        => 'Últimos 7 dias',
+                                        '30d'       => 'Últimos 30 dias',
+                                        'month'     => 'Este mês',
+                                        'custom'    => 'Personalizado (' . (!empty($custom_from) ? wp_date('d/m/Y', strtotime($custom_from)) : '') . ' até ' . (!empty($custom_to) ? wp_date('d/m/Y', strtotime($custom_to)) : '') . ')',
+                                        'all'       => 'Todo o histórico (sem filtro de data)',
+                                    ];
+                                    echo esc_html($p_labels[$periodo] ?? 'Personalizado');
+                                ?></div>
                                 <div>• <strong>Busca:</strong> <?php echo !empty($search) ? esc_html($search) : '<em>(Sem termo de busca)</em>'; ?></div>
                                 <div>• <strong>Status:</strong> <?php echo !empty($status) ? esc_html(ucfirst(str_replace('_', ' ', $status))) : '<em>Todos os status</em>'; ?></div>
                                 <div>• <strong>Canal:</strong> <?php echo !empty($channel) ? esc_html($channel) : '<em>Todos os canais</em>'; ?></div>
@@ -581,8 +687,10 @@ class LeadsController {
                     html += '</div>';
 
                     // Seção 3: Qualificação e WhatsApp
+                    var etapaFunil = lead.etapa_funil || (lead.qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : (lead.qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
                     html += '<div class="li-modal-box"><h4>⭐ Qualificação & WhatsApp</h4>';
                     html += '<p><strong>Status de Qualificação:</strong> ' + lead.qualificacao_status + '</p>';
+                    html += '<p><strong>Etapa do Funil:</strong> <span class="li-badge" style="background:#e0f2fe; color:#0369a1; font-weight:700;">🎯 ' + etapaFunil + '</span></p>';
                     html += '<p><strong>Data da Qualificação:</strong> ' + (lead.qualificacao_data || '-') + '</p>';
                     html += '<p><strong>Origem da Qualificação:</strong> ' + (lead.qualificacao_origem || '-') + '</p>';
                     html += '<p><strong>Score:</strong> ' + lead.score + '</p>';
@@ -732,6 +840,164 @@ class LeadsController {
                     }
                 });
             }
+
+            // Ordenação dinâmica por clique em qualquer coluna da tabela principal
+            var liSortMainState = { col: null, dir: 0 };
+            window.liSortMainTable = function(columnKey) {
+                if (liSortMainState.col === columnKey) {
+                    liSortMainState.dir = (liSortMainState.dir + 1) % 3;
+                } else {
+                    liSortMainState.col = columnKey;
+                    liSortMainState.dir = 1;
+                }
+
+                var rows = Array.from(document.querySelectorAll('tr.li-lead-row-main'));
+                if (!rows.length) return;
+
+                var tbody = rows[0].parentNode;
+
+                rows.forEach(function(row, idx) {
+                    if (!row.hasAttribute('data-original-index')) {
+                        row.setAttribute('data-original-index', idx);
+                    }
+                });
+
+                var tableEl = tbody.closest('table');
+                if (tableEl) {
+                    var allThs = tableEl.querySelectorAll('th.li-sortable-th, #liThStatusMain');
+                    allThs.forEach(function(th) {
+                        th.classList.remove('li-sort-active-asc', 'li-sort-active-desc');
+                        th.style.background = '';
+                        var icon = th.querySelector('.li-sort-icon');
+                        if (icon) {
+                            icon.innerHTML = '<span style="opacity: 0.55; font-size: 11px;">⇅</span>';
+                        }
+                        var label = th.querySelector('.li-status-sort-label');
+                        if (label && th.id.indexOf('Status') !== -1) {
+                            label.textContent = 'Status';
+                        }
+                    });
+
+                    if (liSortMainState.dir !== 0) {
+                        var thId = (columnKey === 'status') ? 'liThStatusMain' : ('liTh_main_' + columnKey);
+                        var activeTh = document.getElementById(thId);
+                        if (activeTh) {
+                            var isAsc = (liSortMainState.dir === 1);
+                            activeTh.classList.add(isAsc ? 'li-sort-active-asc' : 'li-sort-active-desc');
+                            var iconEl = activeTh.querySelector('.li-sort-icon');
+
+                            var badgeText = '';
+                            if (columnKey === 'id') {
+                                badgeText = isAsc ? '▼ Recentes' : '▲ Antigos';
+                            } else if (columnKey === 'date') {
+                                badgeText = isAsc ? '▼ Recentes' : '▲ Antigos';
+                            } else if (columnKey === 'name') {
+                                badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
+                            } else if (columnKey === 'course') {
+                                badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
+                            } else if (columnKey === 'channel') {
+                                badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
+                            } else if (columnKey === 'etapa') {
+                                badgeText = isAsc ? '🎓 Matrículas' : '❌ Desqualificados';
+                            } else if (columnKey === 'status') {
+                                var statusLabel = activeTh.querySelector('.li-status-sort-label');
+                                if (statusLabel) {
+                                    statusLabel.textContent = isAsc ? 'Status (Qualificados)' : 'Status (Desqualificados)';
+                                }
+                                badgeText = isAsc ? '🟢 Qualificados' : '🔴 Desqualificados';
+                            } else {
+                                badgeText = isAsc ? '▲ 1º' : '▼ 2º';
+                            }
+
+                            if (iconEl) {
+                                var badgeClass = isAsc ? 'li-sort-badge li-sort-badge-asc' : 'li-sort-badge li-sort-badge-desc';
+                                iconEl.innerHTML = '<span class="' + badgeClass + '">' + badgeText + '</span>';
+                            }
+                        }
+                    }
+                }
+
+                if (liSortMainState.dir === 0) {
+                    rows.sort(function(a, b) {
+                        return parseInt(a.getAttribute('data-original-index'), 10) - parseInt(b.getAttribute('data-original-index'), 10);
+                    });
+                } else {
+                    var isAsc = (liSortMainState.dir === 1);
+                    rows.sort(function(a, b) {
+                        var res = 0;
+                        if (columnKey === 'id') {
+                            var idA = parseInt(a.getAttribute('data-lead-id') || '0', 10);
+                            var idB = parseInt(b.getAttribute('data-lead-id') || '0', 10);
+                            res = isAsc ? (idB - idA) : (idA - idB);
+                        } else if (columnKey === 'date') {
+                            var dtA = a.getAttribute('data-lead-date-raw') || '';
+                            var dtB = b.getAttribute('data-lead-date-raw') || '';
+                            res = isAsc ? dtB.localeCompare(dtA) : dtA.localeCompare(dtB);
+                        } else if (columnKey === 'name') {
+                            var nA = (a.getAttribute('data-lead-name-raw') || '').trim();
+                            var nB = (b.getAttribute('data-lead-name-raw') || '').trim();
+                            if (!nA && nB) return 1;
+                            if (nA && !nB) return -1;
+                            res = isAsc ? nA.localeCompare(nB, 'pt-BR') : nB.localeCompare(nA, 'pt-BR');
+                        } else if (columnKey === 'course') {
+                            var csA = (a.getAttribute('data-lead-course-raw') || '').trim();
+                            var csB = (b.getAttribute('data-lead-course-raw') || '').trim();
+                            if (!csA && csB) return 1;
+                            if (csA && !csB) return -1;
+                            res = isAsc ? csA.localeCompare(csB, 'pt-BR') : csB.localeCompare(csA, 'pt-BR');
+                        } else if (columnKey === 'channel') {
+                            var chA = (a.getAttribute('data-lead-channel-raw') || '').trim();
+                            var chB = (b.getAttribute('data-lead-channel-raw') || '').trim();
+                            if (!chA && chB) return 1;
+                            if (chA && !chB) return -1;
+                            res = isAsc ? chA.localeCompare(chB, 'pt-BR') : chB.localeCompare(chA, 'pt-BR');
+                        } else if (columnKey === 'etapa') {
+                            function getEtapaWeight(e, reverse) {
+                                e = (e || '').toLowerCase();
+                                if (e.indexOf('matr') !== -1 || e.indexOf('matric') !== -1) return reverse ? 6 : 1;
+                                if (e.indexOf('analis') !== -1 || e.indexOf('negoc') !== -1 || e.indexOf('atend') !== -1) return reverse ? 5 : 2;
+                                if (e.indexOf('contato') !== -1) return reverse ? 4 : 3;
+                                if (e.indexOf('remarket') !== -1) return reverse ? 3 : 4;
+                                if (e.indexOf('form') !== -1 || e.indexOf('envia') !== -1) return reverse ? 2 : 5;
+                                if (e.indexOf('desqual') !== -1 || e.indexOf('perda') !== -1 || e.indexOf('não') !== -1 || e.indexOf('nao') !== -1) return reverse ? 1 : 6;
+                                return reverse ? 3 : 4;
+                            }
+                            var eA = a.getAttribute('data-lead-etapa') || '';
+                            var eB = b.getAttribute('data-lead-etapa') || '';
+                            res = getEtapaWeight(eA, !isAsc) - getEtapaWeight(eB, !isAsc);
+                        } else if (columnKey === 'status') {
+                            function getStatusWeight(st, reverse) {
+                                st = (st || 'pendente').toLowerCase();
+                                if (reverse) {
+                                    if (st === 'nao_qualificado' || st === 'desqualificado') return 1;
+                                    if (st === 'pendente') return 2;
+                                    return 3;
+                                } else {
+                                    if (st === 'qualificado') return 1;
+                                    if (st === 'pendente') return 2;
+                                    return 3;
+                                }
+                            }
+                            var sA = a.getAttribute('data-lead-status') || 'pendente';
+                            var sB = b.getAttribute('data-lead-status') || 'pendente';
+                            res = getStatusWeight(sA, !isAsc) - getStatusWeight(sB, !isAsc);
+                        }
+
+                        if (res !== 0) return res;
+                        return parseInt(a.getAttribute('data-original-index'), 10) - parseInt(b.getAttribute('data-original-index'), 10);
+                    });
+                }
+
+                var fragment = document.createDocumentFragment();
+                rows.forEach(function(row) {
+                    fragment.appendChild(row);
+                });
+                tbody.appendChild(fragment);
+            };
+
+            window.liSortTableByStatusMain = function() {
+                window.liSortMainTable('status');
+            };
 
             // Fecha ao clicar fora
             window.addEventListener('click', function(e) {

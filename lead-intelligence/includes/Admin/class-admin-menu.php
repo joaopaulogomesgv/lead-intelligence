@@ -8,6 +8,8 @@ use LeadIntelligence\Admin\Controllers\ImportController;
 use LeadIntelligence\Admin\Controllers\WhatsAppController;
 use LeadIntelligence\Admin\Controllers\PolosController;
 use LeadIntelligence\Admin\Controllers\MetaController;
+use LeadIntelligence\Admin\Controllers\MetaAdsController;
+use LeadIntelligence\Admin\Controllers\GoogleAdsController;
 use LeadIntelligence\Admin\Settings;
 
 if (!defined('ABSPATH')) {
@@ -31,57 +33,92 @@ class AdminMenu {
     public static function register_menus() {
         $capability = 'manage_options';
 
-        // Menu Principal
+        // 1. Menu Principal (Abre diretamente Todos os Leads)
         add_menu_page(
             'Lead Intelligence',
             'Lead Intelligence',
             $capability,
             'lead-intelligence',
-            [__CLASS__, 'render_dashboard_or_leads'],
-            'dashicons-chart-pie',
+            [LeadsController::class, 'render'],
+            'dashicons-groups',
             30
         );
 
-        // Submenus
+        // 2. Submenu 1: Todos os Leads
         add_submenu_page(
             'lead-intelligence',
-            'Dashboard - Lead Intelligence',
-            'Dashboard',
+            'Todos os Leads - Lead Intelligence',
+            '👥 Todos os Leads',
             $capability,
             'lead-intelligence',
-            [__CLASS__, 'render_dashboard_or_leads']
-        );
-
-        add_submenu_page(
-            'lead-intelligence',
-            'Leads - Lead Intelligence',
-            'Leads',
-            $capability,
-            'lead-intelligence-leads',
             [LeadsController::class, 'render']
         );
 
+        // 3. Submenu: Meta Ads
         add_submenu_page(
             'lead-intelligence',
-            'Qualificações - Lead Intelligence',
-            'Qualificações',
+            'Meta Ads - Lead Intelligence',
+            '🔵 Meta Ads',
             $capability,
-            'lead-intelligence-qualificacoes',
-            [LeadsController::class, 'render']
+            'lead-intelligence-meta',
+            [__CLASS__, 'render_meta_page']
         );
 
+        // 4. Submenu: Google Ads
         add_submenu_page(
             'lead-intelligence',
+            'Google Ads - Lead Intelligence',
+            '🟢 Google Ads',
+            $capability,
+            'lead-intelligence-google',
+            [__CLASS__, 'render_google_page']
+        );
+
+        // 5. Submenu: Importar Planilha
+        add_submenu_page(
+            'lead-intelligence',
+            'Importações - Lead Intelligence',
+            '📥 Importar Planilha',
+            $capability,
+            'lead-intelligence-import',
+            [ImportController::class, 'render']
+        );
+
+        // 7. Submenu: Configurações
+        add_submenu_page(
+            'lead-intelligence',
+            'Configurações - Lead Intelligence',
+            '⚙️ Configurações',
+            $capability,
+            'lead-intelligence-settings',
+            [Settings::class, 'render']
+        );
+
+        // 8. Submenu: Logs
+        add_submenu_page(
+            'lead-intelligence',
+            'Logs do Sistema - Lead Intelligence',
+            '📋 Logs',
+            $capability,
+            'lead-intelligence-logs',
+            [LogsController::class, 'render']
+        );
+
+        // ========================================================
+        // ROTAS LEGADAS INVISÍVEIS (GARANTE QUE NENHUM LINK QUEBRE)
+        // ========================================================
+        add_submenu_page(
+            null,
             'WhatsApp Cloud - Lead Intelligence',
-            'WhatsApp',
+            'WhatsApp Cloud',
             $capability,
             'lead-intelligence-whatsapp',
-            [WhatsAppController::class, 'render']
+            [__CLASS__, 'render_whatsapp_page']
         );
 
         add_submenu_page(
-            'lead-intelligence',
-            'Polos WhatsApp - Lead Intelligence',
+            null,
+            'Polos WhatsApp',
             'Polos WhatsApp',
             $capability,
             'lead-intelligence-polos',
@@ -89,48 +126,39 @@ class AdminMenu {
         );
 
         add_submenu_page(
-            'lead-intelligence',
-            'Meta Ads / CAPI - Lead Intelligence',
-            'Meta',
+            null,
+            'Qualificações',
+            'Qualificações',
             $capability,
-            'lead-intelligence-meta',
-            [MetaController::class, 'render']
+            'lead-intelligence-qualificacoes',
+            [LeadsController::class, 'render']
         );
 
         add_submenu_page(
-            'lead-intelligence',
-            'Relatórios - Lead Intelligence',
+            null,
+            'Relatórios',
             'Relatórios',
             $capability,
             'lead-intelligence-relatorios',
-            [DashboardController::class, 'render']
+            [__CLASS__, 'render_dashboard_page']
         );
 
         add_submenu_page(
-            'lead-intelligence',
-            'Importar Planilha - Lead Intelligence',
-            'Importar Planilha',
+            null,
+            'Dashboard Geral',
+            'Dashboard Geral',
             $capability,
-            'lead-intelligence-import',
-            [ImportController::class, 'render']
+            'lead-intelligence-dashboard',
+            [__CLASS__, 'render_dashboard_page']
         );
 
         add_submenu_page(
-            'lead-intelligence',
-            'Logs do Sistema - Lead Intelligence',
-            'Logs',
+            null,
+            'Todos os Leads',
+            'Todos os Leads',
             $capability,
-            'lead-intelligence-logs',
-            [LogsController::class, 'render']
-        );
-
-        add_submenu_page(
-            'lead-intelligence',
-            'Configurações - Lead Intelligence',
-            'Configurações',
-            $capability,
-            'lead-intelligence-settings',
-            [Settings::class, 'render']
+            'lead-intelligence-leads',
+            [LeadsController::class, 'render']
         );
     }
 
@@ -147,29 +175,44 @@ class AdminMenu {
         );
     }
 
-    public static function render_dashboard_or_leads() {
-        DashboardController::render();
+    public static function render_dashboard_page() {
+        DashboardController::render(['tab' => 'dashboard']);
     }
 
-    public static function render_placeholder() {
-        $screen = get_current_screen();
-        $title = 'Módulo em Preparação';
+    public static function render_meta_page() {
+        MetaAdsController::render();
+    }
+
+    public static function render_google_page() {
+        GoogleAdsController::render();
+    }
+
+    public static function render_whatsapp_page() {
+        $view = isset($_GET['view']) && in_array($_GET['view'], ['chat', 'polos'], true) ? sanitize_key($_GET['view']) : (isset($_GET['action']) ? 'polos' : 'chat');
         ?>
-        <div class="wrap li-wrap">
-            <div class="li-header">
-                <h2>Lead Intelligence &bull; <?php echo esc_html($title); ?></h2>
-            </div>
-            <div class="li-card" style="text-align: center; padding: 50px 20px;">
-                <span class="dashicons dashicons-admin-generic" style="font-size: 48px; width: 48px; height: 48px; color: #0073aa; margin-bottom: 15px;"></span>
-                <h3>Este módulo faz parte das próximas fases do cronograma</h3>
-                <p style="color: #64748b; max-width: 600px; margin: 0 auto 20px;">
-                    O plugin está estruturado conforme a arquitetura modular aprovada. Conforme concluirmos as fases (Fase 1: Elementor, Fase 2: UTMs, Fase 3: Planilhas, Fase 4: Dashboard, Fase 5/6: WhatsApp, Fase 7: Meta CAPI), cada tela será ativada.
-                </p>
-                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads')); ?>" class="button button-primary">
-                    Ver Leads Capturados do Elementor
+        <div class="wrap li-wrap" style="margin-bottom: 0; padding-bottom: 0;">
+            <div class="li-channel-subnav" style="display: flex; gap: 8px; margin: 12px 0 14px 0; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-whatsapp&view=chat')); ?>" 
+                   class="button <?php echo $view === 'chat' ? 'button-primary' : 'button-secondary'; ?>" 
+                   style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 5px 14px; height: 32px; border-radius: 6px; <?php echo $view === 'chat' ? 'background: #25d366; border-color: #25d366; color: #fff;' : ''; ?>">
+                    💬 Central &amp; Webhook WhatsApp
+                </a>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-whatsapp&view=polos')); ?>" 
+                   class="button <?php echo $view === 'polos' ? 'button-primary' : 'button-secondary'; ?>" 
+                   style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; padding: 5px 14px; height: 32px; border-radius: 6px; <?php echo $view === 'polos' ? 'background: #25d366; border-color: #25d366; color: #fff;' : ''; ?>">
+                    🏢 Polos &amp; Números WABA
                 </a>
             </div>
         </div>
         <?php
+        if ($view === 'polos') {
+            PolosController::render();
+        } else {
+            WhatsAppController::render();
+        }
+    }
+
+    public static function render_dashboard_or_leads() {
+        self::render_dashboard_page();
     }
 }

@@ -5,6 +5,7 @@ use LeadIntelligence\Admin\Settings;
 use LeadIntelligence\WhatsApp\WabaClient;
 use LeadIntelligence\WhatsApp\MessageHandler;
 use LeadIntelligence\Database\DbSchema;
+use LeadIntelligence\Database\LeadRepository;
 use LeadIntelligence\PhoneNormalizer;
 use LeadIntelligence\Logger;
 
@@ -124,6 +125,63 @@ class WhatsAppController {
                  )"
             );
             $cleanup_result = "Tabela otimizada com sucesso! " . intval($affected) . " registro(s) repetido(s) removido(s), mantendo apenas a interação consolidada mais recente de cada lead.";
+        }
+
+        // Ação 4: Exclusão individual de histórico de WhatsApp
+        if (isset($_POST['li_delete_single_whatsapp'])) {
+            check_admin_referer('li_whatsapp_delete_verify', 'li_nonce');
+            $del_phone       = sanitize_text_field(wp_unslash($_POST['delete_phone'] ?? ''));
+            $delete_lead_too = !empty($_POST['delete_lead_too']);
+
+            if (!empty($del_phone)) {
+                if ($delete_lead_too) {
+                    $linked_lead_ids = $wpdb->get_col($wpdb->prepare("SELECT DISTINCT lead_id FROM {$whatsapp_table} WHERE telefone_normalizado = %s AND lead_id > 0", $del_phone));
+                    if (!empty($linked_lead_ids)) {
+                        LeadRepository::delete_leads_by_ids(array_map('intval', $linked_lead_ids));
+                    }
+                }
+                $del_count = $wpdb->query($wpdb->prepare("DELETE FROM {$whatsapp_table} WHERE telefone_normalizado = %s", $del_phone));
+                $cleanup_result = "Histórico do WhatsApp (" . PhoneNormalizer::format_display($del_phone) . ") apagado com sucesso (" . intval($del_count) . " mensagem/mensagens excluída(s))" . ($delete_lead_too ? " e lead vinculado removido do cadastro." : ".");
+            }
+        }
+
+        // Ação 5: Exclusão em Massa de Interações do WhatsApp
+        if (isset($_POST['li_bulk_delete_whatsapp'])) {
+            check_admin_referer('li_whatsapp_delete_verify', 'li_nonce');
+            $selected_phones = isset($_POST['selected_phones']) && is_array($_POST['selected_phones']) ? array_map('sanitize_text_field', $_POST['selected_phones']) : [];
+            $delete_lead_too = !empty($_POST['bulk_delete_lead_too']);
+
+            if (!empty($selected_phones)) {
+                $total_msgs   = 0;
+                $all_lead_ids = [];
+
+                foreach ($selected_phones as $phone) {
+                    if (empty($phone)) continue;
+                    if ($delete_lead_too) {
+                        $l_ids = $wpdb->get_col($wpdb->prepare("SELECT DISTINCT lead_id FROM {$whatsapp_table} WHERE telefone_normalizado = %s AND lead_id > 0", $phone));
+                        if (!empty($l_ids)) {
+                            $all_lead_ids = array_merge($all_lead_ids, $l_ids);
+                        }
+                    }
+                    $c = $wpdb->query($wpdb->prepare("DELETE FROM {$whatsapp_table} WHERE telefone_normalizado = %s", $phone));
+                    $total_msgs += intval($c);
+                }
+
+                if (!empty($all_lead_ids)) {
+                    LeadRepository::delete_leads_by_ids(array_unique(array_map('intval', $all_lead_ids)));
+                }
+
+                $cleanup_result = count($selected_phones) . " contato(s) do WhatsApp apagado(s) com sucesso (" . $total_msgs . " mensagens removidas)" . ($delete_lead_too ? " e leads vinculados apagados do CRM." : ".");
+            } else {
+                $cleanup_result = "Nenhum contato foi selecionado para exclusão.";
+            }
+        }
+
+        // Ação 6: Limpar Todo o Histórico de WhatsApp
+        if (isset($_POST['li_truncate_whatsapp'])) {
+            check_admin_referer('li_whatsapp_delete_verify', 'li_nonce');
+            $wpdb->query("TRUNCATE TABLE {$whatsapp_table}");
+            $cleanup_result = "Todo o histórico de interações do WhatsApp foi apagado com sucesso!";
         }
 
         // Métricas de WhatsApp Consolidadas
@@ -340,83 +398,126 @@ class WhatsAppController {
                         <h3 class="li-card-title" style="margin-bottom: 2px;">Últimas Interações de Leads no WhatsApp</h3>
                         <p class="li-card-desc" style="margin: 0; font-size: 12px;">Visualização consolidada: 1 linha por lead/contato com a última mensagem e contador de engajamento.</p>
                     </div>
-                    <div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                         <form method="post" action="" style="display: inline;" onsubmit="return confirm('Deseja otimizar o banco de dados removendo mensagens repetidas antigas e mantendo apenas a interação mais recente de cada lead?');">
                             <?php wp_nonce_field('li_cleanup_messages_verify', 'li_nonce'); ?>
                             <button type="submit" name="li_cleanup_duplicates" class="button button-secondary" title="Remove mensagens repetidas antigas para economizar espaço no MySQL">
-                                🧹 Otimizar Tabela (Remover Repetições)
+                                🧹 Otimizar Tabela
+                            </button>
+                        </form>
+                        <form method="post" action="" style="display: inline;" onsubmit="return confirm('ATENÇÃO: Deseja realmente excluir TODO o histórico de mensagens do WhatsApp?\n\nEsta ação não poderá ser desfeita!');">
+                            <?php wp_nonce_field('li_whatsapp_delete_verify', 'li_nonce'); ?>
+                            <button type="submit" name="li_truncate_whatsapp" class="button button-secondary" style="color: #dc2626; border-color: #fca5a5;" title="Apaga todas as mensagens da tabela do WhatsApp">
+                                🗑️ Limpar Todo o Histórico
                             </button>
                         </form>
                     </div>
                 </div>
 
-                <table class="wp-list-table widefat fixed striped li-table">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">ID</th>
-                            <th style="width: 140px;">Última Interação</th>
-                            <th>Telefone / Lead Vinculado</th>
-                            <th>Última Mensagem</th>
-                            <th style="width: 140px; text-align: center;">Total Mensagens</th>
-                            <th style="width: 110px;">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($messages)): ?>
+                <form method="post" action="" id="liWhatsAppBulkForm" onsubmit="return liConfirmBulkDeleteWa();">
+                    <?php wp_nonce_field('li_whatsapp_delete_verify', 'li_nonce'); ?>
+
+                    <!-- BARRA DE AÇÕES EM MASSA -->
+                    <div style="padding: 10px 24px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                            <button type="submit" name="li_bulk_delete_whatsapp" class="button button-secondary" id="liBtnBulkDeleteWa" style="color: #dc2626; border-color: #fca5a5; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                                🗑️ Apagar Selecionados (<span id="liCountSelectedWa">0</span>)
+                            </button>
+                            <label style="font-size: 12px; color: #475569; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none;">
+                                <input type="checkbox" name="bulk_delete_lead_too" value="1">
+                                <span>Também excluir o lead cadastrado no CRM (se existir)</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <table class="wp-list-table widefat fixed striped li-table">
+                        <thead>
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 35px; color: #64748b;">
-                                    Nenhuma mensagem do WhatsApp registrada ainda. Configure o webhook no Meta Developers ou utilize o simulador acima para testar.
-                                </td>
+                                <th style="width: 38px; text-align: center;">
+                                    <input type="checkbox" id="liSelectAllWa" onclick="liToggleAllWa(this)" title="Selecionar todos os contatos">
+                                </th>
+                                <th style="width: 60px;">ID</th>
+                                <th style="width: 140px;">Última Interação</th>
+                                <th>Telefone / Lead Vinculado</th>
+                                <th>Última Mensagem</th>
+                                <th style="width: 140px; text-align: center;">Total Mensagens</th>
+                                <th style="width: 110px;">Status</th>
+                                <th style="width: 100px; text-align: center;">Ações</th>
                             </tr>
-                        <?php else: ?>
-                            <?php foreach ($messages as $m): ?>
+                        </thead>
+                        <tbody>
+                            <?php if (empty($messages)): ?>
                                 <tr>
-                                    <td>#<?php echo esc_html($m->id); ?></td>
-                                    <td style="font-size: 12px; color: #64748b;">
-                                        <?php echo esc_html(date_i18n('d/m/Y H:i', strtotime($m->created_at))); ?>
-                                    </td>
-                                    <td>
-                                        <div style="font-weight: 600;">
-                                            📞 <?php echo esc_html(PhoneNormalizer::format_display($m->telefone_normalizado)); ?>
-                                        </div>
-                                        <?php if (!empty($m->lead_id)): ?>
-                                            <div style="font-size: 12px; color: #0284c7; margin-top: 2px;">
-                                                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads&s=' . urlencode($m->telefone_normalizado))); ?>">
-                                                    🔗 Lead #<?php echo esc_html($m->lead_id); ?> (<?php echo esc_html($m->lead_nome ?: 'Ver lead'); ?>)
-                                                </a>
-                                            </div>
-                                        <?php else: ?>
-                                            <span style="font-size: 11px; color: #94a3b8;">Lead avulso</span>
-                                        <?php endif; ?>
-                                        <?php if (!empty($m->polo)): ?>
-                                            <div style="margin-top: 4px;">
-                                                <span class="li-badge" style="background: #eff6ff; color: #1d4ed8; font-size: 11px; border: 1px solid #bfdbfe;">
-                                                    🏢 <?php echo esc_html($m->polo); ?>
-                                                </span>
-                                            </div>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <span style="font-size: 13px; color: #1e293b;"><?php echo esc_html($m->conteudo); ?></span>
-                                    </td>
-                                    <td style="text-align: center;">
-                                        <?php 
-                                        $tot_msgs = !empty($m->mensagens_recebidas) ? (int) $m->mensagens_recebidas : 1; 
-                                        ?>
-                                        <span class="li-badge li-status-cinza" style="font-weight: 600;">
-                                            💬 <?php echo esc_html($tot_msgs); ?> <?php echo $tot_msgs === 1 ? 'mensagem' : 'mensagens'; ?>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <span class="li-badge <?php echo (!empty($m->lead_whatsapp_status) && $m->lead_whatsapp_status === 'conversando') || $m->status_entrega === 'received' ? 'li-status-qualificado' : 'li-status-cinza'; ?>">
-                                            <?php echo esc_html(ucfirst($m->lead_whatsapp_status ?: $m->status_entrega ?: 'Ativo')); ?>
-                                        </span>
+                                    <td colspan="8" style="text-align: center; padding: 35px; color: #64748b;">
+                                        Nenhuma mensagem do WhatsApp registrada ainda. Configure o webhook no Meta Developers ou utilize o simulador acima para testar.
                                     </td>
                                 </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+                            <?php else: ?>
+                                <?php foreach ($messages as $m): ?>
+                                    <tr>
+                                        <td style="text-align: center;">
+                                            <input type="checkbox" name="selected_phones[]" value="<?php echo esc_attr($m->telefone_normalizado); ?>" class="li-wa-cb" onchange="liUpdateSelectedWaCount()">
+                                        </td>
+                                        <td>#<?php echo esc_html($m->id); ?></td>
+                                        <td style="font-size: 12px; color: #64748b;">
+                                            <?php echo esc_html(date_i18n('d/m/Y H:i', strtotime($m->created_at))); ?>
+                                        </td>
+                                        <td>
+                                            <div style="font-weight: 600;">
+                                                📞 <?php echo esc_html(PhoneNormalizer::format_display($m->telefone_normalizado)); ?>
+                                            </div>
+                                            <?php if (!empty($m->lead_id)): ?>
+                                                <div style="font-size: 12px; color: #0284c7; margin-top: 2px;">
+                                                    <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads&s=' . urlencode($m->telefone_normalizado))); ?>">
+                                                        🔗 Lead #<?php echo esc_html($m->lead_id); ?> (<?php echo esc_html($m->lead_nome ?: 'Ver lead'); ?>)
+                                                    </a>
+                                                </div>
+                                            <?php else: ?>
+                                                <span style="font-size: 11px; color: #94a3b8;">Lead avulso</span>
+                                            <?php endif; ?>
+                                            <?php if (!empty($m->polo)): ?>
+                                                <div style="margin-top: 4px;">
+                                                    <span class="li-badge" style="background: #eff6ff; color: #1d4ed8; font-size: 11px; border: 1px solid #bfdbfe;">
+                                                        🏢 <?php echo esc_html($m->polo); ?>
+                                                    </span>
+                                                </div>
+                                            <?php endif; ?>
+                                        </td>
+                                        <td>
+                                            <span style="font-size: 13px; color: #1e293b;"><?php echo esc_html($m->conteudo); ?></span>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <?php 
+                                            $tot_msgs = !empty($m->mensagens_recebidas) ? (int) $m->mensagens_recebidas : 1; 
+                                            ?>
+                                            <span class="li-badge li-status-cinza" style="font-weight: 600;">
+                                                💬 <?php echo esc_html($tot_msgs); ?> <?php echo $tot_msgs === 1 ? 'mensagem' : 'mensagens'; ?>
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span class="li-badge <?php echo (!empty($m->lead_whatsapp_status) && $m->lead_whatsapp_status === 'conversando') || $m->status_entrega === 'received' ? 'li-status-qualificado' : 'li-status-cinza'; ?>">
+                                                <?php echo esc_html(ucfirst($m->lead_whatsapp_status ?: $m->status_entrega ?: 'Ativo')); ?>
+                                            </span>
+                                        </td>
+                                        <td style="text-align: center;">
+                                            <button type="button" class="button button-small" style="color: #dc2626; border-color: #fca5a5; background: #fff5f5; font-size: 11px; padding: 2px 10px; height: 26px; line-height: 22px;" onclick="liConfirmDeleteSingleWa('<?php echo esc_js($m->telefone_normalizado); ?>', '<?php echo esc_js(!empty($m->lead_id) ? (int)$m->lead_id : 0); ?>')" title="Apagar este contato do WhatsApp">
+                                                🗑️ Apagar
+                                            </button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </form>
+
+                <!-- FORMULÁRIO OCULTO PARA EXCLUSÃO INDIVIDUAL -->
+                <form method="post" action="" id="liSingleDeleteWaForm" style="display: none;">
+                    <?php wp_nonce_field('li_whatsapp_delete_verify', 'li_nonce'); ?>
+                    <input type="hidden" name="li_delete_single_whatsapp" value="1">
+                    <input type="hidden" name="delete_phone" id="liSingleDeletePhone" value="">
+                    <input type="hidden" name="delete_lead_too" id="liSingleDeleteLeadToo" value="0">
+                </form>
             </div>
 
             <!-- GUIA PASSO A PASSO OFICIAL DA META -->
@@ -435,6 +536,53 @@ class WhatsAppController {
                 </div>
             </div>
         </div>
+
+        <script>
+        function liToggleAllWa(master) {
+            var cbs = document.querySelectorAll('.li-wa-cb');
+            cbs.forEach(function(cb) {
+                cb.checked = master.checked;
+            });
+            liUpdateSelectedWaCount();
+        }
+
+        function liUpdateSelectedWaCount() {
+            var selected = document.querySelectorAll('.li-wa-cb:checked').length;
+            var countEl = document.getElementById('liCountSelectedWa');
+            if (countEl) {
+                countEl.textContent = selected;
+            }
+        }
+
+        function liConfirmBulkDeleteWa() {
+            var selected = document.querySelectorAll('.li-wa-cb:checked').length;
+            if (selected === 0) {
+                alert('Selecione ao menos um contato na tabela do WhatsApp para apagar.');
+                return false;
+            }
+            return confirm('Deseja realmente apagar o histórico de ' + selected + ' contato(s) do WhatsApp?');
+        }
+
+        function liConfirmDeleteSingleWa(phone, leadId) {
+            if (!phone) return;
+            var msg = 'Deseja apagar o histórico de WhatsApp deste número?\n\nTelefone: ' + phone;
+            if (leadId && leadId > 0) {
+                msg += '\n(Vinculado ao Lead #' + leadId + ')';
+            }
+            if (!confirm(msg)) {
+                return;
+            }
+
+            var alsoLead = false;
+            if (leadId && leadId > 0) {
+                alsoLead = confirm('Deseja também APAGAR O LEAD #' + leadId + ' do cadastro geral de Leads?\n\n[OK] = Apagar Mensagens E o Lead do CRM\n[Cancelar] = Apagar APENAS as mensagens do WhatsApp');
+            }
+
+            document.getElementById('liSingleDeletePhone').value = phone;
+            document.getElementById('liSingleDeleteLeadToo').value = alsoLead ? '1' : '0';
+            document.getElementById('liSingleDeleteWaForm').submit();
+        }
+        </script>
         <?php
     }
 }

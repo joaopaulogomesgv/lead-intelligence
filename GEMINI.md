@@ -10,3 +10,4 @@ Consulte o arquivo [AGENTS.md](file:///c:/Users/joao_/OneDrive/Documentos/Plugin
 5. **Telefones**: Normalização via `\LeadIntelligence\PhoneNormalizer::normalize()` (+55 DDD 9 dígitos).
 6. **Meta Graph API**: Versão padrão `v26.0`.
 7. **Meta Conversions API**: Hash SHA-256 em dados sensíveis e fila assíncrona.
+8. **Proteção Contra Erro Crítico do WordPress (Zero Timeout)**: `DbSchema::maybe_update()` DEVE ser ultrarrápido (apenas `create_tables()` com `dbDelta`). NUNCA executar loops de enriquecimento em lote, recalibrações ou queries pesadas dentro de requisições HTTP (evita timeout fatal de 30s do PHP). Crons NUNCA devem ser agendados a cada pageview.

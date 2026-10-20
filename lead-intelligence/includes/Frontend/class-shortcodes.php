@@ -80,7 +80,7 @@ class Shortcodes {
             'capability'           => 'manage_options',
             'theme'                => 'light',
             'full_width'           => 'false',
-            'periodo'              => '30d',
+            'periodo'              => 'today',
             'canal'                => '',
             'show_header'          => 'true',
             'show_import'          => 'false',

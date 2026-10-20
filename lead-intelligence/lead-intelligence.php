@@ -3,7 +3,7 @@
  * Plugin Name: Lead Intelligence
  * Plugin URI: https://github.com/lead-intelligence
  * Description: Central própria de inteligência e qualificação de leads Meta Ads, Elementor Pro e WhatsApp Cloud API.
- * Version: 1.9.8
+ * Version: 2.3.1
  * Author: Lead Intelligence Team
  * Author URI: https://github.com/lead-intelligence
  * Text Domain: lead-intelligence
@@ -17,11 +17,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('LEAD_INTELLIGENCE_VERSION', '1.9.8');
+define('LEAD_INTELLIGENCE_VERSION', '2.3.1');
 define('LEAD_INTELLIGENCE_PLUGIN_FILE', __FILE__);
 define('LEAD_INTELLIGENCE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('LEAD_INTELLIGENCE_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('LEAD_INTELLIGENCE_DB_VERSION', '1.0.5');
+define('LEAD_INTELLIGENCE_DB_VERSION', '1.0.9');
 
 // Autoloader
 require_once LEAD_INTELLIGENCE_PLUGIN_DIR . 'includes/class-autoloader.php';
@@ -32,6 +32,7 @@ require_once LEAD_INTELLIGENCE_PLUGIN_DIR . 'includes/class-autoloader.php';
  */
 function lead_intelligence_activate() {
     \LeadIntelligence\Activator::activate();
+    \LeadIntelligence\GoogleAds\GoogleAdsSync::schedule_cron();
 }
 register_activation_hook(__FILE__, 'lead_intelligence_activate');
 
@@ -62,11 +63,17 @@ function lead_intelligence_init() {
     // Inicializa Webhook próprio da Meta WhatsApp Cloud API
     \LeadIntelligence\WhatsApp\MetaWebhook::init();
 
+    // Inicializa Webhook Inbound & Relay (repassador para n8n)
+    \LeadIntelligence\Webhooks\InboundRelay::init();
+
     // Inicializa fila assíncrona da Meta Conversions API
     \LeadIntelligence\MetaCapi\CapiQueue::init();
 
     // Inicializa sincronização e OAuth com Google Sheets API v4
     \LeadIntelligence\Qualification\GoogleSheetsSync::init();
+
+    // Inicializa cliente e sincronização de custos da Google Ads API
+    \LeadIntelligence\GoogleAds\GoogleAdsSync::init();
 
     // Inicializa shortcodes para Frontend e Page Builders (Elementor, etc.)
     \LeadIntelligence\Frontend\Shortcodes::init();

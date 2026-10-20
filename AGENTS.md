@@ -52,6 +52,13 @@ Este documento define as regras, restrições e conhecimento arquitetural obriga
      3. Constante `LEAD_INTELLIGENCE_DB_VERSION` (caso haja mudança estrutural de banco de dados).
    - O WordPress exige incremento de versão para registrar corretamente a atualização do plugin e evitar conflitos de cache e banco.
 
+7. **Proteção Contra Timeout e Erro Crítico do WordPress (`maybe_update` Ultrarrápido)**:
+   - O método `\LeadIntelligence\Database\DbSchema::maybe_update()` roda no hook `plugins_loaded` a cada requisição HTTP quando a versão do banco é incrementada.
+   - **NUNCA** execute rotinas de processamento pesado, varreduras retroativas de banco, loops de enriquecimento em lote ou queries UPDATE/DELETE sem índice (`retro_enrich_*`, `unify_*`, `recalibrate_*`) dentro do `maybe_update()` ou durante requisições de página.
+   - `maybe_update()` deve executar **estritamente** `self::create_tables()` (usando `dbDelta()` para ajustar tabelas em milissegundos) e salvar a opção `lead_intelligence_db_version`.
+   - Rotinas de recálculo ou enriquecimento retroativo de dados devem ser acionadas exclusivamente por ação manual no painel com paginação/lotes AJAX ou via WP-Cron assíncrono.
+   - **NUNCA** chame `wp_schedule_event()` ou `schedule_cron()` dentro de `lead_intelligence_init()` ou hooks que rodam a cada pageview. Agende apenas no hook de ativação (`Activator::activate()`) ou no salvamento de configurações.
+
 ---
 
 ## 3. Estrutura de Arquivos e Responsabilidades

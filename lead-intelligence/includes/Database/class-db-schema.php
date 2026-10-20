@@ -35,6 +35,11 @@ class DbSchema {
         return $wpdb->prefix . 'li_qualification_imports';
     }
 
+    public static function get_costs_table() {
+        global $wpdb;
+        return $wpdb->prefix . 'li_campaign_costs';
+    }
+
     /**
      * Cria ou atualiza as tabelas do banco de dados
      */
@@ -49,6 +54,7 @@ class DbSchema {
         $whatsapp_table = self::get_whatsapp_table();
         $logs_table = self::get_logs_table();
         $imports_table = self::get_imports_table();
+        $costs_table = self::get_costs_table();
 
         // Tabela Principal de Leads
         $sql_leads = "CREATE TABLE {$leads_table} (
@@ -86,6 +92,7 @@ class DbSchema {
             adset_name varchar(255) DEFAULT '',
             ad_name varchar(255) DEFAULT '',
             qualificacao_status varchar(50) DEFAULT 'pendente',
+            etapa_funil varchar(100) DEFAULT '',
             qualificacao_data datetime DEFAULT NULL,
             qualificacao_origem varchar(100) DEFAULT '',
             qualificacao_dados longtext DEFAULT NULL,
@@ -113,6 +120,7 @@ class DbSchema {
             KEY telefone_normalizado (telefone_normalizado),
             KEY email (email(191)),
             KEY qualificacao_status (qualificacao_status),
+            KEY etapa_funil (etapa_funil(50)),
             KEY utm_campaign (utm_campaign(191)),
             KEY polo (polo(100)),
             KEY created_at (created_at)
@@ -184,25 +192,45 @@ class DbSchema {
             PRIMARY KEY  (id)
         ) {$charset_collate};";
 
+        // Tabela de Custos e Investimentos em Campanhas (Google Ads e Meta Ads)
+        $sql_costs = "CREATE TABLE {$costs_table} (
+            id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+            canal varchar(50) NOT NULL DEFAULT 'google_ads',
+            campaign_id varchar(100) NOT NULL DEFAULT '',
+            campaign_name varchar(255) NOT NULL DEFAULT '',
+            date date NOT NULL,
+            cost decimal(12,2) NOT NULL DEFAULT 0.00,
+            clicks int(11) NOT NULL DEFAULT 0,
+            impressions int(11) NOT NULL DEFAULT 0,
+            cpc decimal(10,2) NOT NULL DEFAULT 0.00,
+            ctr decimal(5,2) NOT NULL DEFAULT 0.00,
+            conversions decimal(10,2) NOT NULL DEFAULT 0.00,
+            synced_at datetime DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY  (id),
+            UNIQUE KEY canal_camp_date (canal, campaign_id, date),
+            KEY canal (canal),
+            KEY date (date),
+            KEY campaign_name (campaign_name)
+        ) {$charset_collate};";
+
         dbDelta($sql_leads);
         dbDelta($sql_history);
         dbDelta($sql_whatsapp);
         dbDelta($sql_logs);
         dbDelta($sql_imports);
+        dbDelta($sql_costs);
 
         update_option('lead_intelligence_db_version', LEAD_INTELLIGENCE_DB_VERSION);
     }
 
     /**
-     * Verifica se o banco precisa ser atualizado
+     * Verifica se o banco precisa ser atualizado (garante criação/ajuste seguro de tabelas sem travar o WordPress)
      */
     public static function maybe_update() {
         $installed_ver = get_option('lead_intelligence_db_version', '0.0.0');
         if (version_compare($installed_ver, LEAD_INTELLIGENCE_DB_VERSION, '<')) {
             self::create_tables();
-            \LeadIntelligence\WhatsApp\MessageHandler::retro_enrich_leads();
-            self::retro_enrich_google_leads();
-            self::unify_and_enrich_leads_by_phone();
+            update_option('lead_intelligence_db_version', LEAD_INTELLIGENCE_DB_VERSION);
         }
     }
 
@@ -283,14 +311,26 @@ class DbSchema {
                         }
                     }
 
-                    // Herda qualificação se o outro tiver
-                    if ($master->qualificacao_status !== 'qualificado' && $other->qualificacao_status === 'qualificado') {
+                    // Herda etapa do funil da planilha se informada
+                    if (!empty($other->etapa_funil) && $other->etapa_funil !== 'Formulário Enviado') {
+                        $updates['etapa_funil'] = $other->etapa_funil;
+                        $master->etapa_funil    = $other->etapa_funil;
+                    }
+
+                    // Herda qualificação ou desqualificação se o outro tiver
+                    if ($other->qualificacao_status === 'qualificado' && $master->qualificacao_status !== 'qualificado') {
                         $updates['qualificacao_status'] = 'qualificado';
                         $updates['qualificacao_data']   = $other->qualificacao_data;
                         $updates['qualificacao_origem'] = $other->qualificacao_origem;
                         $updates['qualificacao_dados']  = $other->qualificacao_dados;
                         $master->qualificacao_status    = 'qualificado';
                         $master->qualificacao_data      = $other->qualificacao_data;
+                    } elseif ($other->qualificacao_status === 'nao_qualificado' && $master->qualificacao_status === 'pendente') {
+                        $updates['qualificacao_status'] = 'nao_qualificado';
+                        $updates['qualificacao_data']   = $other->qualificacao_data;
+                        $updates['qualificacao_origem'] = $other->qualificacao_origem;
+                        $updates['qualificacao_dados']  = $other->qualificacao_dados;
+                        $master->qualificacao_status    = 'nao_qualificado';
                     }
 
                     // Herda UTMs ricas se o master estiver sem ou com genérico ('google', 'meta', 'planilha')
@@ -403,5 +443,67 @@ class DbSchema {
                 $wpdb->update($leads_table, $updates, ['id' => $l->id]);
             }
         }
+    }
+
+    /**
+     * Retro-preenche a coluna etapa_funil para leads existentes no banco
+     */
+    public static function retro_enrich_etapa_funil() {
+        global $wpdb;
+        $table = self::get_leads_table();
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Matrícula Realizada' WHERE qualificacao_status = 'qualificado' AND (etapa_funil IS NULL OR etapa_funil = '')");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Desqualificado' WHERE qualificacao_status = 'nao_qualificado' AND (etapa_funil IS NULL OR etapa_funil = '')");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Formulário Enviado' WHERE (qualificacao_status = 'pendente' OR qualificacao_status IS NULL OR qualificacao_status = '') AND (etapa_funil IS NULL OR etapa_funil = '')");
+    }
+
+    /**
+     * Recalibra os status de qualificação com base estrita na etapa do funil e termos oficiais
+     * Garante que APENAS vendas reais / matrículas confirmadas sejam marcadas como 'qualificado'
+     */
+    public static function recalibrate_funnel_and_qualification() {
+        global $wpdb;
+        $table = self::get_leads_table();
+
+        // 1. Restaura dados originais da planilha armazenados no JSON de qualificacao_dados (se houver)
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Venda', qualificacao_status = 'qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Venda\"%' OR qualificacao_dados LIKE '%\"status\":\"Venda\"%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Não convertido', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%Não convertido%' OR qualificacao_dados LIKE '%Nao convertido%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Desqualificado', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\":\"Perda\"%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Lead Atribuído', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Lead Atribuído%' OR qualificacao_dados LIKE '%Lead Atribuido%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Analisando/Negociação', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Analisando/Negociação%' OR qualificacao_dados LIKE '%Analisando%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Remarketing', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Remarketing%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Tentativa de Contato', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Tentativa de Contato%'");
+
+        // 2. Não qualificados: descartes, perdas, não convertidos
+        $wpdb->query(
+            "UPDATE {$table} 
+             SET qualificacao_status = 'nao_qualificado' 
+             WHERE etapa_funil LIKE '%não convertido%' 
+                OR etapa_funil LIKE '%nao convertido%' 
+                OR etapa_funil LIKE '%desqualificad%' 
+                OR etapa_funil LIKE '%perda%'
+                OR etapa_funil LIKE '%recusad%'"
+        );
+
+        // 3. Pendentes: etapas de atendimento, lead atribuído, remarketing, negociação
+        // Qualquer etapa intermediária que NÃO seja Venda ou Matrícula é PENDENTE
+        $wpdb->query(
+            "UPDATE {$table} 
+             SET qualificacao_status = 'pendente' 
+             WHERE etapa_funil LIKE '%atribu%' 
+                OR etapa_funil LIKE '%tentativa%' 
+                OR etapa_funil LIKE '%remarketing%' 
+                OR etapa_funil LIKE '%analis%' 
+                OR etapa_funil LIKE '%negocia%'
+                OR etapa_funil = 'Formulário Enviado'
+                OR (qualificacao_status = 'qualificado' AND etapa_funil NOT LIKE '%venda%' AND etapa_funil NOT LIKE '%matr%')"
+        );
+
+        // 4. Qualificados: ESTRITAMENTE Vendas e Matrículas confirmadas
+        $wpdb->query(
+            "UPDATE {$table} 
+             SET qualificacao_status = 'qualificado' 
+             WHERE etapa_funil LIKE '%venda%' 
+                OR etapa_funil LIKE '%matr%'"
+        );
     }
 }
