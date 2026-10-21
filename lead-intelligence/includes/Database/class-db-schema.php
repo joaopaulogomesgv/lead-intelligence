@@ -582,20 +582,11 @@ class DbSchema {
         global $wpdb;
         $table = self::get_leads_table();
 
-        // 1. Restaura dados originais da planilha armazenados no JSON de qualificacao_dados (se houver)
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Venda', qualificacao_status = 'qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Venda\"%' OR qualificacao_dados LIKE '%\"status\":\"Venda\"%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Não convertido', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%Não convertido%' OR qualificacao_dados LIKE '%Nao convertido%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Desqualificado', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\":\"Perda\"%' OR qualificacao_dados LIKE '%\"etapa_funil\": \"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\": \"Perda\"%' OR qualificacao_dados LIKE '%\"Perda\"%' OR qualificacao_dados LIKE '%\"Desqualificado\"%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Lead Atribuído', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Lead Atribuído%' OR qualificacao_dados LIKE '%Lead Atribuido%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Analisando/Negociação', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Analisando/Negociação%' OR qualificacao_dados LIKE '%Analisando%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Remarketing', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Remarketing%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Tentativa de Contato', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Tentativa de Contato%'");
-
-        // 2. Não qualificados: descartes, perdas, desqualificados, não convertidos
+        // 1. Não qualificados: descartes, perdas, desqualificados, não convertidos
         $wpdb->query(
             "UPDATE {$table} 
              SET qualificacao_status = 'nao_qualificado' 
-             WHERE etapa_funil LIKE '%não convertido%' 
+             WHERE (etapa_funil LIKE '%não convertido%' 
                 OR etapa_funil LIKE '%nao convertido%' 
                 OR etapa_funil LIKE '%desqualificad%' 
                 OR etapa_funil LIKE '%perda%'
@@ -605,25 +596,26 @@ class DbSchema {
                 OR etapa_funil LIKE '%sem perfil%'
                 OR etapa_funil LIKE '%invalido%'
                 OR etapa_funil LIKE '%inválido%'
-                OR etapa_funil LIKE '%descarte%'"
+                OR etapa_funil LIKE '%descarte%')
+                AND (qualificacao_status != 'nao_qualificado' OR qualificacao_status IS NULL)"
         );
 
-        // 3. Qualificados: ESTRITAMENTE Vendas, Matrículas e Conversões confirmadas
+        // 2. Qualificados: Vendas, Matrículas e Conversões confirmadas
         $wpdb->query(
             "UPDATE {$table} 
              SET qualificacao_status = 'qualificado' 
-             WHERE etapa_funil LIKE '%venda%' 
+             WHERE (etapa_funil LIKE '%venda%' 
                 OR etapa_funil LIKE '%vendid%' 
                 OR etapa_funil LIKE '%matr%'
                 OR etapa_funil LIKE '%aluno%'
                 OR etapa_funil LIKE '%fechado%'
                 OR etapa_funil LIKE '%ganho%'
                 OR etapa_funil LIKE '%pago%'
-                OR etapa_funil LIKE '%aprovad%'"
+                OR etapa_funil LIKE '%aprovad%')
+                AND (qualificacao_status != 'qualificado' OR qualificacao_status IS NULL)"
         );
 
-        // 4. Pendentes: etapas intermediárias de pipeline de atendimento
-        // ATENÇÃO: NUNCA sobrescreve leads que já possuem qualificacao_status = 'nao_qualificado' ou 'qualificado'
+        // 3. Pendentes: etapas intermediárias de pipeline de atendimento
         $wpdb->query(
             "UPDATE {$table} 
              SET qualificacao_status = 'pendente' 
@@ -633,12 +625,13 @@ class DbSchema {
                 OR etapa_funil LIKE '%remarketing%' 
                 OR etapa_funil LIKE '%analis%' 
                 OR etapa_funil LIKE '%negocia%'
-                OR (etapa_funil = 'Formulário Enviado' AND (qualificacao_status IS NULL OR qualificacao_status = '' OR qualificacao_status = 'pendente'))
+                OR (etapa_funil = 'Formulário Enviado' AND (qualificacao_status IS NULL OR qualificacao_status = ''))
              )
              AND etapa_funil NOT LIKE '%desqualificad%'
              AND etapa_funil NOT LIKE '%perda%'
              AND etapa_funil NOT LIKE '%venda%'
-             AND etapa_funil NOT LIKE '%matr%'"
+             AND etapa_funil NOT LIKE '%matr%'
+             AND (qualificacao_status != 'pendente' OR qualificacao_status IS NULL)"
         );
     }
 }

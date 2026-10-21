@@ -187,8 +187,8 @@ class Matcher {
                 'canal'    => $channel,
             ]);
 
-            // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado
-            if ($qualificacao_status === 'qualificado') {
+            // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado (apenas canal Meta Ads)
+            if ($qualificacao_status === 'qualificado' && $channel === 'meta_ads') {
                 CapiQueue::enqueue_qualified($lead_id);
             }
 
@@ -251,8 +251,8 @@ class Matcher {
             'created_at'     => current_time('mysql'),
         ]);
 
-        // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado
-        if ($qualificacao_status === 'qualificado') {
+        // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado (apenas canal Meta Ads)
+        if ($qualificacao_status === 'qualificado' && $channel === 'meta_ads') {
             CapiQueue::enqueue_qualified($new_id);
         }
 

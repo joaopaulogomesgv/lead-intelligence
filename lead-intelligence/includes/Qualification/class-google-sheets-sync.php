@@ -419,9 +419,6 @@ class GoogleSheetsSync {
                 'status'                => 'concluido',
             ], ['id' => $import_id]);
 
-            // Recalibra funil e status de qualificação de forma direta e rápida
-            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
-
             $summary = [
                 'status'     => 'concluido',
                 'channel'    => $channel,

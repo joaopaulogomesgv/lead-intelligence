@@ -495,22 +495,36 @@ class ImportController {
         $redirect_uri       = GoogleSheetsClient::get_redirect_uri($redirect_mode);
         $auth_url = !empty($google_auth['client_id']) ? GoogleSheetsClient::get_auth_url() : '';
 
-        // Se estiver conectado e tiver planilha informada, busca abas e cabeçalhos dinamicamente
+        // Se estiver conectado e tiver planilha informada, busca abas e cabeçalhos dinamicamente (com cache transient de 10 min)
         $detected_tabs = [];
         $sheet_headers = [];
         if ($is_google_connected && !empty($google_sync_settings['spreadsheet_id'])) {
-            $tabs_result = GoogleSheetsClient::get_spreadsheet_tabs($google_sync_settings['spreadsheet_id']);
-            if (!is_wp_error($tabs_result)) {
-                $detected_tabs = $tabs_result;
+            $cache_prefix = 'li_gs_' . md5($google_sync_settings['spreadsheet_id'] . '_' . ($google_sync_settings['sheet_tab'] ?? ''));
+            $cached_tabs = get_transient($cache_prefix . '_tabs');
+            $cached_headers = get_transient($cache_prefix . '_head');
+
+            if ($cached_tabs !== false && is_array($cached_tabs)) {
+                $detected_tabs = $cached_tabs;
+            } else {
+                $tabs_result = GoogleSheetsClient::get_spreadsheet_tabs($google_sync_settings['spreadsheet_id']);
+                if (!is_wp_error($tabs_result)) {
+                    $detected_tabs = $tabs_result;
+                    set_transient($cache_prefix . '_tabs', $detected_tabs, 600);
+                }
             }
 
-            $sample = GoogleSheetsClient::fetch_sheet_data(
-                $google_sync_settings['spreadsheet_id'],
-                $google_sync_settings['sheet_tab'],
-                2
-            );
-            if (!is_wp_error($sample) && !empty($sample['headers'])) {
-                $sheet_headers = $sample['headers'];
+            if ($cached_headers !== false && is_array($cached_headers)) {
+                $sheet_headers = $cached_headers;
+            } else {
+                $sample = GoogleSheetsClient::fetch_sheet_data(
+                    $google_sync_settings['spreadsheet_id'],
+                    $google_sync_settings['sheet_tab'],
+                    2
+                );
+                if (!is_wp_error($sample) && !empty($sample['headers'])) {
+                    $sheet_headers = $sample['headers'];
+                    set_transient($cache_prefix . '_head', $sheet_headers, 600);
+                }
             }
         }
 

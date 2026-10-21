@@ -40,13 +40,9 @@ class LeadRepository {
 
         $row = $wpdb->get_row($query);
 
-        // Auto-cura: se encontrou o lead mas o telefone_normalizado estava em branco, atualiza
+        // Auto-cura em memória: garante telefone_normalizado disponível
         if ($row && empty($row->telefone_normalizado)) {
-            $norm = PhoneNormalizer::normalize($row->telefone ?: $phone);
-            if (!empty($norm)) {
-                $wpdb->update($table, ['telefone_normalizado' => $norm], ['id' => $row->id]);
-                $row->telefone_normalizado = $norm;
-            }
+            $row->telefone_normalizado = PhoneNormalizer::normalize($row->telefone ?: $phone);
         }
 
         return $row;

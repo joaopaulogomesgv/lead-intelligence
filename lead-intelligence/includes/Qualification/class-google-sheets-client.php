@@ -502,12 +502,14 @@ class GoogleSheetsClient {
             return new \WP_Error('invalid_id', 'ID da planilha do Google inválido.');
         }
 
-        // Se o range for apenas o nome da aba ou vazio, formata para abranger todas as colunas
+        // Se o range for apenas o nome da aba ou vazio, formata para abranger apenas as linhas solicitadas
         $clean_range = trim((string) $range);
+        $row_slice = ($max_rows > 0) ? ('1:' . ($max_rows + 1)) : '';
         if (empty($clean_range)) {
-            $clean_range = 'A:ZZ';
+            $clean_range = $row_slice ? ("A1:ZZ" . ($max_rows + 1)) : 'A:ZZ';
         } elseif (strpos($clean_range, '!') === false) {
-            $clean_range = "'" . str_replace("'", "''", $clean_range) . "'!A:ZZ";
+            $escaped = "'" . str_replace("'", "''", $clean_range) . "'";
+            $clean_range = $row_slice ? ("{$escaped}!A1:ZZ" . ($max_rows + 1)) : "{$escaped}!A:ZZ";
         }
 
         $url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values/' . rawurlencode($clean_range) . '?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE';
