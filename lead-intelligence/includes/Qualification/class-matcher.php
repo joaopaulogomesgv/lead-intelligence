@@ -63,14 +63,31 @@ class Matcher {
             ];
         }
 
-        // Determina o status da qualificação priorizando a etapa do funil (se informada)
-        $default_status = !empty($mapping['default_status']) ? $mapping['default_status'] : 'qualificado';
-        if (!empty($raw_etapa)) {
-            $qualificacao_status = self::normalize_status($raw_etapa);
-        } elseif (!empty($raw_status)) {
-            $qualificacao_status = self::normalize_status($raw_status);
+        // Determina o status da qualificação avaliando tanto a etapa do funil quanto a coluna de status
+        $default_status     = !empty($mapping['default_status']) ? $mapping['default_status'] : 'qualificado';
+        $status_from_etapa  = !empty($raw_etapa) ? self::normalize_status($raw_etapa) : '';
+        $status_from_status = !empty($raw_status) ? self::normalize_status($raw_status) : '';
+
+        // Regra de prioridade:
+        // 1. Se qualquer campo indicar qualificado/venda confirmada -> qualificado
+        // 2. Se qualquer campo indicar perda/desqualificado -> nao_qualificado
+        // 3. Fallback para etapa informada, status informado ou padrão configurado
+        if ($status_from_etapa === 'qualificado' || $status_from_status === 'qualificado') {
+            $qualificacao_status = 'qualificado';
+        } elseif ($status_from_etapa === 'nao_qualificado' || $status_from_status === 'nao_qualificado') {
+            $qualificacao_status = 'nao_qualificado';
+        } elseif (!empty($status_from_etapa)) {
+            $qualificacao_status = $status_from_etapa;
+        } elseif (!empty($status_from_status)) {
+            $qualificacao_status = $status_from_status;
         } else {
             $qualificacao_status = $default_status;
+        }
+
+        // Define a etapa do funil preservando o termo real da planilha (ex: 'Desqualificado', 'Perda', 'Tentativa de Contato')
+        $final_etapa = !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : (!empty($raw_status) ? sanitize_text_field($raw_status) : '');
+        if (empty($final_etapa)) {
+            $final_etapa = ($qualificacao_status === 'qualificado') ? 'Matrícula Realizada' : (($qualificacao_status === 'nao_qualificado') ? 'Desqualificado' : 'Formulário Enviado');
         }
 
         $qualificacao_data = !empty($raw_date) ? self::parse_date($raw_date) : current_time('mysql');
@@ -96,7 +113,7 @@ class Matcher {
 
             $update_data = [
                 'qualificacao_status' => $qualificacao_status,
-                'etapa_funil'         => !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : ($qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : 'Formulário Enviado'),
+                'etapa_funil'         => $final_etapa,
                 'qualificacao_data'   => $qualificacao_data,
                 'qualificacao_origem' => 'planilha: ' . sanitize_text_field($filename),
                 'qualificacao_dados'  => $json_dados,
@@ -210,7 +227,7 @@ class Matcher {
             'formulario_nome'      => $form_label,
             'pagina_origem'        => 'Planilha: ' . sanitize_text_field($filename),
             'qualificacao_status'  => $qualificacao_status,
-            'etapa_funil'          => !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : ($qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : 'Formulário Enviado'),
+            'etapa_funil'          => $final_etapa,
             'qualificacao_data'    => $qualificacao_data,
             'qualificacao_origem'  => 'planilha: ' . sanitize_text_field($filename),
             'qualificacao_dados'   => $json_dados,
@@ -250,28 +267,44 @@ class Matcher {
      * Extrai valor da coluna mapeada com auto-detecção resiliente
      */
     private static function get_mapped_value($row_data, $mapping, $key) {
-        // 1. Tenta pelo mapeamento explícito
+        // 1. Tenta pelo mapeamento explícito com tolerância a maiúsculas/minúsculas, espaços e preposições (do/da/de)
         if (!empty($mapping[$key])) {
             $col_name = $mapping[$key];
             if (isset($row_data[$col_name]) && trim((string) $row_data[$col_name]) !== '') {
                 return trim((string) $row_data[$col_name]);
             }
+            $clean_target = str_replace(['-', ' ', '_'], '', strtolower($col_name));
+            $target_simple = str_replace(['do', 'da', 'de', 'para', 'em'], '', $clean_target);
+
+            foreach ($row_data as $col => $val) {
+                $raw_c = preg_replace('/^\xEF\xBB\xBF/', '', (string) $col);
+                $clean_col = str_replace(['-', ' ', '_'], '', strtolower(trim($raw_c)));
+                $col_simple = str_replace(['do', 'da', 'de', 'para', 'em'], '', $clean_col);
+
+                if (
+                    ($clean_col === $clean_target || $col_simple === $target_simple || strpos($clean_col, $clean_target) !== false || strpos($clean_target, $clean_col) !== false)
+                    && trim((string) $val) !== ''
+                ) {
+                    return trim((string) $val);
+                }
+            }
         }
 
         // 2. Auto-detecção inteligente de colunas comuns da planilha
         $alias_map = [
-            'etapa'    => ['etapa_funil', 'etapafunil', 'etapa', 'fase', 'funil', 'estagio', 'situacao_lead'],
-            'telefone' => ['telefone', 'whatsapp', 'celular', 'phone', 'tel', 'contato'],
-            'email'    => ['email', 'e-mail', 'e_mail'],
-            'nome'     => ['nome', 'name', 'cliente', 'aluno', 'lead_nome'],
-            'status'   => ['status', 'situacao', 'estado'],
-            'data'     => ['datacriação', 'datacriacao', 'data_criacao', 'data', 'date', 'data_cadastro'],
+            'etapa'    => ['etapa_funil', 'etapadofunil', 'etapafunil', 'etapa', 'fase', 'funil', 'estagio', 'situacao_lead', 'situacao', 'motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'desqualificacao', 'substatus', 'desfecho', 'resultado', 'motivo_da_perda', 'motivodaperda', 'fase_do_lead', 'fasedolead', 'tentativa_de_contato', 'tentativadecontato'],
+            'telefone' => ['telefone', 'whatsapp', 'celular', 'phone', 'tel', 'contato', 'fone', 'numero'],
+            'email'    => ['email', 'e-mail', 'e_mail', 'correio_eletronico'],
+            'nome'     => ['nome', 'name', 'cliente', 'aluno', 'lead_nome', 'nome_completo', 'nomecompleto'],
+            'status'   => ['status', 'situacao', 'estado', 'perda', 'qualificacao', 'fase', 'fasedolead', 'fase_do_lead', 'status_lead', 'statusdolead', 'desfecho', 'resultado'],
+            'data'     => ['datacriação', 'datacriacao', 'data_criacao', 'data', 'date', 'data_cadastro', 'datamodificacao', 'data_modificacao', 'data_do_lead', 'datadolead'],
             'gclid'    => ['gclid', 'google_click_id', 'google_click'],
             'fbclid'   => ['fbclid', 'meta_click_id', 'fb_click'],
             'ad_id'    => ['adid', 'ad_id', 'id_anuncio', 'anuncio_id'],
-            'campanha' => ['campanha', 'campaign', 'utm_campaign', 'nome_campanha'],
+            'campanha' => ['campanha', 'campaign', 'utm_campaign', 'nome_campanha', 'anuncio'],
             'curso'    => ['curso', 'tipo_curso', 'modalidade'],
             'area'     => ['instancia', 'polo', 'unidade', 'area', 'area_interesse'],
+            'motivo'   => ['motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'justificativa', 'motivo_da_perda', 'motivodaperda'],
         ];
 
         $candidates = $alias_map[$key] ?? [];
@@ -279,10 +312,12 @@ class Matcher {
             foreach ($row_data as $col => $val) {
                 $clean_col = strtolower(trim(preg_replace('/^\xEF\xBB\xBF/', '', (string) $col)));
                 $clean_col = str_replace(['-', ' ', '_'], '', $clean_col);
+                $col_simple = str_replace(['do', 'da', 'de', 'para', 'em'], '', $clean_col);
 
                 foreach ($candidates as $cand) {
                     $clean_cand = str_replace(['-', ' ', '_'], '', strtolower($cand));
-                    if ($clean_col === $clean_cand || strpos($clean_col, $clean_cand) !== false) {
+                    $cand_simple = str_replace(['do', 'da', 'de', 'para', 'em'], '', $clean_cand);
+                    if ($clean_col === $clean_cand || $col_simple === $cand_simple || strpos($clean_col, $clean_cand) !== false || strpos($clean_cand, $clean_col) !== false) {
                         $val_str = trim((string) $val);
                         if ($val_str !== '') {
                             return $val_str;
@@ -302,10 +337,10 @@ class Matcher {
         $clean = mb_strtolower(trim((string) $status_str), 'UTF-8');
         $unaccented = function_exists('remove_accents') ? remove_accents($clean) : $clean;
 
-        // 1. Desqualificados / Perdas / Não convertidos
+        // 1. Desqualificados / Perdas / Não convertidos / Sem Interesse
         if (
-            preg_match('/(desqualificad|nao[ _-]?convertid|não[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|reprovad|sem[ _-]?perfil)/iu', $clean) ||
-            preg_match('/(desqualificad|nao[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|reprovad|sem[ _-]?perfil)/i', $unaccented)
+            preg_match('/(desqualificad|nao[ _-]?convertid|não[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|inválido|reprovad|sem[ _-]?perfil|sem[ _-]?interesse|descarte|desistiu)/iu', $clean) ||
+            preg_match('/(desqualificad|nao[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|reprovad|sem[ _-]?perfil|sem[ _-]?interesse|descarte|desistiu)/i', $unaccented)
         ) {
             return 'nao_qualificado';
         }

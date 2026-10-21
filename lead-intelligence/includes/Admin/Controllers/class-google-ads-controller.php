@@ -143,8 +143,25 @@ class GoogleAdsController {
             $sync_feedback = \LeadIntelligence\GoogleAds\GoogleAdsClient::sync_campaign_costs();
         }
 
+        if (isset($_POST['li_run_google_sync_now']) && check_admin_referer('li_gads_sync_now_verify', 'li_nonce')) {
+            $res = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('google_ads', true);
+            if (is_wp_error($res)) {
+                $sync_feedback = ['success' => false, 'message' => $res->get_error_message()];
+            } else {
+                $sync_feedback = ['success' => true, 'message' => $res['message']];
+            }
+        }
+
+        if (isset($_POST['li_unify_all_leads']) && check_admin_referer('li_gads_unify_verify', 'li_nonce')) {
+            $merged = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+            $sync_feedback = ['success' => true, 'message' => "Unificação concluída! {$merged} registros foram atualizados e enriquecidos com status da planilha e formulários."];
+        }
+
         $settings = \LeadIntelligence\Admin\Settings::get_settings();
         $is_gads_connected = !empty($settings['google_ads_connected']) && !empty($settings['google_ads_refresh_token']);
+        $is_gsheets_connected = \LeadIntelligence\Qualification\GoogleSheetsClient::is_connected();
+        $gsheet_settings = \LeadIntelligence\Qualification\GoogleSheetsSync::get_source_settings('google_ads');
+        $has_gsheet_configured = $is_gsheets_connected && !empty($gsheet_settings['spreadsheet_id']);
 
         // Investimento e Custos do Período
         $investimento = LeadRepository::get_total_cost('google_ads', $date_start, $date_end);
@@ -172,17 +189,33 @@ class GoogleAdsController {
                 </div>
 
                 <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                    <?php if ($is_gads_connected): ?>
+                    <?php if ($has_gsheet_configured): ?>
                         <form method="post" action="" style="display: inline;">
-                            <?php wp_nonce_field('li_gads_channel_sync', 'li_nonce'); ?>
-                            <button type="submit" name="li_sync_gads_channel" value="1" class="button button-primary" style="display: inline-flex; align-items: center; gap: 6px; background: #1a73e8; border-color: #1557b0;">
-                                <span class="dashicons dashicons-update"></span> Sincronizar Gastos API
+                            <?php wp_nonce_field('li_gads_sync_now_verify', 'li_nonce'); ?>
+                            <button type="submit" name="li_run_google_sync_now" value="1" class="button button-primary" style="display: inline-flex; align-items: center; gap: 6px; background: #059669; border-color: #047857;" title="Puxa os status atualizados diretamente da sua planilha Google Sheets">
+                                <span class="dashicons dashicons-update"></span> Sincronizar Google Sheets
                             </button>
                         </form>
                     <?php else: ?>
-                        <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings&tab=google_ads_api')); ?>" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
-                            <span class="dashicons dashicons-admin-generic"></span> Conectar Google Ads API
+                        <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import&tab=google_sheets')); ?>" class="button button-primary" style="display: inline-flex; align-items: center; gap: 6px; background: #059669; border-color: #047857;" title="Conecte ou informe a URL da sua planilha do Google Sheets">
+                            <span class="dashicons dashicons-media-spreadsheet"></span> Conectar Planilha Google
                         </a>
+                    <?php endif; ?>
+
+                    <form method="post" action="" style="display: inline;">
+                        <?php wp_nonce_field('li_gads_unify_verify', 'li_nonce'); ?>
+                        <button type="submit" name="li_unify_all_leads" value="1" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px;" title="Unifica dados cruzados por telefone e e-mail e recalibra status">
+                            <span class="dashicons dashicons-randomize"></span> Unificar com Planilha
+                        </button>
+                    </form>
+
+                    <?php if ($is_gads_connected): ?>
+                        <form method="post" action="" style="display: inline;">
+                            <?php wp_nonce_field('li_gads_channel_sync', 'li_nonce'); ?>
+                            <button type="submit" name="li_sync_gads_channel" value="1" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px;">
+                                <span class="dashicons dashicons-chart-line"></span> Gastos API
+                            </button>
+                        </form>
                     <?php endif; ?>
                 </div>
             </div>
@@ -190,6 +223,14 @@ class GoogleAdsController {
             <?php if ($sync_feedback): ?>
                 <div class="notice <?php echo $sync_feedback['success'] ? 'notice-success' : 'notice-error'; ?> is-dismissible" style="margin-bottom: 20px;">
                     <p><strong><?php echo $sync_feedback['success'] ? '✔' : '❌'; ?></strong> <?php echo esc_html($sync_feedback['message']); ?></p>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($pendentes > 0 && !$has_gsheet_configured): ?>
+                <div class="notice notice-info" style="margin-bottom: 20px; border-left-color: #0284c7; padding: 12px 18px;">
+                    <p style="margin: 0; font-size: 13px; color: #0369a1; line-height: 1.5;">
+                        ℹ️ <strong>Identificação de Qualificação de Leads:</strong> Os leads são capturados em tempo real pelos formulários do Elementor como <code>Formulário Enviado (Pendente)</code>. Para trazer os status comerciais exatos da sua planilha (ex: <em>Perda</em>, <em>Desqualificado</em>, <em>Tentativa de Contato</em>, <em>Venda</em>), conecte o link da sua planilha em <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import&tab=google_sheets')); ?>" style="font-weight: 700; color: #0284c7;">Importar Planilha &rarr; Google Sheets</a> ou faça o cruzamento em <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-import&tab=elementor_cross')); ?>" style="font-weight: 700; color: #0284c7;">Cruzamento Elementor vs Qualificados</a>.
+                    </p>
                 </div>
             <?php endif; ?>
 

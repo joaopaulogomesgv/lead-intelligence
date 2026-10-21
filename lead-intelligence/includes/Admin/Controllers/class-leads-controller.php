@@ -123,6 +123,18 @@ class LeadsController {
             $unify_message = "Unificação concluída com sucesso! {$merged} registros foram mesclados e enriquecidos com as UTMs dos formulários.";
         }
 
+        if (isset($_POST['li_sync_gsheets'])) {
+            check_admin_referer('li_sync_gsheets_verify', 'li_nonce');
+            $res = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('google_ads', true);
+            if (is_wp_error($res)) {
+                $action_message = 'Erro ao sincronizar Google Sheets: ' . $res->get_error_message();
+                $action_type = 'error';
+            } else {
+                $action_message = $res['message'];
+                $action_type = 'success';
+            }
+        }
+
         // Tratamento de Período (Padrão: Hoje)
         $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
         $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
@@ -214,6 +226,19 @@ class LeadsController {
                     <p class="li-subtitle"><?php echo esc_html($page_sub); ?></p>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <?php 
+                    $is_gsheets_connected = \LeadIntelligence\Qualification\GoogleSheetsClient::is_connected();
+                    $gsheet_settings = \LeadIntelligence\Qualification\GoogleSheetsSync::get_source_settings('google_ads');
+                    $has_gsheet_configured = $is_gsheets_connected && !empty($gsheet_settings['spreadsheet_id']);
+                    ?>
+                    <?php if ($has_gsheet_configured): ?>
+                        <form method="post" action="" style="display:inline;">
+                            <?php wp_nonce_field('li_sync_gsheets_verify', 'li_nonce'); ?>
+                            <button type="submit" name="li_sync_gsheets" class="button button-primary" style="display:inline-flex; align-items:center; gap:6px; background:#059669; border-color:#047857;" title="Puxa os status atualizados diretamente do Google Sheets">
+                                <span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Sincronizar Google Sheets
+                            </button>
+                        </form>
+                    <?php endif; ?>
                     <form method="post" action="" style="display:inline;">
                         <?php wp_nonce_field('li_unify_all_leads_verify', 'li_nonce'); ?>
                         <button type="submit" name="li_unify_all_leads" class="button button-primary li-btn-faveni" style="display:inline-flex; align-items:center; gap:6px;" title="Cruza registros da Planilha com o Elementor pelo telefone e unifica UTMs e tempo de fechamento">

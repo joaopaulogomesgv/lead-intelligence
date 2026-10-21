@@ -1437,10 +1437,16 @@ class ImportController {
                     </span>
                 </div>
 
+                <div class="li-metric-card" style="border-top: 3px solid #ef4444; background: #fef2f2;">
+                    <span class="li-metric-label">Desqualificados / Perdas</span>
+                    <span class="li-metric-value" style="color: #dc2626;"><?php echo number_format_i18n($summary['total_desqualificados'] ?? $summary['total_nao_qualificados']); ?></span>
+                    <span style="font-size: 11px; color: #991b1b;">Reconhecidos na planilha</span>
+                </div>
+
                 <div class="li-metric-card" style="border-top: 3px solid #94a3b8; background: #fff;">
-                    <span class="li-metric-label">Não Qualificados / Pendentes</span>
-                    <span class="li-metric-value" style="color: #64748b;"><?php echo number_format_i18n($summary['total_nao_qualificados']); ?></span>
-                    <span style="font-size: 11px; color: #64748b;">Aguardando conversão</span>
+                    <span class="li-metric-label">Pendentes / Sem Match</span>
+                    <span class="li-metric-value" style="color: #64748b;"><?php echo number_format_i18n($summary['total_pendentes'] ?? 0); ?></span>
+                    <span style="font-size: 11px; color: #64748b;">Aguardando atendimento</span>
                 </div>
 
                 <div class="li-metric-card" style="border-top: 3px solid #C5A059; background: #fff;">
@@ -1574,8 +1580,9 @@ class ImportController {
                         <div class="button-group" style="display: inline-flex;">
                             <button type="button" class="button li-filter-btn button-primary" data-filter="all">Todos (<?php echo count($leads); ?>)</button>
                             <button type="button" class="button li-filter-btn" data-filter="qualificado">✔ Qualificados (<?php echo esc_html($summary['total_qualificados']); ?>)</button>
+                            <button type="button" class="button li-filter-btn" data-filter="nao_qualificado" style="color: #dc2626;">✖ Não Qualificados / Perdas (<?php echo esc_html($summary['total_desqualificados'] ?? $summary['total_nao_qualificados']); ?>)</button>
+                            <button type="button" class="button li-filter-btn" data-filter="pendente">⏳ Pendentes (<?php echo esc_html($summary['total_pendentes'] ?? 0); ?>)</button>
                             <button type="button" class="button li-filter-btn" data-filter="duplicado">🔥 Múltiplos Envios (<?php echo esc_html($summary['total_duplicados_leads']); ?>)</button>
-                            <button type="button" class="button li-filter-btn" data-filter="pendente">Pendentes (<?php echo esc_html($summary['total_nao_qualificados']); ?>)</button>
                         </div>
                     </div>
                 </div>
@@ -1588,19 +1595,21 @@ class ImportController {
                                 <th style="width: 140px;">Origem / Campanha</th>
                                 <th style="width: 160px;">Interesse</th>
                                 <th style="width: 120px; text-align: center;">Envios Elementor</th>
-                                <th style="width: 160px;">Status Qualificação</th>
+                                <th style="width: 170px;">Status Qualificação</th>
                                 <th style="width: 130px;">Data de Envio</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php foreach ($leads as $l):
                                 $is_qual = !empty($l['qualificado']);
+                                $is_desq = (!empty($l['qualificacao_status']) && $l['qualificacao_status'] === 'nao_qualificado');
                                 $is_dup  = !empty($l['submissoes_count']) && $l['submissoes_count'] > 1;
-                                $status_class = $is_qual ? 'row-qualificado' : 'row-pendente';
+                                $status_val = $is_qual ? 'qualificado' : ($is_desq ? 'nao_qualificado' : 'pendente');
+                                $status_class = $is_qual ? 'row-qualificado' : ($is_desq ? 'row-desqualificado' : 'row-pendente');
                                 $dup_class = $is_dup ? 'row-duplicado' : '';
                             ?>
                                 <tr class="li-lead-row <?php echo esc_attr($status_class . ' ' . $dup_class); ?>"
-                                    data-status="<?php echo $is_qual ? 'qualificado' : 'pendente'; ?>"
+                                    data-status="<?php echo esc_attr($status_val); ?>"
                                     data-dup="<?php echo $is_dup ? '1' : '0'; ?>">
                                     <td>
                                         <div style="font-weight: 700; color: #1e293b; font-size: 13px;">
@@ -1658,7 +1667,7 @@ class ImportController {
                                     <td>
                                         <?php if ($is_qual): ?>
                                             <span class="li-badge li-status-qualificado" style="font-size: 11px; font-weight: 700;">
-                                                ✔ QUALIFICADO
+                                                ✔ QUALIFICADO / VENDA
                                             </span>
                                             <div style="font-size: 10px; color: #059669; margin-top: 3px;">
                                                 <?php echo esc_html($l['match_motivo']); ?>
@@ -1668,9 +1677,21 @@ class ImportController {
                                                     Polo: <?php echo esc_html($l['polo_qualificado']); ?>
                                                 </div>
                                             <?php endif; ?>
+                                        <?php elseif ($is_desq): ?>
+                                            <span class="li-badge li-status-desqualificado" style="font-size: 11px; font-weight: 700;">
+                                                ✖ <?php echo esc_html(!empty($l['etapa_funil']) && $l['etapa_funil'] !== 'Formulário Enviado' ? strtoupper($l['etapa_funil']) : 'DESQUALIFICADO'); ?>
+                                            </span>
+                                            <div style="font-size: 10px; color: #dc2626; margin-top: 3px;">
+                                                <?php echo esc_html($l['match_motivo']); ?>
+                                            </div>
+                                            <?php if (!empty($l['polo_qualificado'])): ?>
+                                                <div style="font-size: 10px; color: #475569; font-weight: 600;">
+                                                    Polo: <?php echo esc_html($l['polo_qualificado']); ?>
+                                                </div>
+                                            <?php endif; ?>
                                         <?php else: ?>
                                             <span class="li-badge li-status-cinza" style="font-size: 11px;">
-                                                PENDENTE
+                                                ⏳ PENDENTE
                                             </span>
                                         <?php endif; ?>
                                     </td>
@@ -1710,6 +1731,8 @@ class ImportController {
                         var matchesFilter = true;
                         if (currentFilter === 'qualificado') {
                             matchesFilter = (status === 'qualificado');
+                        } else if (currentFilter === 'nao_qualificado') {
+                            matchesFilter = (status === 'nao_qualificado');
                         } else if (currentFilter === 'duplicado') {
                             matchesFilter = isDup;
                         } else if (currentFilter === 'pendente') {

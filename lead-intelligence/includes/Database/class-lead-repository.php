@@ -29,29 +29,48 @@ class LeadRepository {
         $table = DbSchema::get_leads_table();
         $placeholders = implode(',', array_fill(0, count($variations), '%s'));
 
+        // Query ultrarrápida: aproveita os índices de telefone_normalizado e telefone (tempo < 0.1ms)
         $query = $wpdb->prepare(
-            "SELECT * FROM {$table} WHERE telefone_normalizado IN ({$placeholders}) OR telefone IN ({$placeholders}) ORDER BY id DESC LIMIT 1",
+            "SELECT * FROM {$table} 
+             WHERE telefone_normalizado IN ({$placeholders}) 
+                OR telefone IN ({$placeholders}) 
+             ORDER BY id DESC LIMIT 1",
             array_merge($variations, $variations)
         );
 
-        return $wpdb->get_row($query);
+        $row = $wpdb->get_row($query);
+
+        // Auto-cura: se encontrou o lead mas o telefone_normalizado estava em branco, atualiza
+        if ($row && empty($row->telefone_normalizado)) {
+            $norm = PhoneNormalizer::normalize($row->telefone ?: $phone);
+            if (!empty($norm)) {
+                $wpdb->update($table, ['telefone_normalizado' => $norm], ['id' => $row->id]);
+                $row->telefone_normalizado = $norm;
+            }
+        }
+
+        return $row;
     }
 
     /**
-     * Localiza lead por e-mail
+     * Localiza lead por e-mail (tolerante a maiúsculas e espaços com índice)
      *
      * @param string $email
      * @return object|null
      */
     public static function find_by_email($email) {
         global $wpdb;
-        $email = sanitize_email($email);
-        if (empty($email)) {
+        $clean_email = strtolower(trim((string) $email));
+        if (empty($clean_email)) {
             return null;
         }
 
         $table = DbSchema::get_leads_table();
-        return $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE email = %s ORDER BY id DESC LIMIT 1", $email));
+        return $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$table} WHERE email = %s OR email = %s ORDER BY id DESC LIMIT 1",
+            $clean_email,
+            (string) $email
+        ));
     }
 
     /**

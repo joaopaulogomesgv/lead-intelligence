@@ -47,7 +47,8 @@ class ElementorCrossAnalyzer {
 
         // 3. Cruzar Leads Únicos com a Base de Qualificados
         $total_qualified = 0;
-        $total_not_qualified = 0;
+        $total_desqualificados = 0;
+        $total_pendentes = 0;
 
         $by_campaign = [];
         $by_course   = [];
@@ -101,19 +102,23 @@ class ElementorCrossAnalyzer {
             // Atualiza status e metadados da qualificação
             if ($match) {
                 $raw_match_etapa = !empty($match['etapa']) ? $match['etapa'] : '';
-                $inferred_status = !empty($raw_match_etapa) ? Matcher::normalize_status($raw_match_etapa) : 'qualificado';
+                $inferred_status = !empty($match['inferred_status']) ? $match['inferred_status'] : (!empty($raw_match_etapa) ? Matcher::normalize_status($raw_match_etapa) : 'qualificado');
 
                 if ($inferred_status === 'qualificado') {
                     $total_qualified++;
                     $lead['qualificado'] = true;
                     $lead['qualificacao_status'] = 'qualificado';
+                    $lead['etapa_funil'] = !empty($raw_match_etapa) ? $raw_match_etapa : 'Matrícula Realizada';
                 } elseif ($inferred_status === 'nao_qualificado') {
-                    $total_not_qualified++;
+                    $total_desqualificados++;
                     $lead['qualificado'] = false;
                     $lead['qualificacao_status'] = 'nao_qualificado';
+                    $lead['etapa_funil'] = !empty($raw_match_etapa) ? $raw_match_etapa : 'Desqualificado';
                 } else {
+                    $total_pendentes++;
                     $lead['qualificado'] = false;
                     $lead['qualificacao_status'] = 'pendente';
+                    $lead['etapa_funil'] = !empty($raw_match_etapa) ? $raw_match_etapa : 'Formulário Enviado';
                 }
 
                 $lead['match_tipo'] = $match_type;
@@ -121,7 +126,6 @@ class ElementorCrossAnalyzer {
                 $lead['polo_qualificado'] = !empty($match['instancia']) ? $match['instancia'] : (!empty($match['polo']) ? $match['polo'] : '');
                 $lead['data_qualificacao'] = !empty($match['data']) ? $match['data'] : (!empty($match['data_criacao']) ? $match['data_criacao'] : '');
                 $lead['crm_lead_id'] = !empty($match['lead_id']) ? $match['lead_id'] : '';
-                $lead['etapa_funil'] = !empty($raw_match_etapa) ? $raw_match_etapa : ($inferred_status === 'qualificado' ? 'Matrícula Realizada' : 'Formulário Enviado');
 
                 // Agrupamento por Polo
                 $polo_name = !empty($lead['polo_qualificado']) ? $lead['polo_qualificado'] : 'Não especificado';
@@ -130,7 +134,7 @@ class ElementorCrossAnalyzer {
                 }
                 $by_polo[$polo_name]++;
             } else {
-                $total_not_qualified++;
+                $total_pendentes++;
                 $lead['qualificado'] = false;
                 $lead['qualificacao_status'] = 'pendente';
                 $lead['match_tipo'] = '';
@@ -287,7 +291,9 @@ class ElementorCrossAnalyzer {
                 'total_duplicados_leads'     => $duplicate_leads_count,
                 'total_submissoes_extras'    => max(0, $total_submissions - $total_unique),
                 'total_qualificados'         => $total_qualified,
-                'total_nao_qualificados'     => $total_not_qualified,
+                'total_desqualificados'      => $total_desqualificados,
+                'total_nao_qualificados'     => $total_desqualificados,
+                'total_pendentes'            => $total_pendentes,
                 'taxa_qualificacao_global'   => $taxa_qualificacao_global,
                 'total_base_qualificados'    => $qualified_index['total_rows'],
                 'tempo_execucao_segundos'    => $execution_time,
@@ -329,6 +335,8 @@ class ElementorCrossAnalyzer {
                 $date  = '';
                 $lead_id = '';
                 $etapa   = '';
+                $status_val = '';
+                $motivo_val = '';
 
                 foreach ($row_data as $col_name => $val) {
                     $raw_col   = preg_replace('/^\xEF\xBB\xBF/', '', (string) $col_name);
@@ -351,24 +359,53 @@ class ElementorCrossAnalyzer {
                         $instancia = $val_clean;
                     } elseif (strpos($clean_col, 'data') !== false || strpos($clean_col, 'date') !== false) {
                         $date = $val_clean;
-                    } elseif (strpos($clean_col, 'etapa') !== false || strpos($clean_col, 'fase') !== false || strpos($clean_col, 'funil') !== false || strpos($clean_col, 'estagio') !== false || strpos($clean_col, 'situac') !== false || (strpos($clean_col, 'status') !== false && strpos($clean_col, 'whats') === false)) {
+                    } elseif (strpos($clean_col, 'etapa') !== false || strpos($clean_col, 'fase') !== false || strpos($clean_col, 'funil') !== false || strpos($clean_col, 'estagio') !== false) {
                         $etapa = $val_clean;
+                    } elseif (strpos($clean_col, 'status') !== false && strpos($clean_col, 'whats') === false) {
+                        $status_val = $val_clean;
+                    } elseif (strpos($clean_col, 'motivo') !== false || strpos($clean_col, 'desqualifica') !== false) {
+                        $motivo_val = $val_clean;
                     } elseif (strpos($clean_col, 'lead') !== false || strpos($clean_col, 'leaad') !== false || strpos($clean_col, 'id') !== false) {
-                        // Limpa colunas como '["331442"]'
                         $lead_id = trim($val_clean, "[]\"' ");
                     }
                 }
 
+                if (empty($etapa) && !empty($status_val)) {
+                    $etapa = $status_val;
+                }
+                if (empty($etapa) && !empty($motivo_val)) {
+                    $etapa = $motivo_val;
+                }
+
+                $st_from_etapa  = !empty($etapa) ? Matcher::normalize_status($etapa) : '';
+                $st_from_status = !empty($status_val) ? Matcher::normalize_status($status_val) : '';
+                $st_from_motivo = !empty($motivo_val) ? Matcher::normalize_status($motivo_val) : '';
+
+                if ($st_from_etapa === 'qualificado' || $st_from_status === 'qualificado') {
+                    $inferred_status = 'qualificado';
+                } elseif ($st_from_etapa === 'nao_qualificado' || $st_from_status === 'nao_qualificado' || $st_from_motivo === 'nao_qualificado') {
+                    $inferred_status = 'nao_qualificado';
+                } elseif (!empty($st_from_etapa)) {
+                    $inferred_status = $st_from_etapa;
+                } elseif (!empty($st_from_status)) {
+                    $inferred_status = $st_from_status;
+                } else {
+                    $inferred_status = 'pendente';
+                }
+
                 $record = [
-                    'rec_id'       => $index['total_rows'],
-                    'email'        => $email,
-                    'phone'        => $phone,
-                    'nome'         => $name,
-                    'instancia'    => $instancia,
-                    'data'         => $date,
-                    'lead_id'      => $lead_id,
-                    'gclid'        => $gclid,
-                    'etapa'        => $etapa,
+                    'rec_id'          => $index['total_rows'],
+                    'email'           => $email,
+                    'phone'           => $phone,
+                    'nome'            => $name,
+                    'instancia'       => $instancia,
+                    'data'            => $date,
+                    'lead_id'         => $lead_id,
+                    'gclid'           => $gclid,
+                    'etapa'           => $etapa,
+                    'status_val'      => $status_val,
+                    'motivo_val'      => $motivo_val,
+                    'inferred_status' => $inferred_status,
                 ];
 
                 $index['all_records'][$record['rec_id']] = $record;
@@ -629,8 +666,9 @@ class ElementorCrossAnalyzer {
         fputcsv($output, $headers, ';');
 
         foreach ($leads as $lead) {
+            $csv_status = !empty($lead['qualificado']) ? 'QUALIFICADO' : ((($lead['qualificacao_status'] ?? '') === 'nao_qualificado') ? 'NÃO QUALIFICADO' : 'PENDENTE');
             $row = [
-                !empty($lead['qualificado']) ? 'QUALIFICADO' : 'PENDENTE / NÃO QUALIFICADO',
+                $csv_status,
                 !empty($lead['match_motivo']) ? $lead['match_motivo'] : '',
                 !empty($lead['polo_qualificado']) ? $lead['polo_qualificado'] : '',
                 !empty($lead['data_qualificacao']) ? $lead['data_qualificacao'] : '',
@@ -729,10 +767,13 @@ class ElementorCrossAnalyzer {
                     ]);
 
                     CapiQueue::enqueue_qualified($lead_id);
-                } elseif (!empty($lead['qualificacao_status']) && $lead['qualificacao_status'] === 'nao_qualificado' && $existing->qualificacao_status === 'pendente') {
+                } elseif (!empty($lead['qualificacao_status']) && $lead['qualificacao_status'] === 'nao_qualificado') {
                     $update_data['qualificacao_status'] = 'nao_qualificado';
                     $update_data['qualificacao_origem'] = 'Cruzamento Planilha Elementor';
                     $update_data['motivo_qualificacao'] = $lead['match_motivo'];
+                    if (empty($update_data['etapa_funil']) || $update_data['etapa_funil'] === 'Formulário Enviado') {
+                        $update_data['etapa_funil'] = !empty($lead['etapa_funil']) && $lead['etapa_funil'] !== 'Formulário Enviado' ? sanitize_text_field($lead['etapa_funil']) : 'Desqualificado';
+                    }
                 }
 
                 // Enriquece dados ausentes (incluindo se estiver como 'Sem nome')
@@ -763,8 +804,8 @@ class ElementorCrossAnalyzer {
                 $updated_existing++;
             } else {
                 // Cadastra novo lead
-                $qual_status = $is_qual ? 'qualificado' : 'pendente';
-                $qual_data   = $is_qual ? (!empty($lead['data_qualificacao']) ? $lead['data_qualificacao'] : current_time('mysql')) : null;
+                $qual_status = !empty($lead['qualificacao_status']) ? $lead['qualificacao_status'] : ($is_qual ? 'qualificado' : 'pendente');
+                $qual_data   = !empty($lead['data_qualificacao']) ? $lead['data_qualificacao'] : ($is_qual ? current_time('mysql') : null);
 
                 $new_lead = [
                     'uuid'                 => wp_generate_uuid4(),
@@ -790,7 +831,7 @@ class ElementorCrossAnalyzer {
                     'qualificacao_data'    => $qual_data,
                     'qualificacao_origem'  => 'Cruzamento Planilha Elementor',
                     'motivo_qualificacao'  => $lead['match_motivo'],
-                    'etapa_funil'          => !empty($lead['etapa_funil']) ? sanitize_text_field($lead['etapa_funil']) : ($is_qual ? 'Matrícula Realizada' : 'Formulário Enviado'),
+                    'etapa_funil'          => !empty($lead['etapa_funil']) ? sanitize_text_field($lead['etapa_funil']) : ($qual_status === 'qualificado' ? 'Matrícula Realizada' : ($qual_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado')),
                     'polo'                 => !empty($lead['polo_qualificado']) ? sanitize_text_field($lead['polo_qualificado']) : '',
                     'score'                => $is_qual ? 15 : 5,
                     'data_primeira_captura'=> !empty($lead['data_primeiro_envio']) ? $lead['data_primeiro_envio'] : current_time('mysql'),

@@ -304,6 +304,9 @@ class GoogleSheetsSync {
      * @return array|\WP_Error Resumo da execução
      */
     public static function run_sync($channel = 'google_ads', $is_manual = false) {
+        @set_time_limit(300);
+        @ini_set('memory_limit', '512M');
+
         if (!GoogleSheetsClient::is_connected()) {
             $msg = 'Conta Google não conectada. Conecte sua conta para sincronizar.';
             Logger::warning('GoogleSheets', $msg);
@@ -325,123 +328,147 @@ class GoogleSheetsSync {
             return new \WP_Error('missing_spreadsheet', $msg);
         }
 
-        // Lê dados da planilha com Otimização de Janela Deslizante (batchGet das linhas recentes)
-        $sheet_data = GoogleSheetsClient::fetch_sheet_data_smart($spreadsheet_id, $tab, $window);
-
-        if (is_wp_error($sheet_data)) {
-            $err_msg = $sheet_data->get_error_message();
-            self::record_sync_result($channel, [
-                'status'  => 'erro',
-                'message' => $err_msg,
-            ]);
-            return $sheet_data;
-        }
-
-        $rows = $sheet_data['rows'];
-        $total_rows = count($rows);
-
-        if ($total_rows === 0) {
-            $res = [
-                'status'     => 'concluido',
-                'message'    => "Planilha [{$channel_label}] consultada com sucesso, mas nenhuma linha com dados foi encontrada.",
-                'total'      => 0,
-                'matched'    => 0,
-                'created'    => 0,
-                'skipped'    => 0,
-                'timestamp'  => current_time('mysql'),
-            ];
-            self::record_sync_result($channel, $res);
-            return $res;
-        }
-
         global $wpdb;
-        $imports_table = DbSchema::get_imports_table();
-        $source_label = !empty($tab) ? "Google Sheets [{$channel_label}] ({$tab})" : "Google Sheets [{$channel_label}]";
+        $in_transaction = false;
 
-        // Registra na tabela de histórico de importações
-        $wpdb->insert($imports_table, [
-            'nome_arquivo'          => $source_label,
-            'total_linhas'          => $total_rows,
-            'linhas_processadas'    => 0,
-            'leads_qualificados'    => 0,
-            'leads_nao_encontrados' => 0,
-            'mapeamento_colunas'    => wp_json_encode($mapping, JSON_UNESCAPED_UNICODE),
-            'status'                => 'processando',
-            'usuario_id'            => get_current_user_id() ?: 1,
-            'created_at'            => current_time('mysql'),
-        ]);
-        $import_id = $wpdb->insert_id;
+        try {
+            // Lê dados da planilha com Otimização de Janela Deslizante (batchGet das linhas recentes)
+            $sheet_data = GoogleSheetsClient::fetch_sheet_data_smart($spreadsheet_id, $tab, $window);
 
-        $total_matched = 0;
-        $total_created = 0;
-        $total_skipped = 0;
-
-        // Otimização de Banco de Dados: Processa com autocommit pausado em lotes de 200
-        $batch_size = 200;
-        $count = 0;
-        $wpdb->query('START TRANSACTION');
-
-        foreach ($rows as $row_data) {
-            $result = Matcher::process_row($row_data, $mapping, $source_label, $import_id, $channel);
-
-            if ($result['status'] === 'matched') {
-                $total_matched++;
-            } elseif ($result['status'] === 'created') {
-                $total_created++;
-            } else {
-                $total_skipped++;
+            if (is_wp_error($sheet_data)) {
+                $err_msg = $sheet_data->get_error_message();
+                self::record_sync_result($channel, [
+                    'status'  => 'erro',
+                    'message' => $err_msg,
+                ]);
+                return $sheet_data;
             }
 
-            $count++;
-            if ($count % $batch_size === 0) {
-                $wpdb->query('COMMIT');
-                $wpdb->query('START TRANSACTION');
+            $rows = $sheet_data['rows'];
+            $total_rows = count($rows);
+
+            if ($total_rows === 0) {
+                $res = [
+                    'status'     => 'concluido',
+                    'message'    => "Planilha [{$channel_label}] consultada com sucesso, mas nenhuma linha com dados foi encontrada.",
+                    'total'      => 0,
+                    'matched'    => 0,
+                    'created'    => 0,
+                    'skipped'    => 0,
+                    'timestamp'  => current_time('mysql'),
+                ];
+                self::record_sync_result($channel, $res);
+                return $res;
             }
+
+            $imports_table = DbSchema::get_imports_table();
+            $source_label = !empty($tab) ? "Google Sheets [{$channel_label}] ({$tab})" : "Google Sheets [{$channel_label}]";
+
+            // Registra na tabela de histórico de importações
+            $wpdb->insert($imports_table, [
+                'nome_arquivo'          => $source_label,
+                'total_linhas'          => $total_rows,
+                'linhas_processadas'    => 0,
+                'leads_qualificados'    => 0,
+                'leads_nao_encontrados' => 0,
+                'mapeamento_colunas'    => wp_json_encode($mapping, JSON_UNESCAPED_UNICODE),
+                'status'                => 'processando',
+                'usuario_id'            => get_current_user_id() ?: 1,
+                'created_at'            => current_time('mysql'),
+            ]);
+            $import_id = $wpdb->insert_id;
+
+            $total_matched = 0;
+            $total_created = 0;
+            $total_skipped = 0;
+
+            // Otimização de Banco de Dados: Processa com autocommit pausado em lotes de 200
+            $batch_size = 200;
+            $count = 0;
+            $in_transaction = true;
+            $wpdb->query('START TRANSACTION');
+
+            foreach ($rows as $row_data) {
+                $result = Matcher::process_row($row_data, $mapping, $source_label, $import_id, $channel);
+
+                if ($result['status'] === 'matched') {
+                    $total_matched++;
+                } elseif ($result['status'] === 'created') {
+                    $total_created++;
+                } else {
+                    $total_skipped++;
+                }
+
+                $count++;
+                if ($count % $batch_size === 0) {
+                    $wpdb->query('COMMIT');
+                    $wpdb->query('START TRANSACTION');
+                }
+            }
+            $wpdb->query('COMMIT');
+            $in_transaction = false;
+
+            $elapsed = round(microtime(true) - $start_time, 2);
+            $mem_peak = round(memory_get_peak_usage(true) / 1024 / 1024, 1);
+
+            // Atualiza lote de importação
+            $wpdb->update($imports_table, [
+                'linhas_processadas'    => $total_rows,
+                'leads_qualificados'    => $total_matched,
+                'leads_nao_encontrados' => $total_created,
+                'status'                => 'concluido',
+            ], ['id' => $import_id]);
+
+            // Recalibra funil e status de qualificação de forma direta e rápida
+            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
+
+            $summary = [
+                'status'     => 'concluido',
+                'channel'    => $channel,
+                'message'    => "Sincronização [{$channel_label}] concluída com sucesso em {$elapsed}s ({$mem_peak} MB RAM)! {$total_rows} linhas lidas: {$total_matched} cruzadas e {$total_created} novos leads cadastrados.",
+                'total'      => $total_rows,
+                'matched'    => $total_matched,
+                'created'    => $total_created,
+                'skipped'    => $total_skipped,
+                'elapsed'    => $elapsed,
+                'memory'     => $mem_peak,
+                'timestamp'  => current_time('mysql'),
+                'manual'     => $is_manual,
+            ];
+
+            self::record_sync_result($channel, $summary);
+
+            Logger::info('GoogleSheets', "Sincronização [{$channel_label}] concluída em {$elapsed}s ({$source_label}).", [
+                'channel'   => $channel,
+                'total'     => $total_rows,
+                'cruzados'  => $total_matched,
+                'criados'   => $total_created,
+                'ignorados' => $total_skipped,
+                'tempo_seg' => $elapsed,
+                'mem_mb'    => $mem_peak,
+            ]);
+
+            return $summary;
+
+        } catch (\Throwable $e) {
+            if ($in_transaction) {
+                $wpdb->query('ROLLBACK');
+            }
+            Logger::error('GoogleSheets', "Erro na sincronização [{$channel_label}]: " . $e->getMessage(), [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            $err_summary = [
+                'status'    => 'erro',
+                'channel'   => $channel,
+                'message'   => "Erro na sincronização [{$channel_label}]: " . $e->getMessage(),
+                'timestamp' => current_time('mysql'),
+            ];
+            self::record_sync_result($channel, $err_summary);
+
+            return new \WP_Error('sync_exception', $e->getMessage());
         }
-        $wpdb->query('COMMIT');
-
-        $elapsed = round(microtime(true) - $start_time, 2);
-        $mem_peak = round(memory_get_peak_usage(true) / 1024 / 1024, 1);
-
-        // Atualiza lote de importação
-        $wpdb->update($imports_table, [
-            'linhas_processadas'    => $total_rows,
-            'leads_qualificados'    => $total_matched,
-            'leads_nao_encontrados' => $total_created,
-            'status'                => 'concluido',
-        ], ['id' => $import_id]);
-
-        // Unificação e enriquecimento inteligente por telefone pós-sincronização
-        $unified_count = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
-        $unify_suffix = $unified_count > 0 ? " ({$unified_count} unificados com formulários Elementor)" : "";
-
-        $summary = [
-            'status'     => 'concluido',
-            'channel'    => $channel,
-            'message'    => "Sincronização [{$channel_label}] concluída em {$elapsed}s ({$mem_peak} MB RAM)! {$total_rows} linhas lidas: {$total_matched} cruzadas e {$total_created} novos leads cadastrados.{$unify_suffix}",
-            'total'      => $total_rows,
-            'matched'    => $total_matched,
-            'created'    => $total_created,
-            'skipped'    => $total_skipped,
-            'elapsed'    => $elapsed,
-            'memory'     => $mem_peak,
-            'timestamp'  => current_time('mysql'),
-            'manual'     => $is_manual,
-        ];
-
-        self::record_sync_result($channel, $summary);
-
-        Logger::info('GoogleSheets', "Sincronização [{$channel_label}] concluída em {$elapsed}s ({$source_label}).", [
-            'channel'   => $channel,
-            'total'     => $total_rows,
-            'cruzados'  => $total_matched,
-            'criados'   => $total_created,
-            'ignorados' => $total_skipped,
-            'tempo_seg' => $elapsed,
-            'mem_mb'    => $mem_peak,
-        ]);
-
-        return $summary;
     }
 
     /**

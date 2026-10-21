@@ -121,6 +121,7 @@ class DbSchema {
             updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             PRIMARY KEY  (id),
             KEY telefone_normalizado (telefone_normalizado),
+            KEY telefone (telefone(50)),
             KEY email (email(191)),
             KEY qualificacao_status (qualificacao_status),
             KEY etapa_funil (etapa_funil(50)),
@@ -248,6 +249,22 @@ class DbSchema {
         $leads_table   = self::get_leads_table();
         $history_table = self::get_history_table();
 
+        // 0. Auto-cura: preenche telefone_normalizado para registros existentes sem normalização
+        $unnorm = $wpdb->get_results(
+            "SELECT id, telefone FROM {$leads_table} 
+             WHERE (telefone_normalizado IS NULL OR telefone_normalizado = '') 
+               AND telefone IS NOT NULL AND telefone != '' 
+             LIMIT 1500"
+        );
+        if (!empty($unnorm)) {
+            foreach ($unnorm as $un) {
+                $norm = \LeadIntelligence\PhoneNormalizer::normalize($un->telefone);
+                if (!empty($norm)) {
+                    $wpdb->update($leads_table, ['telefone_normalizado' => $norm], ['id' => $un->id]);
+                }
+            }
+        }
+
         // 1. Busca telefones normalizados com registros duplicados
         $duplicates = $wpdb->get_results(
             "SELECT telefone_normalizado, COUNT(*) as qtd 
@@ -272,7 +289,7 @@ class DbSchema {
                 }
 
                 // Identifica o melhor registro mestre:
-                // Prioridade: Aquele com status 'qualificado' (veio da planilha de matrículas)
+                // Prioridade 1: Aquele com status 'qualificado' (veio da planilha de matrículas)
                 $master = null;
                 foreach ($rows as $r) {
                     if ($r->qualificacao_status === 'qualificado') {
@@ -280,7 +297,16 @@ class DbSchema {
                         break;
                     }
                 }
-                // Se nenhum for qualificado, prioriza o que tem utm_source rica
+                // Prioridade 2: Aquele com status 'nao_qualificado' (veio da planilha de desqualificação/perda)
+                if (!$master) {
+                    foreach ($rows as $r) {
+                        if ($r->qualificacao_status === 'nao_qualificado') {
+                            $master = $r;
+                            break;
+                        }
+                    }
+                }
+                // Prioridade 3: Aquele com utm_source rica
                 if (!$master) {
                     foreach ($rows as $r) {
                         if (!empty($r->utm_source) && !in_array($r->utm_source, ['google', 'meta', 'planilha'])) {
@@ -334,6 +360,12 @@ class DbSchema {
                         $updates['qualificacao_origem'] = $other->qualificacao_origem;
                         $updates['qualificacao_dados']  = $other->qualificacao_dados;
                         $master->qualificacao_status    = 'nao_qualificado';
+                    }
+
+                    // Herda polo se informado
+                    if (empty($master->polo) && !empty($other->polo)) {
+                        $updates['polo'] = $other->polo;
+                        $master->polo    = $other->polo;
                     }
 
                     // Herda UTMs ricas se o master estiver sem ou com genérico ('google', 'meta', 'planilha')
@@ -397,6 +429,89 @@ class DbSchema {
                 $merged_count += count($other_rows);
             }
         }
+
+        // 2. Busca também duplicados por e-mail (caso o número de telefone tenha vindo ligeiramente diferente)
+        $email_dups = $wpdb->get_results(
+            "SELECT LOWER(TRIM(email)) as email_clean, COUNT(*) as qtd 
+             FROM {$leads_table} 
+             WHERE email IS NOT NULL AND TRIM(email) != '' AND email LIKE '%@%'
+             GROUP BY LOWER(TRIM(email)) 
+             HAVING qtd > 1"
+        );
+
+        if (!empty($email_dups)) {
+            foreach ($email_dups as $edup) {
+                $e_clean = $edup->email_clean;
+                $e_rows = $wpdb->get_results($wpdb->prepare(
+                    "SELECT * FROM {$leads_table} WHERE LOWER(TRIM(email)) = %s ORDER BY id ASC",
+                    $e_clean
+                ));
+
+                if (count($e_rows) < 2) {
+                    continue;
+                }
+
+                $m_row = null;
+                foreach ($e_rows as $er) {
+                    if ($er->qualificacao_status === 'qualificado') {
+                        $m_row = $er;
+                        break;
+                    }
+                }
+                if (!$m_row) {
+                    foreach ($e_rows as $er) {
+                        if ($er->qualificacao_status === 'nao_qualificado') {
+                            $m_row = $er;
+                            break;
+                        }
+                    }
+                }
+                if (!$m_row) {
+                    $m_row = $e_rows[0];
+                }
+
+                $sec_rows = [];
+                foreach ($e_rows as $er) {
+                    if ($er->id != $m_row->id) {
+                        $sec_rows[] = $er;
+                    }
+                }
+
+                $e_updates = [];
+                foreach ($sec_rows as $s_row) {
+                    if (!empty($s_row->etapa_funil) && $s_row->etapa_funil !== 'Formulário Enviado' && ($m_row->etapa_funil === 'Formulário Enviado' || empty($m_row->etapa_funil))) {
+                        $e_updates['etapa_funil'] = $s_row->etapa_funil;
+                        $m_row->etapa_funil       = $s_row->etapa_funil;
+                    }
+                    if ($s_row->qualificacao_status === 'qualificado' && $m_row->qualificacao_status !== 'qualificado') {
+                        $e_updates['qualificacao_status'] = 'qualificado';
+                        $e_updates['qualificacao_data']   = $s_row->qualificacao_data;
+                        $m_row->qualificacao_status       = 'qualificado';
+                    } elseif ($s_row->qualificacao_status === 'nao_qualificado' && $m_row->qualificacao_status === 'pendente') {
+                        $e_updates['qualificacao_status'] = 'nao_qualificado';
+                        $m_row->qualificacao_status       = 'nao_qualificado';
+                    }
+                    if (empty($m_row->telefone_normalizado) && !empty($s_row->telefone_normalizado)) {
+                        $e_updates['telefone_normalizado'] = $s_row->telefone_normalizado;
+                    }
+                }
+
+                if (!empty($e_updates)) {
+                    $e_updates['updated_at'] = current_time('mysql');
+                    $wpdb->update($leads_table, $e_updates, ['id' => $m_row->id]);
+                }
+
+                foreach ($sec_rows as $s_row) {
+                    $wpdb->query($wpdb->prepare("UPDATE {$history_table} SET lead_id = %d WHERE lead_id = %d", $m_row->id, $s_row->id));
+                    $wpdb->delete($leads_table, ['id' => $s_row->id]);
+                }
+
+                $merged_count += count($sec_rows);
+            }
+        }
+
+        // 3. Executa recalibração garantindo integridade estrita dos status
+        self::recalibrate_funnel_and_qualification();
 
         return $merged_count;
     }
@@ -470,13 +585,13 @@ class DbSchema {
         // 1. Restaura dados originais da planilha armazenados no JSON de qualificacao_dados (se houver)
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Venda', qualificacao_status = 'qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Venda\"%' OR qualificacao_dados LIKE '%\"status\":\"Venda\"%'");
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Não convertido', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%Não convertido%' OR qualificacao_dados LIKE '%Nao convertido%'");
-        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Desqualificado', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\":\"Perda\"%'");
+        $wpdb->query("UPDATE {$table} SET etapa_funil = 'Desqualificado', qualificacao_status = 'nao_qualificado' WHERE qualificacao_dados LIKE '%\"etapa_funil\":\"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\":\"Perda\"%' OR qualificacao_dados LIKE '%\"etapa_funil\": \"Desqualificado\"%' OR qualificacao_dados LIKE '%\"status\": \"Perda\"%' OR qualificacao_dados LIKE '%\"Perda\"%' OR qualificacao_dados LIKE '%\"Desqualificado\"%'");
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Lead Atribuído', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Lead Atribuído%' OR qualificacao_dados LIKE '%Lead Atribuido%'");
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Analisando/Negociação', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Analisando/Negociação%' OR qualificacao_dados LIKE '%Analisando%'");
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Remarketing', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Remarketing%'");
         $wpdb->query("UPDATE {$table} SET etapa_funil = 'Tentativa de Contato', qualificacao_status = 'pendente' WHERE qualificacao_dados LIKE '%Tentativa de Contato%'");
 
-        // 2. Não qualificados: descartes, perdas, não convertidos
+        // 2. Não qualificados: descartes, perdas, desqualificados, não convertidos
         $wpdb->query(
             "UPDATE {$table} 
              SET qualificacao_status = 'nao_qualificado' 
@@ -484,29 +599,46 @@ class DbSchema {
                 OR etapa_funil LIKE '%nao convertido%' 
                 OR etapa_funil LIKE '%desqualificad%' 
                 OR etapa_funil LIKE '%perda%'
-                OR etapa_funil LIKE '%recusad%'"
+                OR etapa_funil LIKE '%perdido%'
+                OR etapa_funil LIKE '%recusad%'
+                OR etapa_funil LIKE '%cancelad%'
+                OR etapa_funil LIKE '%sem perfil%'
+                OR etapa_funil LIKE '%invalido%'
+                OR etapa_funil LIKE '%inválido%'
+                OR etapa_funil LIKE '%descarte%'"
         );
 
-        // 3. Pendentes: etapas de atendimento, lead atribuído, remarketing, negociação
-        // Qualquer etapa intermediária que NÃO seja Venda ou Matrícula é PENDENTE
-        $wpdb->query(
-            "UPDATE {$table} 
-             SET qualificacao_status = 'pendente' 
-             WHERE etapa_funil LIKE '%atribu%' 
-                OR etapa_funil LIKE '%tentativa%' 
-                OR etapa_funil LIKE '%remarketing%' 
-                OR etapa_funil LIKE '%analis%' 
-                OR etapa_funil LIKE '%negocia%'
-                OR etapa_funil = 'Formulário Enviado'
-                OR (qualificacao_status = 'qualificado' AND etapa_funil NOT LIKE '%venda%' AND etapa_funil NOT LIKE '%matr%')"
-        );
-
-        // 4. Qualificados: ESTRITAMENTE Vendas e Matrículas confirmadas
+        // 3. Qualificados: ESTRITAMENTE Vendas, Matrículas e Conversões confirmadas
         $wpdb->query(
             "UPDATE {$table} 
              SET qualificacao_status = 'qualificado' 
              WHERE etapa_funil LIKE '%venda%' 
-                OR etapa_funil LIKE '%matr%'"
+                OR etapa_funil LIKE '%vendid%' 
+                OR etapa_funil LIKE '%matr%'
+                OR etapa_funil LIKE '%aluno%'
+                OR etapa_funil LIKE '%fechado%'
+                OR etapa_funil LIKE '%ganho%'
+                OR etapa_funil LIKE '%pago%'
+                OR etapa_funil LIKE '%aprovad%'"
+        );
+
+        // 4. Pendentes: etapas intermediárias de pipeline de atendimento
+        // ATENÇÃO: NUNCA sobrescreve leads que já possuem qualificacao_status = 'nao_qualificado' ou 'qualificado'
+        $wpdb->query(
+            "UPDATE {$table} 
+             SET qualificacao_status = 'pendente' 
+             WHERE (
+                etapa_funil LIKE '%atribu%' 
+                OR etapa_funil LIKE '%tentativa%' 
+                OR etapa_funil LIKE '%remarketing%' 
+                OR etapa_funil LIKE '%analis%' 
+                OR etapa_funil LIKE '%negocia%'
+                OR (etapa_funil = 'Formulário Enviado' AND (qualificacao_status IS NULL OR qualificacao_status = '' OR qualificacao_status = 'pendente'))
+             )
+             AND etapa_funil NOT LIKE '%desqualificad%'
+             AND etapa_funil NOT LIKE '%perda%'
+             AND etapa_funil NOT LIKE '%venda%'
+             AND etapa_funil NOT LIKE '%matr%'"
         );
     }
 }

@@ -653,18 +653,42 @@ class GoogleSheetsClient {
             $matched_title = !empty($clean_tab) ? $clean_tab : 'Sheet1';
         }
 
-        // Se a planilha for pequena (menos que o limite), busca padrão
-        if ($total_grid_rows <= ($limit_rows + 50)) {
+        $escaped_title = "'" . str_replace("'", "''", $matched_title) . "'";
+
+        // 2. Consulta precisa da última linha preenchida com dados via coluna A (A:A)
+        // O Google Sheets API retorna apenas linhas com valores reais, ignorando células vazias da grade
+        $actual_data_rows = 0;
+        $col_a_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values/' . rawurlencode("{$escaped_title}!A:A") . '?majorDimension=COLUMNS';
+        $col_a_res = wp_remote_get($col_a_url, [
+            'timeout' => 20,
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Accept'        => 'application/json',
+            ],
+        ]);
+
+        if (!is_wp_error($col_a_res) && wp_remote_retrieve_response_code($col_a_res) === 200) {
+            $col_a_body = json_decode(wp_remote_retrieve_body($col_a_res), true);
+            if (!empty($col_a_body['values'][0])) {
+                $actual_data_rows = count($col_a_body['values'][0]);
+            }
+        }
+
+        if ($actual_data_rows <= 0) {
+            $actual_data_rows = $total_grid_rows;
+        }
+
+        // Se a planilha for menor que o limite solicitado, busca padrão completa
+        if ($actual_data_rows <= ($limit_rows + 50)) {
             return self::fetch_sheet_data($spreadsheet_id, $matched_title, $limit_rows);
         }
 
-        // 2. OTIMIZAÇÃO POR BATCHGET:
+        // 3. OTIMIZAÇÃO POR BATCHGET:
         // Range 1 = Cabeçalho (Linha 1): 'Aba'!A1:ZZ1
-        // Range 2 = Últimas N linhas: 'Aba'!A{start}:ZZ{end}
-        $start_row = max(2, $total_grid_rows - $limit_rows);
-        $escaped_title = "'" . str_replace("'", "''", $matched_title) . "'";
+        // Range 2 = Últimas N linhas reais: 'Aba'!A{start}:ZZ{end}
+        $start_row = max(2, $actual_data_rows - $limit_rows);
         $range_header  = "{$escaped_title}!A1:ZZ1";
-        $range_data    = "{$escaped_title}!A{$start_row}:ZZ{$total_grid_rows}";
+        $range_data    = "{$escaped_title}!A{$start_row}:ZZ{$actual_data_rows}";
 
         $batch_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values:batchGet?' .
                      'ranges=' . rawurlencode($range_header) . '&' .

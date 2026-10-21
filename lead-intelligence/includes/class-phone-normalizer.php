@@ -106,6 +106,24 @@ class PhoneNormalizer {
             // Com zero no DDD
             $variations[] = '0' . $ddd . $num9;
             $variations[] = '0' . $ddd . $num8;
+
+            // Variações formatadas (como são digitadas e salvas em formulários Elementor)
+            $part1_9 = substr($num9, 0, 5);
+            $part2_9 = substr($num9, 5, 4);
+            $part1_8 = substr($num8, 0, 4);
+            $part2_8 = substr($num8, 4, 4);
+
+            $variations[] = "({$ddd}) {$part1_9}-{$part2_9}";
+            $variations[] = "({$ddd}) {$num9}";
+            $variations[] = "({$ddd}) {$part1_8}-{$part2_8}";
+            $variations[] = "({$ddd}) {$num8}";
+            $variations[] = "+55 ({$ddd}) {$part1_9}-{$part2_9}";
+            $variations[] = "+55 {$ddd} {$part1_9}-{$part2_9}";
+            $variations[] = "+55{$ddd}{$num9}";
+            $variations[] = "{$ddd} {$part1_9}-{$part2_9}";
+            $variations[] = "{$ddd} {$num9}";
+            $variations[] = "{$ddd} {$part1_8}-{$part2_8}";
+            $variations[] = "{$ddd} {$num8}";
         }
 
         return array_values(array_unique($variations));
