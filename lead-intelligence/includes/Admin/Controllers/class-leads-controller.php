@@ -111,20 +111,30 @@ class LeadsController {
         }
 
         if (isset($_POST['li_sync_all_ads'])) {
-            check_admin_referer('li_sync_all_ads_verify', 'li_nonce');
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_all_ads_verify');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada.', 'lead-intelligence'));
+            }
             $sync_res = WabaClient::sync_all_pending_leads();
             $sync_message = $sync_res['message'];
             $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
         }
 
         if (isset($_POST['li_unify_all_leads'])) {
-            check_admin_referer('li_unify_all_leads_verify', 'li_nonce');
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_unify_all_leads_verify');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada.', 'lead-intelligence'));
+            }
             $merged = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
             $unify_message = "Unificação concluída com sucesso! {$merged} registros foram mesclados e enriquecidos com as UTMs dos formulários.";
         }
 
         if (isset($_POST['li_sync_gsheets'])) {
-            check_admin_referer('li_sync_gsheets_verify', 'li_nonce');
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_gsheets_verify');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada.', 'lead-intelligence'));
+            }
             $messages = [];
             $has_error = false;
 

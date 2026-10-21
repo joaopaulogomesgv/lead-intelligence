@@ -139,12 +139,22 @@ class GoogleAdsController {
         $leads = is_array($leads) ? $leads : [];
 
         $sync_feedback = null;
-        if (isset($_POST['li_sync_gads_channel']) && check_admin_referer('li_gads_channel_sync', 'li_nonce')) {
+        if (isset($_POST['li_sync_gads_channel'])) {
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_gads_channel_sync');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada.', 'lead-intelligence'));
+            }
             $sync_feedback = \LeadIntelligence\GoogleAds\GoogleAdsClient::sync_campaign_costs();
         }
 
-        if (isset($_POST['li_run_google_sync_now']) && check_admin_referer('li_gads_sync_now_verify', 'li_nonce')) {
+        if (isset($_POST['li_run_google_sync_now'])) {
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_gads_sync_now_verify');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada. Recarregue a página e tente novamente.', 'lead-intelligence'));
+            }
             $res = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('google_ads', true);
+            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
+            \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
             if (is_wp_error($res)) {
                 $sync_feedback = ['success' => false, 'message' => $res->get_error_message()];
             } else {
@@ -152,8 +162,13 @@ class GoogleAdsController {
             }
         }
 
-        if (isset($_POST['li_unify_all_leads']) && check_admin_referer('li_gads_unify_verify', 'li_nonce')) {
+        if (isset($_POST['li_unify_all_leads'])) {
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_gads_unify_verify');
+            if (!$nonce_valid && !current_user_can('manage_options')) {
+                wp_die(__('Permissão negada ou sessão expirada.', 'lead-intelligence'));
+            }
             $merged = \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
             $sync_feedback = ['success' => true, 'message' => "Unificação concluída! {$merged} registros foram atualizados e enriquecidos com status da planilha e formulários."];
         }
 
@@ -427,7 +442,28 @@ class GoogleAdsController {
                         <?php else: ?>
                             <?php foreach ($leads as $lead): 
                                 $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
-                                $etapa_raw = !empty($lead->etapa_funil) ? $lead->etapa_funil : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+                                $etapa_raw = !empty($lead->etapa_funil) && strcasecmp(trim($lead->etapa_funil), 'pendente') !== 0
+                                    ? trim($lead->etapa_funil)
+                                    : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+
+                                // Estilização visual inteligente da Etapa do Funil baseada em termos comerciais reais
+                                $etapa_lower = mb_strtolower($etapa_raw, 'UTF-8');
+                                if (preg_match('/(venda|vendid|matricul|aluno|fechado|ganho|pago|aprovad)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;';
+                                    $etapa_icon = '🎓';
+                                } elseif (preg_match('/(desqualificad|nao[ _-]?convertid|não[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|inválido|sem[ _-]?perfil|descarte)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3;';
+                                    $etapa_icon = '❌';
+                                } elseif (preg_match('/(tentativa|contato|atendimento|aguardando)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;';
+                                    $etapa_icon = '📞';
+                                } elseif (preg_match('/(negocia|proposta|analis|boleto|remarketing)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+                                    $etapa_icon = '⏳';
+                                } else {
+                                    $etapa_badge_style = 'background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;';
+                                    $etapa_icon = '📝';
+                                }
                                 
                                 // Extrai apenas a utm_source de forma limpa
                                 $source_display = $lead->utm_source;
@@ -475,8 +511,9 @@ class GoogleAdsController {
                                         <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
-                                        <span class="li-badge <?php echo $lead->qualificacao_status === 'qualificado' ? 'li-status-qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'li-status-desqualificado' : 'li-status-cinza'); ?>" style="font-size: 11px;">
-                                            <?php echo esc_html($etapa_raw); ?>
+                                        <span class="li-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; <?php echo esc_attr($etapa_badge_style); ?>">
+                                            <span><?php echo esc_html($etapa_icon); ?></span>
+                                            <span><?php echo esc_html($etapa_raw); ?></span>
                                         </span>
                                     </td>
                                     <td style="text-align: center;">
