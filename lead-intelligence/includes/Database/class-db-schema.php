@@ -633,5 +633,14 @@ class DbSchema {
              AND etapa_funil NOT LIKE '%matr%'
              AND (qualificacao_status != 'pendente' OR qualificacao_status IS NULL)"
         );
+
+        // 4. Normalização de etapas: se etapa_funil estiver com 'PENDENTE' em caixa alta ou vazia, converte para 'Formulário Enviado'
+        $wpdb->query(
+            "UPDATE {$table} 
+             SET etapa_funil = 'Formulário Enviado' 
+             WHERE UPPER(TRIM(etapa_funil)) = 'PENDENTE' 
+                OR etapa_funil IS NULL 
+                OR etapa_funil = ''"
+        );
     }
 }

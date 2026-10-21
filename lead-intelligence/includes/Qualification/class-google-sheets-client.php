@@ -502,14 +502,13 @@ class GoogleSheetsClient {
             return new \WP_Error('invalid_id', 'ID da planilha do Google inválido.');
         }
 
-        // Se o range for apenas o nome da aba ou vazio, formata para abranger apenas as linhas solicitadas
+        // Se o range for apenas o nome da aba ou vazio, consulta a aba diretamente sem limites rígidos de coluna ZZ (evita erro 400 de limite de colunas no Google Sheets)
         $clean_range = trim((string) $range);
-        $row_slice = ($max_rows > 0) ? ('1:' . ($max_rows + 1)) : '';
         if (empty($clean_range)) {
-            $clean_range = $row_slice ? ("A1:ZZ" . ($max_rows + 1)) : 'A:ZZ';
+            $clean_range = 'A:Z';
         } elseif (strpos($clean_range, '!') === false) {
             $escaped = "'" . str_replace("'", "''", $clean_range) . "'";
-            $clean_range = $row_slice ? ("{$escaped}!A1:ZZ" . ($max_rows + 1)) : "{$escaped}!A:ZZ";
+            $clean_range = $escaped;
         }
 
         $url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values/' . rawurlencode($clean_range) . '?majorDimension=ROWS&valueRenderOption=FORMATTED_VALUE';
@@ -591,16 +590,33 @@ class GoogleSheetsClient {
     }
 
     /**
+     * Converte número da coluna para letras padrão A1 (ex: 1->A, 26->Z, 27->AA, 52->AZ, 702->ZZ)
+     */
+    public static function col_num_to_letter($num) {
+        $num = (int) $num;
+        if ($num <= 0) {
+            return 'Z';
+        }
+        $letter = '';
+        while ($num > 0) {
+            $rem = ($num - 1) % 26;
+            $letter = chr(65 + $rem) . $letter;
+            $num = intval(($num - $rem - 1) / 26);
+        }
+        return $letter ?: 'Z';
+    }
+
+    /**
      * Busca dados com Otimização Inteligente de Janela (Tail Range via batchGet)
      * Para planilhas gigantes (ex: 30.000+ linhas), busca apenas a linha de cabeçalho + as últimas N linhas,
      * reduzindo o consumo de memória e tempo de CPU em mais de 95%.
      *
      * @param string $spreadsheet_id ID ou URL da planilha
      * @param string $tab_name Nome da aba
-     * @param string $window 'tail_1000'|'tail_2000'|'tail_3000'|'tail_5000'|'all'
+     * @param string $window 'tail_1000'|'tail_2000'|'tail_3000'|'tail_5000'|'tail_10000'|'all'
      * @return array|\WP_Error
      */
-    public static function fetch_sheet_data_smart($spreadsheet_id, $tab_name = '', $window = 'tail_2000') {
+    public static function fetch_sheet_data_smart($spreadsheet_id, $tab_name = '', $window = 'tail_5000') {
         $token = self::get_valid_access_token();
         if (is_wp_error($token)) {
             return $token;
@@ -613,18 +629,8 @@ class GoogleSheetsClient {
 
         $clean_tab = trim((string) $tab_name);
 
-        // Se for carga completa ('all'), busca tudo diretamente
-        if ($window === 'all') {
-            return self::fetch_sheet_data($spreadsheet_id, $clean_tab, 0);
-        }
-
-        $limit_rows = 2000;
-        if (preg_match('/tail_(\d+)/', $window, $m)) {
-            $limit_rows = (int) $m[1];
-        }
-
-        // 1. Consulta metadados para descobrir o total de linhas (gridProperties.rowCount)
-        $meta_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '?fields=sheets(properties(sheetId,title,gridProperties.rowCount))';
+        // 1. Consulta metadados para descobrir o total exato de linhas e colunas reais da grade
+        $meta_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '?fields=sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))';
         $meta_res = wp_remote_get($meta_url, [
             'timeout' => 20,
             'headers' => [
@@ -634,7 +640,8 @@ class GoogleSheetsClient {
         ]);
 
         $total_grid_rows = 0;
-        $matched_title = '';
+        $total_grid_cols = 26;
+        $matched_title   = '';
 
         if (!is_wp_error($meta_res) && wp_remote_retrieve_response_code($meta_res) === 200) {
             $meta_body = json_decode(wp_remote_retrieve_body($meta_res), true);
@@ -643,8 +650,9 @@ class GoogleSheetsClient {
                     $props = $sheet_meta['properties'] ?? [];
                     $t = $props['title'] ?? '';
                     if (empty($clean_tab) || strcasecmp($clean_tab, $t) === 0) {
-                        $matched_title = $t;
+                        $matched_title   = $t;
                         $total_grid_rows = (int) ($props['gridProperties']['rowCount'] ?? 0);
+                        $total_grid_cols = (int) ($props['gridProperties']['columnCount'] ?? 26);
                         break;
                     }
                 }
@@ -655,42 +663,39 @@ class GoogleSheetsClient {
             $matched_title = !empty($clean_tab) ? $clean_tab : 'Sheet1';
         }
 
+        if ($total_grid_rows <= 0) {
+            $total_grid_rows = 5000;
+        }
+        if ($total_grid_cols <= 0) {
+            $total_grid_cols = 26;
+        }
+
         $escaped_title = "'" . str_replace("'", "''", $matched_title) . "'";
+        $last_col = self::col_num_to_letter($total_grid_cols);
 
-        // 2. Consulta precisa da última linha preenchida com dados via coluna A (A:A)
-        // O Google Sheets API retorna apenas linhas com valores reais, ignorando células vazias da grade
-        $actual_data_rows = 0;
-        $col_a_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values/' . rawurlencode("{$escaped_title}!A:A") . '?majorDimension=COLUMNS';
-        $col_a_res = wp_remote_get($col_a_url, [
-            'timeout' => 20,
-            'headers' => [
-                'Authorization' => 'Bearer ' . $token,
-                'Accept'        => 'application/json',
-            ],
-        ]);
-
-        if (!is_wp_error($col_a_res) && wp_remote_retrieve_response_code($col_a_res) === 200) {
-            $col_a_body = json_decode(wp_remote_retrieve_body($col_a_res), true);
-            if (!empty($col_a_body['values'][0])) {
-                $actual_data_rows = count($col_a_body['values'][0]);
-            }
+        // Se for carga completa ('all'), busca tudo diretamente
+        if ($window === 'all') {
+            $range_all = "{$escaped_title}!A1:{$last_col}{$total_grid_rows}";
+            return self::fetch_sheet_data($spreadsheet_id, $range_all, 0);
         }
 
-        if ($actual_data_rows <= 0) {
-            $actual_data_rows = $total_grid_rows;
+        $limit_rows = 5000;
+        if (preg_match('/tail_(\d+)/', $window, $m)) {
+            $limit_rows = (int) $m[1];
         }
 
-        // Se a planilha for menor que o limite solicitado, busca padrão completa
-        if ($actual_data_rows <= ($limit_rows + 50)) {
-            return self::fetch_sheet_data($spreadsheet_id, $matched_title, $limit_rows);
+        // Se a planilha inteira for menor ou igual ao limite solicitado, busca completa
+        if ($total_grid_rows <= ($limit_rows + 50)) {
+            $range_direct = "{$escaped_title}!A1:{$last_col}{$total_grid_rows}";
+            return self::fetch_sheet_data($spreadsheet_id, $range_direct, $total_grid_rows);
         }
 
-        // 3. OTIMIZAÇÃO POR BATCHGET:
-        // Range 1 = Cabeçalho (Linha 1): 'Aba'!A1:ZZ1
-        // Range 2 = Últimas N linhas reais: 'Aba'!A{start}:ZZ{end}
-        $start_row = max(2, $actual_data_rows - $limit_rows);
-        $range_header  = "{$escaped_title}!A1:ZZ1";
-        $range_data    = "{$escaped_title}!A{$start_row}:ZZ{$actual_data_rows}";
+        // 2. OTIMIZAÇÃO POR BATCHGET COM COLUNAS REAIS:
+        // Range 1 = Cabeçalho (Linha 1): 'Aba'!A1:{last_col}1
+        // Range 2 = Últimas N linhas reais: 'Aba'!A{start}:{last_col}{end}
+        $start_row = max(2, $total_grid_rows - $limit_rows);
+        $range_header = "{$escaped_title}!A1:{$last_col}1";
+        $range_data   = "{$escaped_title}!A{$start_row}:{$last_col}{$total_grid_rows}";
 
         $batch_url = self::SHEETS_API_URL . '/' . rawurlencode($id) . '/values:batchGet?' .
                      'ranges=' . rawurlencode($range_header) . '&' .
@@ -713,8 +718,8 @@ class GoogleSheetsClient {
         $body = json_decode(wp_remote_retrieve_body($batch_res), true);
 
         if ($code !== 200 || empty($body['valueRanges']) || count($body['valueRanges']) < 2) {
-            // Fallback: se falhar o batchGet, usa fetch_sheet_data normal com limite
-            return self::fetch_sheet_data($spreadsheet_id, $matched_title, $limit_rows);
+            // Fallback resiliente: se o batchGet falhar, usa fetch_sheet_data com o range tail calculado
+            return self::fetch_sheet_data($spreadsheet_id, "{$escaped_title}!A{$start_row}:{$last_col}{$total_grid_rows}", $limit_rows);
         }
 
         $header_values = $body['valueRanges'][0]['values'][0] ?? [];
@@ -761,6 +766,7 @@ class GoogleSheetsClient {
             'optimized'  => true,
             'window'     => $window,
             'start_row'  => $start_row,
+            'grid_rows'  => $total_grid_rows,
         ];
     }
 }

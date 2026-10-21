@@ -158,6 +158,10 @@ class ImportController {
                     wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&channel={$source_channel}&sync_error=" . urlencode($sync_result->get_error_message())));
                     exit;
                 } else {
+                    // Recalibra funil e unifica contatos pós-sincronização
+                    DbSchema::recalibrate_funnel_and_qualification();
+                    DbSchema::unify_and_enrich_leads_by_phone();
+
                     wp_safe_redirect(admin_url("admin.php?page=lead-intelligence-import&tab=google_sheets&channel={$source_channel}&sync_success=" . urlencode($sync_result['message'])));
                     exit;
                 }

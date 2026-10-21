@@ -125,13 +125,43 @@ class LeadsController {
 
         if (isset($_POST['li_sync_gsheets'])) {
             check_admin_referer('li_sync_gsheets_verify', 'li_nonce');
-            $res = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('google_ads', true);
-            if (is_wp_error($res)) {
-                $action_message = 'Erro ao sincronizar Google Sheets: ' . $res->get_error_message();
-                $action_type = 'error';
+            $messages = [];
+            $has_error = false;
+
+            // 1. Sincroniza Google Ads se configurado
+            $google_conf = \LeadIntelligence\Qualification\GoogleSheetsSync::get_source_settings('google_ads');
+            if (!empty($google_conf['spreadsheet_id'])) {
+                $res_g = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('google_ads', true);
+                if (is_wp_error($res_g)) {
+                    $messages[] = 'Google Ads: ' . $res_g->get_error_message();
+                    $has_error = true;
+                } else {
+                    $messages[] = $res_g['message'];
+                }
+            }
+
+            // 2. Sincroniza Meta Ads se configurado
+            $meta_conf = \LeadIntelligence\Qualification\GoogleSheetsSync::get_source_settings('meta_ads');
+            if (!empty($meta_conf['spreadsheet_id'])) {
+                $res_m = \LeadIntelligence\Qualification\GoogleSheetsSync::run_sync('meta_ads', true);
+                if (is_wp_error($res_m)) {
+                    $messages[] = 'Meta Ads: ' . $res_m->get_error_message();
+                    $has_error = true;
+                } else {
+                    $messages[] = $res_m['message'];
+                }
+            }
+
+            // 3. Recalibra etapas e qualificação de todos os leads imediatamente
+            \LeadIntelligence\Database\DbSchema::recalibrate_funnel_and_qualification();
+            \LeadIntelligence\Database\DbSchema::unify_and_enrich_leads_by_phone();
+
+            if (empty($messages)) {
+                $action_message = 'Nenhuma planilha do Google Sheets está configurada. Configure o link da planilha em "Qualificação > Google Sheets".';
+                $action_type = 'warning';
             } else {
-                $action_message = $res['message'];
-                $action_type = 'success';
+                $action_message = implode('<br>', $messages);
+                $action_type = $has_error ? 'warning' : 'success';
             }
         }
 
@@ -480,7 +510,29 @@ class LeadsController {
                             <?php foreach ($leads as $lead): 
                                 $lead_channel = LeadRepository::get_channel($lead);
                                 $chan_info    = LeadRepository::get_channel_info($lead_channel);
-                                $etapa_raw = !empty($lead->etapa_funil) ? $lead->etapa_funil : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+                                $etapa_raw = !empty($lead->etapa_funil) && strcasecmp(trim($lead->etapa_funil), 'pendente') !== 0
+                                    ? trim($lead->etapa_funil)
+                                    : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+
+                                // Estilização visual inteligente da Etapa do Funil baseada em termos comerciais reais
+                                $etapa_lower = mb_strtolower($etapa_raw, 'UTF-8');
+                                if (preg_match('/(venda|vendid|matricul|aluno|fechado|ganho|pago|aprovad)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0;';
+                                    $etapa_icon = '🎓';
+                                } elseif (preg_match('/(desqualificad|nao[ _-]?convertid|não[ _-]?convertid|perda|perdido|cancelad|recusad|invalido|inválido|sem[ _-]?perfil|descarte)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #ffe4e6; color: #be123c; border: 1px solid #fecdd3;';
+                                    $etapa_icon = '❌';
+                                } elseif (preg_match('/(tentativa|contato|atendimento|aguardando)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd;';
+                                    $etapa_icon = '📞';
+                                } elseif (preg_match('/(negocia|proposta|analis|boleto|remarketing)/iu', $etapa_lower)) {
+                                    $etapa_badge_style = 'background: #fef3c7; color: #b45309; border: 1px solid #fde68a;';
+                                    $etapa_icon = '⏳';
+                                } else {
+                                    $etapa_badge_style = 'background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;';
+                                    $etapa_icon = '📝';
+                                }
+
                                 $lead_course = $lead->tipo_curso ?: ($lead->area_interesse ?: '-');
                                 $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
                                 
@@ -547,8 +599,9 @@ class LeadsController {
                                         <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">
-                                        <span class="li-badge <?php echo $lead->qualificacao_status === 'qualificado' ? 'li-status-qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'li-status-desqualificado' : 'li-status-cinza'); ?>" style="font-size: 11px;">
-                                            <?php echo esc_html($etapa_raw); ?>
+                                        <span class="li-badge" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 4px; <?php echo esc_attr($etapa_badge_style); ?>">
+                                            <span><?php echo esc_html($etapa_icon); ?></span>
+                                            <span><?php echo esc_html($etapa_raw); ?></span>
                                         </span>
                                     </td>
                                     <td style="text-align: center;">

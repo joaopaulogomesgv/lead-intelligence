@@ -188,7 +188,7 @@ class GoogleSheetsSync {
                 'spreadsheet_id'  => '',
                 'sheet_tab'       => '',
                 'cron_frequency'  => 'disabled',
-                'sync_window'     => 'tail_2000',
+                'sync_window'     => 'tail_5000',
                 'mapping'         => [
                     'telefone'       => 'telefone',
                     'email'          => 'Email',
@@ -211,7 +211,7 @@ class GoogleSheetsSync {
                 'spreadsheet_id'  => '',
                 'sheet_tab'       => '',
                 'cron_frequency'  => 'disabled',
-                'sync_window'     => 'tail_2000',
+                'sync_window'     => 'tail_5000',
                 'mapping'         => [
                     'telefone'       => 'telefone',
                     'email'          => 'Email',

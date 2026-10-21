@@ -303,6 +303,18 @@ class Matcher {
             $raw_email  = !empty($col_map['email']) ? ($row_data[$col_map['email']] ?? '') : '';
             $raw_status = !empty($col_map['status']) ? ($row_data[$col_map['status']] ?? '') : '';
             $raw_etapa  = !empty($col_map['etapa']) ? ($row_data[$col_map['etapa']] ?? '') : '';
+
+            // Se etapa não veio pela coluna mapeada, tenta detectar outras colunas de fase/motivo na linha
+            if (empty($raw_etapa)) {
+                foreach (['motivo_perda', 'motivo_desqualificacao', 'motivo', 'desfecho', 'resultado', 'fase', 'situacao', 'desqualificacao', 'substatus'] as $cand_alias) {
+                    $cand_key = self::detect_column_key($row_data, [], $cand_alias);
+                    if (!empty($cand_key) && !empty($row_data[$cand_key])) {
+                        $raw_etapa = $row_data[$cand_key];
+                        break;
+                    }
+                }
+            }
+
             if (empty($raw_etapa) && !empty($raw_status)) {
                 $raw_etapa = $raw_status;
             }
@@ -321,15 +333,25 @@ class Matcher {
                 $qual_status = 'qualificado';
             } elseif ($status_from_etapa === 'nao_qualificado' || $status_from_status === 'nao_qualificado') {
                 $qual_status = 'nao_qualificado';
-            } elseif (!empty($status_from_etapa)) {
+            } elseif (!empty($status_from_etapa) && $status_from_etapa !== 'pendente') {
                 $qual_status = $status_from_etapa;
-            } elseif (!empty($status_from_status)) {
+            } elseif (!empty($status_from_status) && $status_from_status !== 'pendente') {
                 $qual_status = $status_from_status;
             } else {
                 $qual_status = $default_status;
             }
 
-            $final_etapa = !empty($raw_etapa) ? sanitize_text_field($raw_etapa) : (!empty($raw_status) ? sanitize_text_field($raw_status) : '');
+            // Preserva a etapa comercial verbatim (ex: Tentativa de Contato, Em Negociação, Desqualificado, Matrícula)
+            $clean_etapa_val = !empty($raw_etapa) ? trim((string) $raw_etapa) : '';
+            $clean_status_val = !empty($raw_status) ? trim((string) $raw_status) : '';
+
+            $final_etapa = '';
+            if (!empty($clean_etapa_val) && strcasecmp($clean_etapa_val, 'pendente') !== 0) {
+                $final_etapa = sanitize_text_field($clean_etapa_val);
+            } elseif (!empty($clean_status_val) && strcasecmp($clean_status_val, 'pendente') !== 0) {
+                $final_etapa = sanitize_text_field($clean_status_val);
+            }
+
             if (empty($final_etapa)) {
                 $final_etapa = ($qual_status === 'qualificado') ? 'Matrícula Realizada' : (($qual_status === 'nao_qualificado') ? 'Desqualificado' : 'Formulário Enviado');
             }
@@ -357,6 +379,12 @@ class Matcher {
                     $lookup_phones[$v] = true;
                 }
             }
+            if (!empty($raw_phone)) {
+                $raw_d = preg_replace('/\D/', '', (string) $raw_phone);
+                if (!empty($raw_d)) {
+                    $lookup_phones[$raw_d] = true;
+                }
+            }
             if (!empty($email_norm)) {
                 $lookup_emails[strtolower(trim($email_norm))] = true;
             }
@@ -379,11 +407,19 @@ class Matcher {
                 ));
                 if (!empty($results)) {
                     foreach ($results as $lead) {
+                        $lead_keys = [];
                         if (!empty($lead->telefone_normalizado)) {
-                            $leads_by_phone[$lead->telefone_normalizado] = $lead;
+                            $lead_keys = array_merge($lead_keys, PhoneNormalizer::get_lookup_variations($lead->telefone_normalizado));
                         }
                         if (!empty($lead->telefone)) {
-                            $leads_by_phone[$lead->telefone] = $lead;
+                            $lead_keys = array_merge($lead_keys, PhoneNormalizer::get_lookup_variations($lead->telefone));
+                            $lead_keys[] = $lead->telefone;
+                            $lead_keys[] = preg_replace('/\D/', '', (string) $lead->telefone);
+                        }
+                        foreach (array_unique($lead_keys) as $lk) {
+                            if (!empty($lk)) {
+                                $leads_by_phone[$lk] = $lead;
+                            }
                         }
                         if (!empty($lead->email)) {
                             $leads_by_email[strtolower(trim($lead->email))] = $lead;
@@ -417,8 +453,26 @@ class Matcher {
 
         foreach ($prepared_rows as $p) {
             $existing = null;
-            if (!empty($p['phone_norm']) && isset($leads_by_phone[$p['phone_norm']])) {
-                $existing = $leads_by_phone[$p['phone_norm']];
+            if (!empty($p['phone_norm'])) {
+                if (isset($leads_by_phone[$p['phone_norm']])) {
+                    $existing = $leads_by_phone[$p['phone_norm']];
+                } else {
+                    $p_vars = PhoneNormalizer::get_lookup_variations($p['phone_norm']);
+                    foreach ($p_vars as $pv) {
+                        if (isset($leads_by_phone[$pv])) {
+                            $existing = $leads_by_phone[$pv];
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!$existing && !empty($p['raw_phone'])) {
+                $raw_digits = preg_replace('/\D/', '', (string) $p['raw_phone']);
+                if (isset($leads_by_phone[$p['raw_phone']])) {
+                    $existing = $leads_by_phone[$p['raw_phone']];
+                } elseif (isset($leads_by_phone[$raw_digits])) {
+                    $existing = $leads_by_phone[$raw_digits];
+                }
             }
             if (!$existing && !empty($p['email_norm']) && isset($leads_by_email[$p['email_norm']])) {
                 $existing = $leads_by_email[$p['email_norm']];
@@ -441,6 +495,7 @@ class Matcher {
                     'updated_at'          => current_time('mysql'),
                 ];
 
+                if (empty($existing->telefone_normalizado) && !empty($p['phone_norm'])) $update_data['telefone_normalizado'] = $p['phone_norm'];
                 if (empty($existing->nome) && !empty($p['raw_name'])) $update_data['nome'] = sanitize_text_field($p['raw_name']);
                 if (empty($existing->email) && !empty($p['email_norm'])) $update_data['email'] = $p['email_norm'];
                 if (empty($existing->tipo_curso) && !empty($p['raw_course'])) $update_data['tipo_curso'] = sanitize_text_field($p['raw_course']);
