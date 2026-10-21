@@ -220,6 +220,7 @@ class LeadRepository {
             'search'       => '',
             'status'       => '',
             'campaign'     => '',
+            'utm_source'   => '',
             'orderby'      => 'id',
             'order'        => 'DESC',
             'date_from'    => '',
@@ -232,12 +233,25 @@ class LeadRepository {
 
         if (!empty($args['search'])) {
             $search = '%' . $wpdb->esc_like(trim($args['search'])) . '%';
-            $where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR area_interesse LIKE %s)";
+            $where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR area_interesse LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR pagina_origem LIKE %s)";
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
+            $params[] = $search;
+            $params[] = $search;
+            $params[] = $search;
+        }
+
+        if (!empty($args['utm_source'])) {
+            $src_val = trim($args['utm_source']);
+            $src_like = '%' . $wpdb->esc_like($src_val) . '%';
+            $where[] = "(utm_source = %s OR utm_source_first = %s OR utm_source LIKE %s OR pagina_origem LIKE %s)";
+            $params[] = $src_val;
+            $params[] = $src_val;
+            $params[] = $src_like;
+            $params[] = '%' . $wpdb->esc_like('utm_source=' . $src_val) . '%';
         }
 
         if (!empty($args['status'])) {
@@ -528,9 +542,9 @@ class LeadRepository {
     }
 
     /**
-     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal e período de data)
+     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal, período de data e utm_source)
      */
-    public static function get_status_counts($channel = '', $date_start = '', $date_end = '') {
+    public static function get_status_counts($channel = '', $date_start = '', $date_end = '', $utm_source = '') {
         global $wpdb;
         $table = DbSchema::get_leads_table();
         $where = ['1=1'];
@@ -541,6 +555,16 @@ class LeadRepository {
             if (!empty($chan_sql)) {
                 $where[] = $chan_sql;
             }
+        }
+
+        if (!empty($utm_source)) {
+            $src_val = trim($utm_source);
+            $src_like = '%' . $wpdb->esc_like($src_val) . '%';
+            $where[] = "(utm_source = %s OR utm_source_first = %s OR utm_source LIKE %s OR pagina_origem LIKE %s)";
+            $params[] = $src_val;
+            $params[] = $src_val;
+            $params[] = $src_like;
+            $params[] = '%' . $wpdb->esc_like('utm_source=' . $src_val) . '%';
         }
 
         if (!empty($date_start)) {
@@ -572,6 +596,50 @@ class LeadRepository {
             'pendente'            => isset($results['pendente']) ? (int) $results['pendente']->total : 0,
             'sem_correspondencia' => isset($results['sem_correspondencia']) ? (int) $results['sem_correspondencia']->total : 0,
         ];
+    }
+
+    /**
+     * Retorna todas as utm_sources distintas cadastradas no banco de leads
+     *
+     * @return array
+     */
+    public static function get_distinct_utm_sources() {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+        $results = $wpdb->get_col("
+            SELECT DISTINCT utm_source 
+            FROM {$table} 
+            WHERE utm_source IS NOT NULL AND TRIM(utm_source) != '' 
+            ORDER BY utm_source ASC
+        ");
+
+        if (!is_array($results)) {
+            $results = [];
+        }
+
+        // Também busca utm_source passadas dentro da URL da pagina_origem
+        $url_sources = $wpdb->get_col("
+            SELECT DISTINCT pagina_origem 
+            FROM {$table} 
+            WHERE pagina_origem LIKE '%utm_source=%' 
+            LIMIT 50
+        ");
+
+        if (is_array($url_sources)) {
+            foreach ($url_sources as $u) {
+                $q = parse_url($u, PHP_URL_QUERY);
+                if (!empty($q)) {
+                    parse_str($q, $qp);
+                    if (!empty($qp['utm_source'])) {
+                        $results[] = sanitize_text_field($qp['utm_source']);
+                    }
+                }
+            }
+        }
+
+        $clean = array_unique(array_filter(array_map('trim', $results)));
+        sort($clean);
+        return array_values($clean);
     }
 
     /**
@@ -1021,5 +1089,177 @@ class LeadRepository {
                 ORDER BY total_cost DESC";
 
         return $wpdb->get_results($wpdb->prepare($sql, $params));
+    }
+
+    /**
+     * Atualiza qualificação ou venda de um lead e despacha na hora para a Meta Conversions API (CAPI)
+     *
+     * @param int $lead_id
+     * @param string $action 'qualificar' | 'desqualificar' | 'pendente' | 'venda' | 'remover_venda'
+     * @param float|null $valor_venda
+     * @return array
+     */
+    public static function update_lead_status_and_capi($lead_id, $action, $valor_venda = null) {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+        $history_table = DbSchema::get_history_table();
+
+        $lead = self::find_by_id($lead_id);
+        if (!$lead) {
+            return [
+                'success' => false,
+                'message' => 'Lead não localizado no banco de dados.',
+            ];
+        }
+
+        $now = current_time('mysql');
+        $user_id = get_current_user_id();
+        $updates = ['updated_at' => $now];
+        $history = [];
+        $meta_event_to_send = null;
+
+        $old_status = (string) ($lead->qualificacao_status ?? 'pendente');
+        $old_etapa  = (string) ($lead->etapa_funil ?? '');
+        $old_is_sale = !empty($lead->capi_purchase_sent) || stripos($old_etapa, 'venda') !== false || stripos($old_etapa, 'matr') !== false;
+
+        switch ($action) {
+            case 'qualificar':
+                $new_status = 'qualificado';
+                $new_etapa  = $old_is_sale ? $old_etapa : 'Qualificado';
+                $updates['qualificacao_status'] = $new_status;
+                $updates['etapa_funil']         = $new_etapa;
+                $updates['qualificacao_data']   = $now;
+                $updates['qualificacao_origem'] = 'manual_meta_ads';
+                $meta_event_to_send = 'LeadQualified';
+                break;
+
+            case 'desqualificar':
+                $new_status = 'nao_qualificado';
+                $new_etapa  = 'Desqualificado';
+                $updates['qualificacao_status'] = $new_status;
+                $updates['etapa_funil']         = $new_etapa;
+                $updates['qualificacao_data']   = $now;
+                $updates['qualificacao_origem'] = 'manual_meta_ads';
+                $updates['capi_purchase_sent']  = 0;
+                break;
+
+            case 'pendente':
+                $new_status = 'pendente';
+                $new_etapa  = 'Formulário Enviado';
+                $updates['qualificacao_status'] = $new_status;
+                $updates['etapa_funil']         = $new_etapa;
+                $updates['capi_purchase_sent']  = 0;
+                break;
+
+            case 'venda':
+                $new_status = 'qualificado';
+                $new_etapa  = 'Matrícula Realizada';
+                $updates['qualificacao_status'] = $new_status;
+                $updates['etapa_funil']         = $new_etapa;
+                $updates['qualificacao_data']   = $now;
+                $updates['qualificacao_origem'] = 'manual_meta_ads';
+                if ($valor_venda !== null && (float) $valor_venda > 0) {
+                    $updates['valor_venda'] = (float) $valor_venda;
+                }
+                $meta_event_to_send = 'Purchase';
+                break;
+
+            case 'remover_venda':
+                $new_status = ($old_status === 'nao_qualificado') ? 'nao_qualificado' : 'qualificado';
+                $new_etapa  = ($new_status === 'nao_qualificado') ? 'Desqualificado' : 'Qualificado';
+                $updates['etapa_funil']        = $new_etapa;
+                $updates['capi_purchase_sent'] = 0;
+                break;
+
+            default:
+                return [
+                    'success' => false,
+                    'message' => 'Ação de qualificação inválida.',
+                ];
+        }
+
+        // Registro de Auditoria
+        if (isset($updates['qualificacao_status']) && $updates['qualificacao_status'] !== $old_status) {
+            $history[] = [
+                'lead_id'        => $lead_id,
+                'campo'          => 'qualificacao_status',
+                'valor_anterior' => $old_status,
+                'valor_novo'     => $updates['qualificacao_status'],
+                'origem'         => 'manual_meta_ads',
+                'usuario_id'     => $user_id,
+                'created_at'     => $now,
+            ];
+        }
+
+        if (isset($updates['etapa_funil']) && $updates['etapa_funil'] !== $old_etapa) {
+            $history[] = [
+                'lead_id'        => $lead_id,
+                'campo'          => 'etapa_funil',
+                'valor_anterior' => $old_etapa,
+                'valor_novo'     => $updates['etapa_funil'],
+                'origem'         => 'manual_meta_ads',
+                'usuario_id'     => $user_id,
+                'created_at'     => $now,
+            ];
+        }
+
+        $wpdb->update($table, $updates, ['id' => $lead_id]);
+
+        foreach ($history as $h) {
+            $wpdb->insert($history_table, $h);
+        }
+
+        $updated_lead = self::find_by_id($lead_id);
+
+        // Despacho imediato para a Meta CAPI
+        $capi_result = null;
+        if ($meta_event_to_send === 'LeadQualified') {
+            $capi_result = \LeadIntelligence\MetaCapi\CapiService::send_lead_qualified_event($updated_lead);
+            if (!empty($capi_result['success'])) {
+                $wpdb->update($table, [
+                    'capi_qualified_sent' => 1,
+                    'capi_qualified_time' => $now,
+                    'capi_event_id'       => $capi_result['event_id'] ?? '',
+                ], ['id' => $lead_id]);
+                $updated_lead->capi_qualified_sent = 1;
+                $updated_lead->capi_qualified_time = $now;
+            }
+        } elseif ($meta_event_to_send === 'Purchase') {
+            if (empty($updated_lead->capi_qualified_sent)) {
+                $q_res = \LeadIntelligence\MetaCapi\CapiService::send_lead_qualified_event($updated_lead);
+                if (!empty($q_res['success'])) {
+                    $wpdb->update($table, [
+                        'capi_qualified_sent' => 1,
+                        'capi_qualified_time' => $now,
+                    ], ['id' => $lead_id]);
+                    $updated_lead->capi_qualified_sent = 1;
+                }
+            }
+
+            $capi_result = \LeadIntelligence\MetaCapi\CapiService::send_purchase_event($updated_lead, $valor_venda);
+            if (!empty($capi_result['success'])) {
+                $wpdb->update($table, [
+                    'capi_purchase_sent' => 1,
+                    'capi_purchase_time' => $now,
+                    'capi_event_id'      => $capi_result['event_id'] ?? '',
+                ], ['id' => $lead_id]);
+                $updated_lead->capi_purchase_sent = 1;
+                $updated_lead->capi_purchase_time = $now;
+            }
+        }
+
+        Logger::info('Leads', "Lead #{$lead_id} teve status atualizado para '{$action}' via Painel Meta Ads.", [
+            'status'      => $updated_lead->qualificacao_status,
+            'etapa'       => $updated_lead->etapa_funil,
+            'capi_event'  => $meta_event_to_send,
+            'capi_result' => $capi_result ? ($capi_result['success'] ? 'sucesso' : 'falha') : 'nao_aplicavel',
+        ]);
+
+        return [
+            'success'     => true,
+            'action'      => $action,
+            'lead'        => $updated_lead,
+            'capi_result' => $capi_result,
+        ];
     }
 }

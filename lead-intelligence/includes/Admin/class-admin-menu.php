@@ -25,6 +25,7 @@ class AdminMenu {
         add_action('admin_menu', [__CLASS__, 'register_menus']);
         add_action('admin_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
         add_action('wp_ajax_li_sync_lead_ad', [LeadsController::class, 'ajax_sync_lead_ad']);
+        add_action('wp_ajax_li_meta_ads_update_lead', [MetaAdsController::class, 'ajax_update_lead_status']);
 
         // Inicializa listeners de formulários do controller de importação
         ImportController::init();

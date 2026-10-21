@@ -659,12 +659,36 @@ class ImportController {
                         </div>
 
                         <!-- MÉTODO 2: OAUTH 2.0 (EXPANSÍVEL) -->
-                        <details style="margin-top: 20px; padding: 14px 18px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+                        <details style="margin-top: 20px; padding: 16px 20px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
                             <summary style="font-weight: 600; color: #475569; cursor: pointer; font-size: 13px;">
                                 Método 2: OAuth 2.0 Clássico (Login via Navegador) - <em>Clique para expandir caso prefira</em>
                             </summary>
                             
-                            <form method="post" action="" style="margin-top: 15px;">
+                            <!-- AVISO CRÍTICO DE REDIRECT URI MISMATCH -->
+                            <div style="margin-top: 16px; padding: 14px 18px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; font-size: 13px; color: #1e40af; line-height: 1.6;">
+                                <strong style="display: flex; align-items: center; gap: 6px; font-size: 14px; margin-bottom: 6px; color: #1d4ed8;">
+                                    📌 Como evitar o "Erro 400: redirect_uri_mismatch":
+                                </strong>
+                                Para o Google permitir o login, você precisa cadastrar a URL abaixo em:
+                                <br>
+                                <em>Google Cloud Console &rarr; APIs e Serviços &rarr; Credenciais &rarr; Seu ID de cliente OAuth &rarr; <strong>URIs de redirecionamento autorizados</strong></em>
+                                
+                                <div style="margin-top: 10px; background: #ffffff; border: 1px solid #93c5fd; border-radius: 6px; padding: 10px 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+                                    <div>
+                                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700;">URI de Redirecionamento Oficial (REST API):</div>
+                                        <code id="li-gauth-redirect-uri" style="font-size: 13px; color: #1d4ed8; font-weight: 700;"><?php echo esc_url($redirect_uri_rest); ?></code>
+                                    </div>
+                                    <button type="button" class="button button-secondary" onclick="navigator.clipboard.writeText(document.getElementById('li-gauth-redirect-uri').innerText); alert('URI de Redirecionamento copiada com sucesso! Cole no Google Cloud Console.');">
+                                        📋 Copiar URI
+                                    </button>
+                                </div>
+
+                                <div style="margin-top: 8px; font-size: 12px; color: #3b82f6;">
+                                    💡 <em>Dica: Adicione também a URL alternativa caso seu servidor use proxy:</em> <code><?php echo esc_url($redirect_uri_admin); ?></code>
+                                </div>
+                            </div>
+
+                            <form method="post" action="" style="margin-top: 16px;">
                                 <?php wp_nonce_field('li_google_creds_verify', 'li_nonce'); ?>
                                 <table class="form-table" style="margin-top: 0;">
                                     <tr>
@@ -672,7 +696,7 @@ class ImportController {
                                         <td>
                                             <input type="text" name="google_client_id" id="google_client_id"
                                                    value="<?php echo esc_attr($google_auth['client_id']); ?>"
-                                                   class="regular-text" style="width: 100%; max-width: 480px;"
+                                                   class="regular-text" style="width: 100%; max-width: 520px;"
                                                    placeholder="ex: 123456789-xxxxxxxx.apps.googleusercontent.com">
                                         </td>
                                     </tr>
@@ -681,14 +705,14 @@ class ImportController {
                                         <td>
                                             <input type="password" name="google_client_secret" id="google_client_secret"
                                                    value="<?php echo !empty($google_auth['client_secret']) ? '••••••••••••••••' : ''; ?>"
-                                                   class="regular-text" style="width: 100%; max-width: 480px;"
+                                                   class="regular-text" style="width: 100%; max-width: 520px;"
                                                    placeholder="GOCSPX-xxxxxxxxxxxxxx">
                                         </td>
                                     </tr>
                                 </table>
-                                <div style="margin-top: 10px; display: flex; gap: 10px;">
-                                    <button type="submit" name="li_connect_google_btn" class="button button-secondary">
-                                        Conectar via OAuth
+                                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                                    <button type="submit" name="li_connect_google_btn" class="button button-primary" style="font-weight: 600;">
+                                        🔗 Salvar Credenciais &amp; Conectar via OAuth
                                     </button>
                                 </div>
                             </form>

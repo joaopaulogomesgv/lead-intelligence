@@ -2919,6 +2919,72 @@ body.admin-bar .li-wrap .li-main-wrapper {
     cursor: pointer;
 }
 
+/* ==========================================================================
+   Ações e Sincronização Meta CAPI (Linhas da Tabela Meta Ads)
+   ========================================================================== */
+.li-wrap .li-meta-row-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+.li-wrap .li-btn-group-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.li-wrap .li-action-btn {
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.li-wrap .li-action-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0,0,0,0.12);
+}
+
+.li-wrap .li-action-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.li-wrap .li-btn-qualificar.is-active-qual {
+    background: #10b981 !important;
+    color: #ffffff !important;
+    border-color: #059669 !important;
+    font-weight: 700 !important;
+}
+
+.li-wrap .li-btn-desqualificar.is-active-desq {
+    background: #ef4444 !important;
+    color: #ffffff !important;
+    border-color: #dc2626 !important;
+    font-weight: 700 !important;
+}
+
+.li-wrap .li-btn-venda.is-active-venda {
+    background: #d97706 !important;
+    color: #ffffff !important;
+    border-color: #b45309 !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px rgba(217, 119, 6, 0.4) !important;
+}
+
+.li-wrap .li-capi-pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 12px;
+    line-height: 1.3;
+    white-space: nowrap;
+}
+
 
 
 

@@ -33,6 +33,7 @@ class Settings {
                 'area_interesse' => 'area_interesse,area,interesse,curso_interesse,especializacao',
                 'polo'           => 'polo,unidade,cidade,polo_apoio,campus,local',
             ],
+            'enable_whatsapp_capture'  => 1,
             'meta_app_id'              => '',
             'meta_app_secret'          => '',
             'meta_waba_id'             => '',
@@ -51,6 +52,7 @@ class Settings {
             'logo_compact'             => '',
             'enable_webhook_relay'     => 1,
             'webhook_relay_target_url' => 'https://n8n.favbot.ai/webhook/446479c3-932c-4289-8c1a-4b06e7d4b960',
+            'webhook_inbound_key'      => '4b06e7d4b960',
             'google_ads_developer_token'   => '',
             'google_ads_client_id'         => '',
             'google_ads_client_secret'     => '',
@@ -105,6 +107,64 @@ class Settings {
             self::process_save_settings();
             return;
         }
+
+        // 4. Desconectar WhatsApp Oficial / Pausar Captura
+        if (isset($_POST['li_disconnect_whatsapp'])) {
+            self::process_disconnect_whatsapp();
+            return;
+        }
+
+        // 5. Reativar Captura de WhatsApp
+        if (isset($_POST['li_reconnect_whatsapp'])) {
+            self::process_reconnect_whatsapp();
+            return;
+        }
+    }
+
+    /**
+     * Desconecta o WhatsApp e pausa a criação de leads pelo webhook
+     */
+    private static function process_disconnect_whatsapp() {
+        if (!check_admin_referer('li_whatsapp_disconnect_verify', 'li_nonce') || !current_user_can('manage_options')) {
+            wp_die('Permissão insuficiente ou nonce inválido.');
+        }
+
+        $current = self::get_settings();
+        $current['enable_whatsapp_capture'] = 0;
+        $current['meta_access_token']        = '';
+        $current['meta_waba_id']             = '';
+        $current['meta_app_id']              = '';
+        $current['meta_app_secret']          = '';
+        $current['meta_phone_number_id']     = '';
+
+        // Inativa os polos para segurança absoluta
+        $polos = PoloRepository::get_all();
+        foreach ($polos as &$p) {
+            $p['status'] = 'inativo';
+        }
+        update_option('lead_intelligence_polos', $polos);
+        update_option('lead_intelligence_settings', $current);
+
+        Logger::info('WhatsApp', 'WhatsApp desconectado com sucesso pelo administrador. Captura de novos leads pausada.');
+        wp_safe_redirect(add_query_arg(['page' => 'lead-intelligence-settings', 'tab' => 'whatsapp', 'wa_disconnected' => 1], admin_url('admin.php')));
+        exit;
+    }
+
+    /**
+     * Reativa a captura de mensagens do WhatsApp
+     */
+    private static function process_reconnect_whatsapp() {
+        if (!check_admin_referer('li_whatsapp_reconnect_verify', 'li_nonce') || !current_user_can('manage_options')) {
+            wp_die('Permissão insuficiente ou nonce inválido.');
+        }
+
+        $current = self::get_settings();
+        $current['enable_whatsapp_capture'] = 1;
+        update_option('lead_intelligence_settings', $current);
+
+        Logger::info('WhatsApp', 'Captura de mensagens do WhatsApp reativada pelo administrador.');
+        wp_safe_redirect(add_query_arg(['page' => 'lead-intelligence-settings', 'tab' => 'whatsapp', 'wa_reconnected' => 1], admin_url('admin.php')));
+        exit;
     }
 
     /**
@@ -220,6 +280,7 @@ class Settings {
 
         $enable_relay = isset($_POST['enable_webhook_relay']) ? 1 : (isset($_POST['has_forms_tab']) ? 0 : $current['enable_webhook_relay']);
         $target_relay = !empty($_POST['webhook_relay_target_url']) ? esc_url_raw(trim($_POST['webhook_relay_target_url'])) : $current['webhook_relay_target_url'];
+        $inbound_key  = !empty($_POST['webhook_inbound_key']) ? sanitize_text_field(trim($_POST['webhook_inbound_key'])) : ($current['webhook_inbound_key'] ?? '4b06e7d4b960');
 
         // Google Ads API
         $gads_dev_token = sanitize_text_field($_POST['google_ads_developer_token'] ?? '');
@@ -240,6 +301,7 @@ class Settings {
         $enable_gads_sync   = isset($_POST['enable_google_ads_costs_sync']) ? 1 : (isset($_POST['has_gads_form']) ? 0 : ($current['enable_google_ads_costs_sync'] ?? 1));
 
         $new_settings = [
+            'enable_whatsapp_capture'  => isset($_POST['has_whatsapp_form']) ? (isset($_POST['enable_whatsapp_capture']) ? 1 : 0) : ($current['enable_whatsapp_capture'] ?? 1),
             'enable_elementor_capture' => isset($_POST['has_forms_tab']) ? $enable_elementor : $current['enable_elementor_capture'],
             'enable_debug_logging'     => isset($_POST['has_forms_tab']) ? $enable_debug : $current['enable_debug_logging'],
             'utm_preservation'         => isset($_POST['has_forms_tab']) ? $utm_preservation : $current['utm_preservation'],
@@ -262,6 +324,7 @@ class Settings {
             'logo_compact'             => isset($_POST['logo_compact']) ? esc_url_raw($_POST['logo_compact']) : $current['logo_compact'],
             'enable_webhook_relay'     => $enable_relay,
             'webhook_relay_target_url' => $target_relay,
+            'webhook_inbound_key'      => $inbound_key,
             'google_ads_developer_token'   => $gads_dev_token,
             'google_ads_client_id'         => $gads_client_id,
             'google_ads_client_secret'     => $gads_client_secret,
@@ -362,6 +425,14 @@ class Settings {
             <?php elseif (!empty($_GET['disconnected'])): ?>
                 <div class="notice notice-info is-dismissible" style="margin-bottom: 20px;">
                     <p>Conta Google Ads desconectada com sucesso.</p>
+                </div>
+            <?php elseif (!empty($_GET['wa_disconnected'])): ?>
+                <div class="notice notice-warning is-dismissible" style="margin-bottom: 20px;">
+                    <p>🛑 <strong>WhatsApp desconectado com sucesso!</strong> A captura de mensagens pelo webhook foi pausada e nenhum lead novo do WhatsApp será salvo no banco de dados.</p>
+                </div>
+            <?php elseif (!empty($_GET['wa_reconnected'])): ?>
+                <div class="notice notice-success is-dismissible" style="margin-bottom: 20px;">
+                    <p>✔ <strong>Captura de mensagens do WhatsApp reativada com sucesso!</strong></p>
                 </div>
             <?php endif; ?>
 
@@ -521,7 +592,57 @@ class Settings {
         <?php
         else:
             // Listagem de Polos (Padrão)
+            $settings_current = self::get_settings();
+            $capture_on       = !isset($settings_current['enable_whatsapp_capture']) || !empty($settings_current['enable_whatsapp_capture']);
+            $has_active       = false;
+            foreach ($polos as $p) {
+                if (($p['status'] ?? 'ativo') === 'ativo') {
+                    $has_active = true;
+                    break;
+                }
+            }
+            $is_connected = $capture_on && $has_active;
         ?>
+            <!-- CARD DE STATUS DE CONEXÃO DO WHATSAPP -->
+            <div class="li-card" style="margin-bottom: 20px; border-left: 4px solid <?php echo $is_connected ? '#10b981' : '#f59e0b'; ?>; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+                <div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;">
+                            Status da Conexão do WhatsApp (Meta Cloud API)
+                        </h4>
+                        <?php if ($is_connected): ?>
+                            <span class="li-badge" style="background: rgba(16, 185, 129, 0.15); color: #059669; font-weight: 700;">🟢 Conectado &amp; Capturando Leads</span>
+                        <?php else: ?>
+                            <span class="li-badge" style="background: rgba(245, 158, 11, 0.15); color: #d97706; font-weight: 700;">⚪ Desconectado / Nenhum Número Conectado</span>
+                        <?php endif; ?>
+                    </div>
+                    <p style="margin: 4px 0 0; font-size: 13px; color: #64748b;">
+                        <?php if ($is_connected): ?>
+                            O webhook está ativo, processando mensagens recebidas e salvando leads vinculados à Meta para os números cadastrados.
+                        <?php else: ?>
+                            A captura está <strong>desconectada / sem números ativos</strong>. Nenhuma mensagem recebida da Meta será salva como lead no plugin.
+                        <?php endif; ?>
+                    </p>
+                </div>
+                <div>
+                    <?php if ($is_connected): ?>
+                        <form method="post" action="" onsubmit="return confirm('Tem certeza que deseja DESCONECTAR o WhatsApp? A captura de mensagens e criação de novos leads via WhatsApp serão pausadas imediatamente.');">
+                            <?php wp_nonce_field('li_whatsapp_disconnect_verify', 'li_nonce'); ?>
+                            <button type="submit" name="li_disconnect_whatsapp" class="button" style="color: #dc2626; border-color: #fca5a5; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                                🛑 Desconectar WhatsApp
+                            </button>
+                        </form>
+                    <?php else: ?>
+                        <form method="post" action="">
+                            <?php wp_nonce_field('li_whatsapp_reconnect_verify', 'li_nonce'); ?>
+                            <button type="submit" name="li_reconnect_whatsapp" class="button button-primary" style="background: #10b981; border-color: #10b981; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;">
+                                🟢 Reativar Captura de Mensagens
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            </div>
+
             <!-- RESUMO DO TESTE DE CONEXÃO WABA -->
             <?php if ($test_result): ?>
                 <?php if (!empty($test_result['success'])): ?>
@@ -850,9 +971,23 @@ class Settings {
                     Permite receber dados de webhooks externos, gravá-los no Lead Intelligence primeiro e retransmiti-los automaticamente para o n8n ou outros sistemas.
                 </p>
 
-                <div style="background: #f8fafc; padding: 12px 16px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 15px;">
-                    <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 600;">Endpoint de Entrada para Enviar ao Plugin:</div>
-                    <code style="font-size: 13px; color: #0284c7; font-weight: 600;"><?php echo esc_url($inbound_relay_url); ?></code>
+                <div style="background: #f8fafc; padding: 14px 18px; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 18px; display: flex; flex-direction: column; gap: 14px;">
+                    <div>
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 4px;">ENDPOINT DE ENTRADA PARA ENVIAR AO PLUGIN:</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <code id="li_inbound_url_display" style="font-size: 13px; color: #0284c7; font-weight: 600; background: #ffffff; padding: 7px 12px; border-radius: 4px; border: 1px solid #cbd5e1; flex: 1; user-select: all;"><?php echo esc_url($inbound_relay_url); ?></code>
+                            <button type="button" class="button button-secondary" onclick="navigator.clipboard.writeText('<?php echo esc_js($inbound_relay_url); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar URL'}, 2000);">Copiar URL</button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div style="font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; margin-bottom: 4px;">CHAVE DO WEBHOOK (COLE NO CAMPO "CHAVE" DO GOOGLE ADS OU META ADS):</div>
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <input type="text" id="webhook_inbound_key" name="webhook_inbound_key" value="<?php echo esc_attr($settings['webhook_inbound_key'] ?? '4b06e7d4b960'); ?>" class="regular-text" style="font-family: monospace; font-weight: 700; font-size: 13px; color: #0f172a; background: #ffffff; height: 34px; max-width: 360px;" placeholder="Ex: 4b06e7d4b960">
+                            <button type="button" class="button button-secondary" onclick="navigator.clipboard.writeText(document.getElementById('webhook_inbound_key').value); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar Chave'}, 2000);">Copiar Chave</button>
+                        </div>
+                        <p class="description" style="margin: 4px 0 0 0;">Esta é a chave padrão definida para validação das extensões de formulário de leads do Google Ads e Meta Ads.</p>
+                    </div>
                 </div>
 
                 <table class="form-table">

@@ -1519,10 +1519,19 @@ class DashboardController {
                                                         <?php if (!empty($lead_utms)): ?>
                                                             <div class="li-utm-badge-list">
                                                                 <?php foreach ($lead_utms as $utm_key => $utm_val): ?>
-                                                                    <div class="li-utm-item" title="<?php echo esc_attr("{$utm_key} = {$utm_val}"); ?>">
-                                                                        <span class="li-utm-key"><?php echo esc_html($utm_key); ?></span>
-                                                                        <span class="li-utm-val"><?php echo esc_html($utm_val); ?></span>
-                                                                    </div>
+                                                                    <?php if ($utm_key === 'utm_source'): ?>
+                                                                        <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads&utm_source=' . urlencode($utm_val))); ?>" style="text-decoration: none;" title="<?php echo esc_attr("Ver todos os leads com {$utm_key} = {$utm_val}"); ?>">
+                                                                            <div class="li-utm-item" style="cursor: pointer; transition: all 0.15s ease;">
+                                                                                <span class="li-utm-key"><?php echo esc_html($utm_key); ?></span>
+                                                                                <span class="li-utm-val"><?php echo esc_html($utm_val); ?> 🔍</span>
+                                                                            </div>
+                                                                        </a>
+                                                                    <?php else: ?>
+                                                                        <div class="li-utm-item" title="<?php echo esc_attr("{$utm_key} = {$utm_val}"); ?>">
+                                                                            <span class="li-utm-key"><?php echo esc_html($utm_key); ?></span>
+                                                                            <span class="li-utm-val"><?php echo esc_html($utm_val); ?></span>
+                                                                        </div>
+                                                                    <?php endif; ?>
                                                                 <?php endforeach; ?>
                                                                 <?php if (!empty($lead->fbclid)): ?>
                                                                     <div style="margin-top: 2px;">
@@ -1966,10 +1975,12 @@ class DashboardController {
                                                         ?>
                                                         <?php if (!empty($lead->utm_source)): ?>
                                                             <div class="li-utm-badge-list">
-                                                                <div class="li-utm-item" title="<?php echo esc_attr("utm_source = {$lead->utm_source}"); ?>">
-                                                                    <span class="li-utm-key">utm_source</span>
-                                                                    <span class="li-utm-val"><?php echo esc_html($lead->utm_source); ?></span>
-                                                                </div>
+                                                                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads&utm_source=' . urlencode($lead->utm_source))); ?>" style="text-decoration: none;" title="<?php echo esc_attr("Ver todos os leads com utm_source = {$lead->utm_source}"); ?>">
+                                                                    <div class="li-utm-item" style="cursor: pointer; transition: all 0.15s ease;">
+                                                                        <span class="li-utm-key">utm_source</span>
+                                                                        <span class="li-utm-val"><?php echo esc_html($lead->utm_source); ?> 🔍</span>
+                                                                    </div>
+                                                                </a>
                                                             </div>
                                                         <?php else: ?>
                                                             <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>

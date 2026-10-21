@@ -170,24 +170,27 @@ class LeadsController {
                 break;
         }
 
-        $search    = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-        $status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
-        $channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
-        $page      = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
-        $per_page  = 20;
+        $search     = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $status     = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
+        $channel    = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
+        $utm_source = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
+        $page       = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
+        $per_page   = 20;
 
-        $counts = LeadRepository::get_status_counts($channel, $date_start, $date_end);
+        $available_utm_sources = LeadRepository::get_distinct_utm_sources();
+        $counts = LeadRepository::get_status_counts($channel, $date_start, $date_end, $utm_source);
 
         $leads_data = LeadRepository::get_leads([
-            'search'    => $search,
-            'status'    => $status,
-            'channel'   => $channel,
-            'date_from' => !empty($date_start) ? substr($date_start, 0, 10) : '',
-            'date_to'   => !empty($date_end) ? substr($date_end, 0, 10) : '',
-            'page'      => $page,
-            'per_page'  => $per_page,
-            'orderby'   => 'id',
-            'order'     => 'DESC',
+            'search'     => $search,
+            'status'     => $status,
+            'channel'    => $channel,
+            'utm_source' => $utm_source,
+            'date_from'  => !empty($date_start) ? substr($date_start, 0, 10) : '',
+            'date_to'    => !empty($date_end) ? substr($date_end, 0, 10) : '',
+            'page'       => $page,
+            'per_page'   => $per_page,
+            'orderby'    => 'id',
+            'order'      => 'DESC',
         ]);
 
         $leads = $leads_data['items'];
@@ -317,13 +320,24 @@ class LeadsController {
                     <?php endif; ?>
 
                     <!-- Campo de Pesquisa Fluido -->
-                    <div style="flex: 1 1 220px; min-width: 180px;">
+                    <div style="flex: 1 1 200px; min-width: 160px;">
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Pesquisar</label>
                         <input type="text" name="s" value="<?php echo esc_attr($search); ?>" placeholder="Buscar por nome, e-mail, telefone..." style="width: 100%; height: 32px; font-size: 13px;">
                     </div>
 
+                    <!-- Filtro Específico por utm_source -->
+                    <div style="min-width: 170px;">
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">🏷️ utm_source</label>
+                        <input type="text" name="utm_source" list="li_utm_sources_list" value="<?php echo esc_attr($utm_source); ?>" placeholder="Ex: generica-20-10-26" style="width: 100%; height: 32px; font-size: 13px;">
+                        <datalist id="li_utm_sources_list">
+                            <?php foreach ($available_utm_sources as $src_opt): ?>
+                                <option value="<?php echo esc_attr($src_opt); ?>"></option>
+                            <?php endforeach; ?>
+                        </datalist>
+                    </div>
+
                     <!-- Select de Canal -->
-                    <div style="min-width: 150px;">
+                    <div style="min-width: 140px;">
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Canal</label>
                         <select name="canal" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Canais</option>
@@ -335,7 +349,7 @@ class LeadsController {
                     </div>
 
                     <!-- Select de Status -->
-                    <div style="min-width: 140px;">
+                    <div style="min-width: 130px;">
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Status</label>
                         <select name="status" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Status</option>
@@ -357,6 +371,28 @@ class LeadsController {
                     </div>
                 </form>
             </div>
+
+            <!-- CARD DE DESTAQUE: FILTRO ATIVO POR UTM SOURCE -->
+            <?php if (!empty($utm_source)): ?>
+                <div style="margin-bottom: 15px; padding: 12px 18px; background: #f0f9ff; border: 1px solid #7dd3fc; border-left: 4px solid #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 18px;">🏷️</span>
+                        <div style="font-size: 13px; color: #0369a1;">
+                            Filtro ativo: <strong>utm_source = </strong>
+                            <code style="background: #ffffff; border: 1px solid #bae6fd; padding: 3px 8px; border-radius: 4px; color: #0369a1; font-weight: 700; font-size: 13px;"><?php echo esc_html($utm_source); ?></code>
+                            <span style="margin-left: 12px; color: #0f172a; font-weight: 600;">
+                                📊 Encontrados: <strong><?php echo (int) $total_leads; ?> leads</strong> 
+                                (<?php echo (int) $counts['qualificado']; ?> qualificados / vendas)
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <a href="<?php echo esc_url(remove_query_arg('utm_source')); ?>" class="button button-secondary button-small" style="color: #b91c1c; border-color: #fca5a5;">
+                            ✕ Limpar Filtro UTM
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- TABELA DE LEADS COM FORMULÁRIO DE AÇÕES EM MASSA -->
             <form method="post" action="" id="liLeadsBulkForm">
@@ -476,9 +512,11 @@ class LeadsController {
                                     </td>
                                     <td>
                                         <?php if (!empty($source_display)): ?>
-                                            <code style="background: #e0f2fe; color: #0369a1; padding: 3px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-block;">
-                                                <?php echo esc_html($source_display); ?>
-                                            </code>
+                                            <a href="<?php echo esc_url(add_query_arg(['utm_source' => $source_display, 'periodo' => $periodo], $current_url)); ?>" style="text-decoration: none;" title="Clique para filtrar apenas leads com utm_source = '<?php echo esc_attr($source_display); ?>'">
+                                                <code style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#bae6fd'; this.style.color='#0284c7';" onmouseout="this.style.background='#e0f2fe'; this.style.color='#0369a1';">
+                                                    <span>🏷️</span> <?php echo esc_html($source_display); ?>
+                                                </code>
+                                            </a>
                                         <?php else: ?>
                                             <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>
                                         <?php endif; ?>
@@ -491,7 +529,7 @@ class LeadsController {
                                     <td style="text-align: center;">
                                         <span class="li-badge <?php echo $lead->qualificacao_status === 'qualificado' ? 'li-status-qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'li-status-desqualificado' : 'li-status-cinza'); ?>" style="font-weight: 600;">
                                             <?php 
-                                            if ($lead->qualificacao_status === 'qualificado') {
+                                             if ($lead->qualificacao_status === 'qualificado') {
                                                 echo 'Venda';
                                             } elseif ($lead->qualificacao_status === 'nao_qualificado') {
                                                 echo 'Não Qualificado';
@@ -522,13 +560,14 @@ class LeadsController {
                         <?php for ($i = 1; $i <= $total_pages; $i++): ?>
                             <?php
                             $link = add_query_arg([
-                                'paged'   => $i,
-                                'periodo' => $periodo,
-                                'from'    => $custom_from,
-                                'to'      => $custom_to,
-                                's'       => $search,
-                                'status'  => $status,
-                                'canal'   => $channel,
+                                'paged'      => $i,
+                                'periodo'    => $periodo,
+                                'from'       => $custom_from,
+                                'to'         => $custom_to,
+                                's'          => $search,
+                                'status'     => $status,
+                                'canal'      => $channel,
+                                'utm_source' => $utm_source,
                             ], $current_url);
                             ?>
                             <a href="<?php echo esc_url($link); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">

@@ -104,12 +104,29 @@ class MetaWebhook {
             return new \WP_REST_Response(['status' => 'ignored_empty_payload'], 200);
         }
 
+        // 2. Trava de Segurança: Verificação se o WhatsApp está Ativo e com Números Conectados
+        $capture_enabled = !empty($settings['enable_whatsapp_capture']);
+
+        $active_polos = array_filter(\LeadIntelligence\WhatsApp\PoloRepository::get_all(), function($p) {
+            return ($p['status'] ?? 'ativo') === 'ativo';
+        });
+
+        // Se a captura foi desativada OU se não há nenhum número/polo ativo conectado no plugin
+        if (!$capture_enabled || empty($active_polos)) {
+            Logger::debug('WhatsApp', 'Webhook da Meta recebido mas ignorado: Integração com WhatsApp está DESCONECTADA ou sem números ativos no plugin.', [
+                'capture_enabled' => $capture_enabled,
+                'active_polos'    => count($active_polos),
+            ]);
+            // Retorna 200 para a Meta não ficar reenviando em loop, mas NÃO processa nenhuma mensagem nem salva leads
+            return new \WP_REST_Response(['status' => 'whatsapp_disconnected'], 200);
+        }
+
         Logger::debug('WhatsApp', 'Evento recebido no Webhook WhatsApp Cloud API.', [
             'object'  => $payload['object'] ?? 'unknown',
             'entries' => count($payload['entry'] ?? []),
         ]);
 
-        // 2. Processa as mensagens e eventos de status
+        // 3. Processa as mensagens e eventos de status
         try {
             MessageHandler::process_payload($payload);
         } catch (\Throwable $e) {

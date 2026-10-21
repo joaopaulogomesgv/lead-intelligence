@@ -144,10 +144,17 @@ class LogsController {
                                     <td><?php echo esc_html($log->mensagem); ?></td>
                                     <td>
                                         <?php if (!empty($log->contexto)): ?>
-                                            <details>
-                                                <summary style="cursor: pointer; color: #0284c7; font-size: 12px;">Ver JSON</summary>
-                                                <pre style="background: #0f172a; color: #f8fafc; padding: 8px; font-size: 11px; border-radius: 4px; overflow-x: auto; max-height: 150px;"><?php echo esc_html($log->contexto); ?></pre>
-                                            </details>
+                                            <textarea id="li-log-data-<?php echo esc_attr($log->id); ?>" style="display:none;"><?php echo esc_textarea($log->contexto); ?></textarea>
+                                            <button type="button" 
+                                                    class="button button-small li-btn-view-json" 
+                                                    data-log-id="<?php echo esc_attr($log->id); ?>"
+                                                    data-log-cat="<?php echo esc_attr($log->categoria); ?>"
+                                                    data-log-lvl="<?php echo esc_attr($log->nivel); ?>"
+                                                    data-log-time="<?php echo esc_attr(date_i18n('d/m/Y H:i:s', strtotime($log->created_at))); ?>"
+                                                    data-log-msg="<?php echo esc_attr($log->mensagem); ?>"
+                                                    style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; color: #1a73e8; border-color: #dadce0; background: #ffffff; cursor: pointer; padding: 3px 8px; border-radius: 4px;">
+                                                🔍 Ver JSON
+                                            </button>
                                         <?php else: ?>
                                             <span style="color: #94a3b8; font-size: 12px;">-</span>
                                         <?php endif; ?>
@@ -172,6 +179,156 @@ class LogsController {
                     </div>
                 </div>
             <?php endif; ?>
+
+            <!-- MODAL DE VISUALIZAÇÃO DO JSON (ESTILO GOOGLE ADS) -->
+            <div id="li-json-modal" style="display: none; position: fixed; inset: 0; background: rgba(32, 33, 36, 0.6); z-index: 999999; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(2px);">
+                <div style="background: #ffffff; border-radius: 8px; width: 100%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28); overflow: hidden; border: 1px solid #dadce0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+                    
+                    <!-- Header do Modal -->
+                    <div style="padding: 20px 24px 14px 24px; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+                        <div>
+                            <div style="font-size: 14px; color: #5f6368; line-height: 1.5; font-weight: 400;">
+                                Compare esses dados com aqueles que você recebeu no sistema de gerenciamento de dados
+                            </div>
+                            <div id="li-modal-meta-info" style="font-size: 12px; color: #80868b; margin-top: 6px; display: flex; align-items: center; gap: 8px;"></div>
+                        </div>
+                        <button type="button" id="li-modal-close" style="background: transparent; border: none; font-size: 22px; line-height: 1; cursor: pointer; color: #5f6368; padding: 2px 6px; border-radius: 4px; margin-top: -2px;" title="Fechar">&times;</button>
+                    </div>
+
+                    <!-- Mensagem do Log (se houver) -->
+                    <div id="li-modal-msg-wrapper" style="padding: 0 24px 12px 24px; display: none;">
+                        <div style="font-size: 12px; color: #3c4043; background: #f8f9fa; border: 1px solid #e8eaed; border-radius: 4px; padding: 8px 12px;">
+                            <strong style="color: #202124;">Mensagem:</strong> <span id="li-modal-msg-container"></span>
+                        </div>
+                    </div>
+
+                    <!-- Corpo com JSON Formatado estilo Google Ads -->
+                    <div style="padding: 0 24px 14px 24px; flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+                        <div style="border: 1px solid #dadce0; border-radius: 4px; background: #ffffff; padding: 14px 16px; overflow: auto; max-height: 440px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);">
+                            <pre id="li-modal-json-pre" style="margin: 0; color: #202124; font-family: 'Roboto Mono', Menlo, Consolas, Monaco, monospace; font-size: 13px; line-height: 1.6; white-space: pre; tab-size: 2; font-weight: 400;"></pre>
+                        </div>
+                    </div>
+
+                    <!-- Rodapé com Link de Cópia estilo Google Ads -->
+                    <div style="padding: 6px 24px 20px 24px; display: flex; justify-content: space-between; align-items: center;">
+                        <button type="button" id="li-modal-copy-btn" style="background: none; border: none; padding: 0; color: #1a73e8; font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; outline: none; font-family: inherit; transition: color 0.2s;">
+                            Copiar para a área de transferência
+                        </button>
+                        <button type="button" style="background: #ffffff; border: 1px solid #dadce0; border-radius: 4px; color: #3c4043; font-size: 13px; font-weight: 500; padding: 6px 14px; cursor: pointer;" onclick="document.getElementById('li-json-modal').style.display='none';">
+                            Fechar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SCRIPT JS DO MODAL DE LOGS -->
+            <script>
+            jQuery(document).ready(function($) {
+                var $modal = $('#li-json-modal');
+
+                function decodeHtmlEntities(str) {
+                    if (!str) return '';
+                    var txt = document.createElement('textarea');
+                    txt.innerHTML = str;
+                    var val = txt.value;
+                    // Se houver codificação dupla (&amp;quot; ou &quot;)
+                    if (val.indexOf('&quot;') !== -1 || val.indexOf('&amp;') !== -1 || val.indexOf('&#039;') !== -1) {
+                        txt.innerHTML = val;
+                        val = txt.value;
+                    }
+                    // Substituição de garantia para aspas residuais
+                    return val.replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+                }
+
+                function formatJsonPayload(raw) {
+                    if (!raw) return '{}';
+                    var decoded = decodeHtmlEntities(raw).trim();
+                    
+                    try {
+                        var parsed = JSON.parse(decoded);
+                        // Se o resultado do parse ainda for string (caso tenha sido serializado duas vezes)
+                        if (typeof parsed === 'string') {
+                            try {
+                                parsed = JSON.parse(parsed);
+                            } catch (e2) {}
+                        }
+                        return JSON.stringify(parsed, null, 2);
+                    } catch (err) {
+                        // Tenta uma limpeza mais agressiva de quebras/aspas caso venha de log de texto
+                        try {
+                            var clean = decoded.replace(/\\"/g, '"');
+                            var parsed3 = JSON.parse(clean);
+                            return JSON.stringify(parsed3, null, 2);
+                        } catch (err2) {
+                            return decoded;
+                        }
+                    }
+                }
+
+                $(document).on('click', '.li-btn-view-json', function(e) {
+                    e.preventDefault();
+                    var logId   = $(this).data('log-id');
+                    var logCat  = $(this).data('log-cat');
+                    var logLvl  = $(this).data('log-lvl');
+                    var logTime = $(this).data('log-time');
+                    var logMsg  = $(this).data('log-msg');
+                    var rawVal  = $('#li-log-data-' + logId).val();
+
+                    $('#li-modal-meta-info').html('Log #' + logId + ' &bull; ' + logCat + ' &bull; ' + logTime);
+
+                    if (logMsg && logMsg.trim().length > 0) {
+                        $('#li-modal-msg-container').text(logMsg);
+                        $('#li-modal-msg-wrapper').show();
+                    } else {
+                        $('#li-modal-msg-wrapper').hide();
+                    }
+
+                    var formatted = formatJsonPayload(rawVal);
+                    $('#li-modal-json-pre').text(formatted);
+
+                    $modal.css('display', 'flex');
+                });
+
+                $('#li-modal-close').on('click', function() {
+                    $modal.hide();
+                });
+
+                $modal.on('click', function(e) {
+                    if ($(e.target).is($modal)) {
+                        $modal.hide();
+                    }
+                });
+
+                $(document).on('keydown', function(e) {
+                    if (e.key === 'Escape' && $modal.is(':visible')) {
+                        $modal.hide();
+                    }
+                });
+
+                $('#li-modal-copy-btn').on('click', function() {
+                    var textToCopy = $('#li-modal-json-pre').text();
+                    var $btn = $(this);
+                    navigator.clipboard.writeText(textToCopy).then(function() {
+                        var oldText = $btn.text();
+                        $btn.text('✔ Copiado para a área de transferência!').css('color', '#137333');
+                        setTimeout(function() {
+                            $btn.text('Copiar para a área de transferência').css('color', '#1a73e8');
+                        }, 2200);
+                    }).catch(function() {
+                        var textarea = document.createElement('textarea');
+                        textarea.value = textToCopy;
+                        document.body.appendChild(textarea);
+                        textarea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(textarea);
+                        $btn.text('✔ Copiado para a área de transferência!').css('color', '#137333');
+                        setTimeout(function() {
+                            $btn.text('Copiar para a área de transferência').css('color', '#1a73e8');
+                        }, 2200);
+                    });
+                });
+            });
+            </script>
         </div>
         <?php
     }

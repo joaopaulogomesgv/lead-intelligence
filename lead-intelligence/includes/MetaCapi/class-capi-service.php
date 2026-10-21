@@ -37,9 +37,27 @@ class CapiService {
     }
 
     /**
+     * Envia o evento oficial 'Purchase' (Venda / Matrícula) para a Meta Conversions API
+     *
+     * @param object $lead Objeto do lead vindo de wp_li_leads
+     * @param float $value Valor da conversão (padrão 100.00 se não definido)
+     * @param string $currency Moeda (padrão BRL)
+     * @return array ['success' => bool, 'message' => string, 'response' => array]
+     */
+    public static function send_purchase_event($lead, $value = 100.00, $currency = 'BRL') {
+        $val = (float) (!empty($value) && $value > 0 ? $value : (!empty($lead->valor_venda) ? $lead->valor_venda : 100.00));
+        return self::dispatch_event('Purchase', $lead, 'system_generated', [
+            'value'        => $val,
+            'currency'     => $currency,
+            'content_type' => 'product',
+            'content_name' => !empty($lead->tipo_curso) ? $lead->tipo_curso : (!empty($lead->area_interesse) ? $lead->area_interesse : 'Matrícula Faveni'),
+        ]);
+    }
+
+    /**
      * Prepara payload e despacha para a Graph API da Meta
      */
-    public static function dispatch_event($event_name, $lead, $action_source = 'website') {
+    public static function dispatch_event($event_name, $lead, $action_source = 'website', $extra_custom_data = []) {
         $settings = Settings::get_settings();
 
         $pixel_id  = $settings['capi_pixel_id'];
@@ -73,6 +91,17 @@ class CapiService {
         if ($event_name === 'LeadQualified') {
             $custom_data['score'] = (int) $lead->score;
             $custom_data['origem_qualificacao'] = $lead->qualificacao_origem;
+        }
+
+        if ($event_name === 'Purchase') {
+            $custom_data['value']        = isset($extra_custom_data['value']) ? (float) $extra_custom_data['value'] : 100.00;
+            $custom_data['currency']     = $extra_custom_data['currency'] ?? 'BRL';
+            $custom_data['content_type'] = $extra_custom_data['content_type'] ?? 'product';
+            $custom_data['content_name'] = $extra_custom_data['content_name'] ?? ($lead->tipo_curso ?: 'Matrícula');
+        }
+
+        if (!empty($extra_custom_data)) {
+            $custom_data = array_merge($custom_data, $extra_custom_data);
         }
 
         $event_payload = [

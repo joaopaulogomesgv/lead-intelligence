@@ -106,15 +106,18 @@ class MessageHandler {
         $received_display_phone = sanitize_text_field($metadata['display_phone_number'] ?? '');
 
         // Identifica o Polo associado a este Phone Number ID
-        $polo_nome = '';
-        if (!empty($received_phone_id)) {
-            $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
-            if ($polo_info && !empty($polo_info['nome'])) {
-                $polo_nome = $polo_info['nome'];
-            } elseif (!empty($received_display_phone)) {
-                $polo_nome = 'Polo ' . $received_display_phone;
-            }
+        if (empty($received_phone_id)) {
+            Logger::debug('WhatsApp', 'Mensagem ignorada: Phone Number ID ausente no payload.');
+            return;
         }
+
+        $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
+        if (!$polo_info || ($polo_info['status'] ?? 'ativo') !== 'ativo') {
+            Logger::debug('WhatsApp', "Mensagem ignorada: O Phone Number ID {$received_phone_id} não pertence a nenhum número de WhatsApp ativo configurado no plugin.");
+            return;
+        }
+
+        $polo_nome = !empty($polo_info['nome']) ? $polo_info['nome'] : ('Polo ' . $received_display_phone);
 
         // 1. Extração de Metadados de Anúncio Meta (Click-to-WhatsApp Referral)
         $referral    = $msg['referral'] ?? [];

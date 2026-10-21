@@ -78,7 +78,7 @@ class GoogleSheetsClient {
         if (($data['auth_type'] ?? '') === 'service_account') {
             return !empty($data['sa_client_email']) && !empty($data['sa_private_key']);
         }
-        return !empty($data['refresh_token']) && !empty($data['client_id']);
+        return (!empty($data['refresh_token']) || !empty($data['access_token'])) && !empty($data['client_id']);
     }
 
     /**
@@ -219,9 +219,10 @@ class GoogleSheetsClient {
             return '';
         }
 
-        // Token alfanumérico limpo (evita falsos-positivos de base64 e JSON em WAF / ModSecurity)
-        $nonce = wp_create_nonce('li_google_auth_nonce');
-        $state = 'li_' . $nonce;
+        // Token alfanumérico seguro armazenado em transient (imune a perda de sessão cross-site na REST API)
+        $state_token = wp_generate_password(32, false);
+        set_transient('li_gauth_state_' . $state_token, get_current_user_id() ?: 1, 1800);
+        $state = 'li_' . $state_token;
 
         $params = [
             'client_id'             => $client_id,
@@ -281,6 +282,7 @@ class GoogleSheetsClient {
         $email = self::fetch_user_email($access_token);
 
         self::save_auth_data([
+            'auth_type'       => 'oauth',
             'access_token'    => $access_token,
             'refresh_token'   => $refresh_token,
             'expires_at'      => time() + $expires_in - 60,
@@ -325,7 +327,10 @@ class GoogleSheetsClient {
 
         // 2. Modo OAuth 2.0 Clássico
         if (empty($data['refresh_token'])) {
-            return new \WP_Error('not_connected', 'Conta Google não conectada.');
+            if (!empty($data['access_token']) && ($data['expires_at'] ?? 0) > time()) {
+                return $data['access_token'];
+            }
+            return new \WP_Error('not_connected', 'Conta Google não conectada ou sem refresh token. Por favor, reconecte a conta.');
         }
 
         // Se ainda for válido por mais de 60 segundos, reutiliza

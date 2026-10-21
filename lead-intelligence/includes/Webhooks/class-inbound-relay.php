@@ -48,18 +48,24 @@ class InboundRelay {
     }
 
     /**
-     * Endpoint GET: teste de status e instruções de uso
+     * Endpoint GET: teste de status, handshake da Meta (hub.challenge) e instruções de uso
      */
     public static function handle_inbound_get(\WP_REST_Request $request) {
+        // Se a Meta enviar verificação de webhook via GET com hub.challenge
+        $hub_challenge = $request->get_param('hub_challenge') ?: ($request->get_param('hub.challenge') ?: '');
+        if (!empty($hub_challenge)) {
+            return new \WP_REST_Response((int) $hub_challenge, 200);
+        }
+
         $settings = \LeadIntelligence\Admin\Settings::get_settings();
         $target_url = $settings['webhook_relay_target_url'] ?? '';
 
         return new \WP_REST_Response([
-            'status'     => 'online',
-            'message'    => 'Endpoint Inbound Webhook do Lead Intelligence está ativo e pronto para receber dados via POST.',
-            'relay_to'   => !empty($target_url) ? esc_url_raw($target_url) : 'Nenhum webhook de destino configurado',
+            'status'       => 'online',
+            'message'      => 'Endpoint Inbound Webhook do Lead Intelligence está ativo e pronto para receber dados via POST.',
+            'relay_to'     => !empty($target_url) ? esc_url_raw($target_url) : 'Nenhum webhook de destino configurado',
             'relay_active' => !empty($settings['enable_webhook_relay']),
-            'timestamp'  => current_time('mysql'),
+            'timestamp'    => current_time('mysql'),
         ], 200);
     }
 
@@ -91,8 +97,51 @@ class InboundRelay {
             ], 400);
         }
 
-        // 1. Extração flexível dos dados do lead
+        // Detecção de Ping / Verificação de Teste do Google Ads, Meta Ads ou CRM
+        $is_google_test = !empty($payload['is_test']) 
+            || (isset($payload['google_key']) && isset($payload['user_column_data']))
+            || (isset($payload['lead_id']) && strpos((string)$payload['lead_id'], 'test') !== false);
+
+        $is_test_ping = $is_google_test
+            || !empty($payload['test']) 
+            || !empty($payload['ping']) 
+            || !empty($request->get_param('hub_challenge'))
+            || !empty($request->get_param('hub.challenge'))
+            || (isset($payload['lead_id']) && in_array((string)$payload['lead_id'], ['0', 'test', 'dummy', 'test_lead_id'], true))
+            || (isset($payload['phone_number']) && strpos((string)$payload['phone_number'], '<') !== false);
+
+        if ($is_test_ping) {
+            Logger::info('InboundRelay', 'Ping/Teste de validação de webhook recebido com sucesso (Google Ads / Meta).', [
+                'is_google_test' => $is_google_test,
+                'google_key'     => $payload['google_key'] ?? '',
+                'lead_id'        => $payload['lead_id'] ?? '',
+            ]);
+
+            // Se o relay estiver configurado e ativo, repassa o teste para o n8n também
+            $target_url = !empty($settings['webhook_relay_target_url']) ? trim($settings['webhook_relay_target_url']) : '';
+            $relay_active = !isset($settings['enable_webhook_relay']) || !empty($settings['enable_webhook_relay']);
+            if ($relay_active && !empty($target_url)) {
+                self::forward_to_target($target_url, $payload, null, 0);
+            }
+
+            return new \WP_REST_Response([
+                'success' => true,
+                'status'  => 'google_ads_lead_form_verified',
+                'message' => 'Webhook do Google Ads verificado e conectado com sucesso!',
+            ], 200);
+        }
+
+        // 1. Extração flexível dos dados do lead (Google Ads, Meta Ads ou formulários genéricos)
         $extracted = self::extract_lead_fields($payload);
+
+        // Se for lead fictício de teste da Meta ou Google (ex: <phone_number> ou test@example.com)
+        if (strpos($extracted['telefone'], '<') !== false || strpos($extracted['email'], '<') !== false || $extracted['email'] === 'test@example.com') {
+            return new \WP_REST_Response([
+                'success' => true,
+                'status'  => 'test_accepted',
+                'message' => 'Evento de teste reconhecido com sucesso.',
+            ], 200);
+        }
 
         // Se não tiver pelo menos telefone ou email, não é possível criar o cadastro
         if (empty($extracted['telefone']) && empty($extracted['email'])) {
@@ -266,8 +315,78 @@ class InboundRelay {
      * @return array
      */
     private static function extract_lead_fields($payload) {
-        // Normaliza chaves em minúsculo para busca insensível a maiúsculas
         $flat = [];
+
+        // 1. Suporte oficial ao Google Ads Lead Form (user_column_data)
+        if (!empty($payload['user_column_data']) && is_array($payload['user_column_data'])) {
+            foreach ($payload['user_column_data'] as $col) {
+                if (is_array($col)) {
+                    $col_id = strtoupper(trim((string) ($col['column_id'] ?? '')));
+                    $val    = trim((string) ($col['string_value'] ?? ''));
+                    if ($val === '') continue;
+
+                    switch ($col_id) {
+                        case 'FULL_NAME':
+                        case 'FIRST_NAME':
+                            $flat['nome'] = $val;
+                            break;
+                        case 'LAST_NAME':
+                            $flat['sobrenome'] = $val;
+                            break;
+                        case 'PHONE_NUMBER':
+                            $flat['telefone'] = $val;
+                            break;
+                        case 'EMAIL':
+                            $flat['email'] = $val;
+                            break;
+                        case 'POSTAL_CODE':
+                            $flat['cep'] = $val;
+                            break;
+                        case 'CITY':
+                            $flat['cidade'] = $val;
+                            break;
+                        default:
+                            $col_name = strtolower(str_replace(' ', '_', trim((string) ($col['column_name'] ?? ''))));
+                            if ($col_name) {
+                                $flat[$col_name] = $val;
+                            }
+                            break;
+                    }
+                }
+            }
+            if (empty($flat['utm_source'])) {
+                $flat['utm_source'] = 'google_ads';
+            }
+            if (empty($flat['utm_medium'])) {
+                $flat['utm_medium'] = 'lead_form';
+            }
+            if (!empty($payload['campaign_id']) && empty($flat['utm_campaign'])) {
+                $flat['utm_campaign'] = 'camp_' . $payload['campaign_id'];
+            }
+            if (!empty($payload['form_id']) && empty($flat['formulario_nome'])) {
+                $flat['formulario_nome'] = 'Google Ads Form #' . $payload['form_id'];
+            }
+        }
+
+        // 2. Suporte a field_data (formato nativo de formulários de leads da Meta / Facebook Lead Ads)
+        if (!empty($payload['field_data']) && is_array($payload['field_data'])) {
+            foreach ($payload['field_data'] as $field) {
+                if (is_array($field) && !empty($field['name'])) {
+                    $fn = strtolower(trim((string) $field['name']));
+                    $val = '';
+                    if (isset($field['values']) && is_array($field['values']) && !empty($field['values'][0])) {
+                        $val = (string) $field['values'][0];
+                    } elseif (isset($field['value'])) {
+                        $val = is_array($field['value']) ? ($field['value'][0] ?? '') : (string) $field['value'];
+                    }
+                    if ($val !== '') {
+                        $flat[$fn] = trim($val);
+                    }
+                }
+            }
+        }
+
+        // 3. Normaliza chaves planas em minúsculo
         foreach ($payload as $k => $v) {
             if (is_scalar($v) || is_null($v)) {
                 $flat[strtolower(trim((string) $k))] = trim((string) $v);
@@ -286,8 +405,8 @@ class InboundRelay {
         };
 
         $nome = $find(['nome', 'name', 'full_name', 'first_name', 'cliente', 'contato', 'lead_nome']);
-        $email = $find(['email', 'e-mail', 'mail', 'lead_email']);
-        $telefone = $find(['telefone', 'phone', 'whatsapp', 'celular', 'tel', 'mobile', 'telefone_normalizado', 'lead_telefone']);
+        $email = $find(['email', 'e-mail', 'mail', 'lead_email', 'user_email', 'work_email']);
+        $telefone = $find(['telefone', 'phone', 'phone_number', 'raw_phone_number', 'whatsapp', 'celular', 'tel', 'mobile', 'telefone_normalizado', 'lead_telefone', 'user_phone', 'telefone_contato']);
 
         $tipo_curso = $find(['tipo_curso', 'curso', 'course', 'modalidade', 'grau']);
         $area_interesse = $find(['area_interesse', 'area', 'segmento']);
