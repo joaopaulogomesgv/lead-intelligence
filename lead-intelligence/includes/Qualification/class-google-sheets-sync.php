@@ -37,6 +37,22 @@ class GoogleSheetsSync {
     }
 
     /**
+     * Registra intervalos customizados no WP-Cron (ex: a cada 6 horas)
+     *
+     * @param array $schedules
+     * @return array
+     */
+    public static function register_cron_intervals($schedules) {
+        if (!isset($schedules['six_hours'])) {
+            $schedules['six_hours'] = [
+                'interval' => 6 * HOUR_IN_SECONDS,
+                'display'  => __('A cada 6 Horas', 'lead-intelligence'),
+            ];
+        }
+        return $schedules;
+    }
+
+    /**
      * Registra o endpoint REST de callback do OAuth
      */
     public static function register_rest_routes() {
