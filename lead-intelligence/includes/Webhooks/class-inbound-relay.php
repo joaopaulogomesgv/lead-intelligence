@@ -98,21 +98,26 @@ class InboundRelay {
         }
 
         // Detecção de Ping / Verificação de Teste do Google Ads, Meta Ads ou CRM
-        $is_google_test = !empty($payload['is_test']) 
-            || (isset($payload['google_key']) && isset($payload['user_column_data']))
-            || (isset($payload['lead_id']) && strpos((string)$payload['lead_id'], 'test') !== false);
+        // O Google Ads faz um ping inicial ao cadastrar o webhook enviando apenas google_key (sem user_column_data)
+        $has_columns    = !empty($payload['user_column_data']) && is_array($payload['user_column_data']);
+        $has_field_data = !empty($payload['field_data']) && is_array($payload['field_data']);
 
-        $is_test_ping = $is_google_test
+        $is_explicit_test = !empty($payload['is_test']) 
             || !empty($payload['test']) 
-            || !empty($payload['ping']) 
-            || !empty($request->get_param('hub_challenge'))
-            || !empty($request->get_param('hub.challenge'))
-            || (isset($payload['lead_id']) && in_array((string)$payload['lead_id'], ['0', 'test', 'dummy', 'test_lead_id'], true))
-            || (isset($payload['phone_number']) && strpos((string)$payload['phone_number'], '<') !== false);
+            || !empty($payload['ping'])
+            || (isset($payload['lead_id']) && (strpos((string)$payload['lead_id'], 'test') !== false || in_array((string)$payload['lead_id'], ['0', 'test', 'dummy', 'test_lead_id'], true)));
+
+        // É apenas um ping de conexão quando:
+        // 1. É um challenge da Meta (hub_challenge)
+        // 2. É teste explícito SEM colunas de dados reais preenchidas
+        // 3. É ping do Google Ads com google_key SEM colunas de usuário (validação inicial de URL)
+        $is_test_ping = (!empty($request->get_param('hub_challenge')) || !empty($request->get_param('hub.challenge')))
+            || ($is_explicit_test && !$has_columns && !$has_field_data)
+            || (isset($payload['google_key']) && !$has_columns && !$has_field_data && empty($payload['phone']) && empty($payload['telefone']));
 
         if ($is_test_ping) {
             Logger::info('InboundRelay', 'Ping/Teste de validação de webhook recebido com sucesso (Google Ads / Meta).', [
-                'is_google_test' => $is_google_test,
+                'is_google_test' => true,
                 'google_key'     => $payload['google_key'] ?? '',
                 'lead_id'        => $payload['lead_id'] ?? '',
             ]);
@@ -131,8 +136,16 @@ class InboundRelay {
             ], 200);
         }
 
+        // Parâmetros opcionais passados na query string da URL (ex: ?utm_campaign=formulario google)
+        $query_params = [
+            'utm_source'      => sanitize_text_field($request->get_param('utm_source') ?: ''),
+            'utm_medium'      => sanitize_text_field($request->get_param('utm_medium') ?: ''),
+            'utm_campaign'    => sanitize_text_field($request->get_param('utm_campaign') ?: ''),
+            'formulario_nome' => sanitize_text_field($request->get_param('formulario_nome') ?: ($request->get_param('form_name') ?: '')),
+        ];
+
         // 1. Extração flexível dos dados do lead (Google Ads, Meta Ads ou formulários genéricos)
-        $extracted = self::extract_lead_fields($payload);
+        $extracted = self::extract_lead_fields($payload, $query_params, $settings);
 
         // Se for lead fictício de teste da Meta ou Google (ex: <phone_number> ou test@example.com)
         if (strpos($extracted['telefone'], '<') !== false || strpos($extracted['email'], '<') !== false || $extracted['email'] === 'test@example.com') {
@@ -166,12 +179,12 @@ class InboundRelay {
             'tipo_curso'          => $extracted['tipo_curso'],
             'area_interesse'      => $extracted['area_interesse'],
             'polo'                => $extracted['polo'],
-            'formulario_nome'     => !empty($extracted['formulario_nome']) ? $extracted['formulario_nome'] : 'Webhook Inbound (Relay)',
+            'formulario_nome'     => !empty($extracted['formulario_nome']) ? $extracted['formulario_nome'] : ($settings['webhook_inbound_form_name'] ?? 'Formulário Google'),
             'ip_address'          => $ip,
             'user_agent'          => $ua,
-            'utm_source'          => !empty($extracted['utm_source']) ? $extracted['utm_source'] : 'webhook_inbound',
-            'utm_medium'          => $extracted['utm_medium'] ?? '',
-            'utm_campaign'        => $extracted['utm_campaign'] ?? '',
+            'utm_source'          => !empty($extracted['utm_source']) ? $extracted['utm_source'] : ($settings['webhook_inbound_utm_source'] ?? 'google_ads'),
+            'utm_medium'          => !empty($extracted['utm_medium']) ? $extracted['utm_medium'] : ($settings['webhook_inbound_utm_medium'] ?? 'lead_form'),
+            'utm_campaign'        => !empty($extracted['utm_campaign']) ? $extracted['utm_campaign'] : ($settings['webhook_inbound_utm_campaign'] ?? 'formulario google'),
             'utm_content'         => $extracted['utm_content'] ?? '',
             'utm_term'            => $extracted['utm_term'] ?? '',
             'gclid'               => $extracted['gclid'] ?? '',
@@ -188,11 +201,17 @@ class InboundRelay {
         // Busca o lead salvo com dados normalizados
         $saved_lead = LeadRepository::find_by_id($lead_id);
 
-        Logger::info('InboundRelay', "Lead #{$lead_id} salvo com sucesso via Inbound Webhook.", [
-            'nome'     => $extracted['nome'],
-            'telefone' => PhoneNormalizer::format_display($extracted['telefone']),
-            'email'    => $extracted['email'],
-            'curso'    => $extracted['tipo_curso'],
+        Logger::info('InboundRelay', "Lead #{$lead_id} salvo com sucesso via Inbound Webhook ({$lead_data['utm_campaign']}).", [
+            'lead_id'      => $lead_id,
+            'nome'         => $extracted['nome'],
+            'telefone'     => PhoneNormalizer::format_display($extracted['telefone']),
+            'email'        => $extracted['email'],
+            'curso'        => $extracted['tipo_curso'],
+            'utm_campaign' => $lead_data['utm_campaign'],
+            'utm_source'   => $lead_data['utm_source'],
+            'utm_medium'   => $lead_data['utm_medium'],
+            'formulario'   => $lead_data['formulario_nome'],
+            'origem'       => !empty($payload['user_column_data']) ? 'Google Ads Lead Form' : 'Inbound Webhook',
         ]);
 
         // 4. Repasse (Relay) para o webhook do n8n (se configurado e ativo)
@@ -219,6 +238,8 @@ class InboundRelay {
                 'nome'                 => $saved_lead ? $saved_lead->nome : $extracted['nome'],
                 'telefone_normalizado' => $saved_lead ? $saved_lead->telefone_normalizado : PhoneNormalizer::normalize($extracted['telefone']),
                 'email'                => $saved_lead ? $saved_lead->email : $extracted['email'],
+                'utm_campaign'         => $lead_data['utm_campaign'],
+                'utm_source'           => $lead_data['utm_source'],
             ],
         ], 200);
     }
@@ -240,22 +261,38 @@ class InboundRelay {
         $forward_payload['_lead_intelligence'] = [
             'lead_id'              => $lead_id,
             'uuid'                 => $saved_lead ? ($saved_lead->uuid ?? '') : '',
+            'nome'                 => $saved_lead ? ($saved_lead->nome ?? '') : ($original_payload['nome'] ?? ''),
+            'email'                => $saved_lead ? ($saved_lead->email ?? '') : ($original_payload['email'] ?? ''),
             'telefone_normalizado' => $saved_lead ? ($saved_lead->telefone_normalizado ?? '') : '',
             'telefone_formatado'   => $saved_lead ? PhoneNormalizer::format_display($saved_lead->telefone_normalizado ?? '') : '',
+            'formulario_nome'      => $saved_lead ? ($saved_lead->formulario_nome ?? '') : 'Formulário Google',
+            'utm_source'           => $saved_lead ? ($saved_lead->utm_source ?? '') : 'google_ads',
+            'utm_medium'           => $saved_lead ? ($saved_lead->utm_medium ?? '') : 'lead_form',
+            'utm_campaign'         => $saved_lead ? ($saved_lead->utm_campaign ?? '') : 'formulario google',
+            'utm_content'          => $saved_lead ? ($saved_lead->utm_content ?? '') : '',
+            'utm_term'             => $saved_lead ? ($saved_lead->utm_term ?? '') : '',
+            'gclid'                => $saved_lead ? ($saved_lead->gclid ?? '') : '',
             'status'               => $saved_lead ? ($saved_lead->status ?? 'novo') : 'novo',
-            'etapa_funil'          => $saved_lead ? ($saved_lead->etapa_funil ?? '') : '',
+            'etapa_funil'          => $saved_lead ? ($saved_lead->etapa_funil ?? '') : 'Formulário Enviado',
             'qualificacao_status'  => $saved_lead ? ($saved_lead->qualificacao_status ?? 'pendente') : 'pendente',
-            'canal_identificado'   => $saved_lead ? ($saved_lead->canal_identificado ?? '') : '',
+            'canal_identificado'   => 'Google Ads Lead Form',
             'created_at'           => current_time('mysql'),
             'source'               => 'lead_intelligence_inbound_relay',
         ];
 
-        // Se o payload original não tiver chaves planas de topo, adiciona as mais úteis diretamente
-        if (!isset($forward_payload['lead_id'])) {
-            $forward_payload['lead_id'] = $lead_id;
-        }
-        if (!isset($forward_payload['telefone_normalizado']) && $saved_lead && !empty($saved_lead->telefone_normalizado)) {
-            $forward_payload['telefone_normalizado'] = $saved_lead->telefone_normalizado;
+        // Disponibiliza as UTMs e dados limpos diretamente na raiz do JSON para nós do n8n
+        $forward_payload['lead_id']         = $lead_id;
+        $forward_payload['utm_campaign']    = $saved_lead ? $saved_lead->utm_campaign : ($forward_payload['utm_campaign'] ?? 'formulario google');
+        $forward_payload['utm_source']      = $saved_lead ? $saved_lead->utm_source : ($forward_payload['utm_source'] ?? 'google_ads');
+        $forward_payload['utm_medium']      = $saved_lead ? $saved_lead->utm_medium : ($forward_payload['utm_medium'] ?? 'lead_form');
+        $forward_payload['formulario_nome'] = $saved_lead ? $saved_lead->formulario_nome : 'Formulário Google';
+        if ($saved_lead) {
+            if (!empty($saved_lead->nome))                 $forward_payload['nome']                 = $saved_lead->nome;
+            if (!empty($saved_lead->email))                $forward_payload['email']                = $saved_lead->email;
+            if (!empty($saved_lead->telefone))             $forward_payload['telefone']             = $saved_lead->telefone;
+            if (!empty($saved_lead->telefone_normalizado)) $forward_payload['telefone_normalizado'] = $saved_lead->telefone_normalizado;
+            if (!empty($saved_lead->polo))                 $forward_payload['polo']                 = $saved_lead->polo;
+            if (!empty($saved_lead->tipo_curso))           $forward_payload['tipo_curso']           = $saved_lead->tipo_curso;
         }
 
         $response = wp_remote_post($target_url, [
@@ -312,9 +349,11 @@ class InboundRelay {
      * Mapeador tolerante para extrair campos do payload recebido
      *
      * @param array $payload
+     * @param array $query_params
+     * @param array $settings
      * @return array
      */
-    private static function extract_lead_fields($payload) {
+    private static function extract_lead_fields($payload, $query_params = [], $settings = []) {
         $flat = [];
 
         // 1. Suporte oficial ao Google Ads Lead Form (user_column_data)
@@ -353,18 +392,6 @@ class InboundRelay {
                             break;
                     }
                 }
-            }
-            if (empty($flat['utm_source'])) {
-                $flat['utm_source'] = 'google_ads';
-            }
-            if (empty($flat['utm_medium'])) {
-                $flat['utm_medium'] = 'lead_form';
-            }
-            if (!empty($payload['campaign_id']) && empty($flat['utm_campaign'])) {
-                $flat['utm_campaign'] = 'camp_' . $payload['campaign_id'];
-            }
-            if (!empty($payload['form_id']) && empty($flat['formulario_nome'])) {
-                $flat['formulario_nome'] = 'Google Ads Form #' . $payload['form_id'];
             }
         }
 
@@ -412,19 +439,44 @@ class InboundRelay {
         $area_interesse = $find(['area_interesse', 'area', 'segmento']);
         $polo = $find(['polo', 'unidade', 'cidade', 'campus', 'polo_apoio']);
 
-        $utm_source   = $find(['utm_source', 'source', 'origem']);
-        $utm_medium   = $find(['utm_medium', 'medium', 'meio']);
-        $utm_campaign = $find(['utm_campaign', 'campaign', 'campanha', 'campaign_name']);
+        // Configurações padrão definidas no plugin
+        $cfg_source   = !empty($settings['webhook_inbound_utm_source']) ? trim($settings['webhook_inbound_utm_source']) : 'google_ads';
+        $cfg_medium   = !empty($settings['webhook_inbound_utm_medium']) ? trim($settings['webhook_inbound_utm_medium']) : 'lead_form';
+        $cfg_campaign = !empty($settings['webhook_inbound_utm_campaign']) ? trim($settings['webhook_inbound_utm_campaign']) : 'formulario google';
+        $cfg_form_nm  = !empty($settings['webhook_inbound_form_name']) ? trim($settings['webhook_inbound_form_name']) : 'Formulário Google';
+
+        // Determinação das UTMs com prioridade (Query String > Payload Limpo > Configuração Padrão)
+        $utm_source = !empty($query_params['utm_source']) 
+            ? $query_params['utm_source'] 
+            : ($find(['utm_source', 'source', 'origem']) ?: $cfg_source);
+
+        $utm_medium = !empty($query_params['utm_medium']) 
+            ? $query_params['utm_medium'] 
+            : ($find(['utm_medium', 'medium', 'meio']) ?: $cfg_medium);
+
+        // Se no payload vier campaign_id numérico (ex: 21849182), substitui pelo nome legível amigável "formulario google"
+        $payload_campaign = $find(['utm_campaign', 'campaign', 'campanha', 'campaign_name']);
+        if (!empty($query_params['utm_campaign'])) {
+            $utm_campaign = $query_params['utm_campaign'];
+        } elseif (!empty($payload_campaign) && !is_numeric($payload_campaign) && strpos($payload_campaign, 'camp_') !== 0) {
+            $utm_campaign = $payload_campaign;
+        } else {
+            $utm_campaign = $cfg_campaign;
+        }
+
+        $form_nome = !empty($query_params['formulario_nome']) 
+            ? $query_params['formulario_nome'] 
+            : ($find(['formulario_nome', 'form_name', 'origem_nome', 'titulo']) ?: $cfg_form_nm);
+
         $utm_content  = $find(['utm_content', 'content', 'anuncio', 'ad_name']);
         $utm_term     = $find(['utm_term', 'term', 'palavra_chave', 'keyword']);
 
         $gclid      = $find(['gclid', 'google_click_id']);
         $fbclid     = $find(['fbclid', 'facebook_click_id']);
         $gad_source = $find(['gad_source']);
-        $form_nome  = $find(['formulario_nome', 'form_name', 'origem_nome', 'titulo']);
 
-        $etapa_funil = $find(['etapa_funil', 'etapa', 'status', 'situacao']);
-        $qualificacao_status = $find(['qualificacao_status']);
+        $etapa_funil = $find(['etapa_funil', 'etapa', 'status', 'situacao']) ?: 'Formulário Enviado';
+        $qualificacao_status = $find(['qualificacao_status']) ?: 'pendente';
 
         return [
             'nome'                => sanitize_text_field($nome),

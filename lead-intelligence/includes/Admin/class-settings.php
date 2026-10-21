@@ -53,6 +53,10 @@ class Settings {
             'enable_webhook_relay'     => 1,
             'webhook_relay_target_url' => 'https://n8n.favbot.ai/webhook/446479c3-932c-4289-8c1a-4b06e7d4b960',
             'webhook_inbound_key'      => '4b06e7d4b960',
+            'webhook_inbound_utm_campaign' => 'formulario google',
+            'webhook_inbound_utm_source'   => 'google_ads',
+            'webhook_inbound_utm_medium'   => 'lead_form',
+            'webhook_inbound_form_name'    => 'Formulário Google',
             'google_ads_developer_token'   => '',
             'google_ads_client_id'         => '',
             'google_ads_client_secret'     => '',
@@ -281,6 +285,10 @@ class Settings {
         $enable_relay = isset($_POST['enable_webhook_relay']) ? 1 : (isset($_POST['has_forms_tab']) ? 0 : $current['enable_webhook_relay']);
         $target_relay = !empty($_POST['webhook_relay_target_url']) ? esc_url_raw(trim($_POST['webhook_relay_target_url'])) : $current['webhook_relay_target_url'];
         $inbound_key  = !empty($_POST['webhook_inbound_key']) ? sanitize_text_field(trim($_POST['webhook_inbound_key'])) : ($current['webhook_inbound_key'] ?? '4b06e7d4b960');
+        $inbound_campaign = !empty($_POST['webhook_inbound_utm_campaign']) ? sanitize_text_field(trim($_POST['webhook_inbound_utm_campaign'])) : ($current['webhook_inbound_utm_campaign'] ?? 'formulario google');
+        $inbound_source   = !empty($_POST['webhook_inbound_utm_source']) ? sanitize_text_field(trim($_POST['webhook_inbound_utm_source'])) : ($current['webhook_inbound_utm_source'] ?? 'google_ads');
+        $inbound_medium   = !empty($_POST['webhook_inbound_utm_medium']) ? sanitize_text_field(trim($_POST['webhook_inbound_utm_medium'])) : ($current['webhook_inbound_utm_medium'] ?? 'lead_form');
+        $inbound_form_nm  = !empty($_POST['webhook_inbound_form_name']) ? sanitize_text_field(trim($_POST['webhook_inbound_form_name'])) : ($current['webhook_inbound_form_name'] ?? 'Formulário Google');
 
         // Google Ads API
         $gads_dev_token = sanitize_text_field($_POST['google_ads_developer_token'] ?? '');
@@ -325,6 +333,10 @@ class Settings {
             'enable_webhook_relay'     => $enable_relay,
             'webhook_relay_target_url' => $target_relay,
             'webhook_inbound_key'      => $inbound_key,
+            'webhook_inbound_utm_campaign' => $inbound_campaign,
+            'webhook_inbound_utm_source'   => $inbound_source,
+            'webhook_inbound_utm_medium'   => $inbound_medium,
+            'webhook_inbound_form_name'    => $inbound_form_nm,
             'google_ads_developer_token'   => $gads_dev_token,
             'google_ads_client_id'         => $gads_client_id,
             'google_ads_client_secret'     => $gads_client_secret,
@@ -1006,6 +1018,34 @@ class Settings {
                         <td>
                             <input type="url" id="webhook_relay_target_url" name="webhook_relay_target_url" value="<?php echo esc_attr($settings['webhook_relay_target_url'] ?? ''); ?>" class="large-text" placeholder="https://n8n.favbot.ai/webhook/...">
                             <p class="description">Webhook do n8n para onde o lead será despachado após ser seguro no banco local.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="webhook_inbound_utm_campaign">UTM Campaign (Campanha Padrão)</label></th>
+                        <td>
+                            <input type="text" id="webhook_inbound_utm_campaign" name="webhook_inbound_utm_campaign" value="<?php echo esc_attr($settings['webhook_inbound_utm_campaign'] ?? 'formulario google'); ?>" class="regular-text" placeholder="formulario google">
+                            <p class="description">Nome da campanha atribuído aos leads que entram pelo formulário do Google Ads / Webhook Inbound (ex: <code>formulario google</code>).</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="webhook_inbound_utm_source">UTM Source (Origem Padrão)</label></th>
+                        <td>
+                            <input type="text" id="webhook_inbound_utm_source" name="webhook_inbound_utm_source" value="<?php echo esc_attr($settings['webhook_inbound_utm_source'] ?? 'google_ads'); ?>" class="regular-text" placeholder="google_ads">
+                            <p class="description">Origem do lead no Lead Intelligence e repassada ao n8n (ex: <code>google_ads</code>).</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="webhook_inbound_utm_medium">UTM Medium (Mídia Padrão)</label></th>
+                        <td>
+                            <input type="text" id="webhook_inbound_utm_medium" name="webhook_inbound_utm_medium" value="<?php echo esc_attr($settings['webhook_inbound_utm_medium'] ?? 'lead_form'); ?>" class="regular-text" placeholder="lead_form">
+                            <p class="description">Meio ou formato de captura (ex: <code>lead_form</code>).</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="webhook_inbound_form_name">Nome do Formulário</label></th>
+                        <td>
+                            <input type="text" id="webhook_inbound_form_name" name="webhook_inbound_form_name" value="<?php echo esc_attr($settings['webhook_inbound_form_name'] ?? 'Formulário Google'); ?>" class="regular-text" placeholder="Formulário Google">
+                            <p class="description">Identificação visível na listagem de leads e no histórico (ex: <code>Formulário Google</code>).</p>
                         </td>
                     </tr>
                 </table>
