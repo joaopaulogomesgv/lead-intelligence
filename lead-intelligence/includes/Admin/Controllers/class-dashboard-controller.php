@@ -653,6 +653,7 @@ class DashboardController {
                                             <label class="li-filter-lbl">Canal</label>
                                             <select name="canal" id="liSelectCanal" class="li-select">
                                                 <option value="">Todos os Canais</option>
+                                                <option value="chatgpt" <?php selected($filter_channel, 'chatgpt'); ?>>🤖 ChatGPT Ads</option>
                                                 <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
                                                 <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
                                                 <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>

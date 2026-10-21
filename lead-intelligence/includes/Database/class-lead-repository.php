@@ -397,6 +397,25 @@ class LeadRepository {
             return "({$meta_raw} AND NOT {$google_condition})";
         }
 
+        if ($chan === 'chatgpt' || $chan === 'chatgpt_ads') {
+            return "(
+                LOWER(COALESCE(utm_source, '')) IN ('chat-ads', 'chatgpt', 'chatgpt_ads', 'chat-gpt', 'openai', 'chat_ads') OR
+                INSTR(LOWER(COALESCE(utm_source, '')), 'chat-ads') > 0 OR
+                INSTR(LOWER(COALESCE(utm_source, '')), 'chatgpt') > 0 OR
+                INSTR(LOWER(COALESCE(utm_source, '')), 'chat-gpt') > 0 OR
+                INSTR(LOWER(COALESCE(utm_campaign, '')), 'chatgpt') > 0 OR
+                INSTR(LOWER(COALESCE(utm_campaign, '')), 'chat-gpt') > 0 OR
+                INSTR(LOWER(COALESCE(formulario_nome, '')), 'chat ads') > 0 OR
+                INSTR(LOWER(COALESCE(formulario_nome, '')), 'chat-ads') > 0 OR
+                INSTR(LOWER(COALESCE(formulario_nome, '')), 'chatgpt') > 0 OR
+                INSTR(LOWER(COALESCE(pagina_origem, '')), 'chat-gpt') > 0 OR
+                INSTR(LOWER(COALESCE(pagina_origem, '')), 'chatgpt') > 0 OR
+                INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=chat-ads') > 0 OR
+                INSTR(LOWER(COALESCE(referrer, '')), 'chatgpt.com') > 0 OR
+                INSTR(LOWER(COALESCE(referrer, '')), 'openai.com') > 0
+            )";
+        }
+
         if ($chan === 'whatsapp') {
             return "(
                 INSTR(LOWER(COALESCE(formulario_nome, '')), 'whatsapp') > 0 OR
@@ -406,10 +425,11 @@ class LeadRepository {
         }
 
         if ($chan === 'organico') {
-            $google = self::get_channel_sql_condition('google_ads');
-            $meta   = self::get_channel_sql_condition('meta_ads');
-            $wa     = self::get_channel_sql_condition('whatsapp');
-            return "(NOT ({$google}) AND NOT ({$meta}) AND NOT ({$wa}))";
+            $google  = self::get_channel_sql_condition('google_ads');
+            $meta    = self::get_channel_sql_condition('meta_ads');
+            $wa      = self::get_channel_sql_condition('whatsapp');
+            $chatgpt = self::get_channel_sql_condition('chatgpt');
+            return "(NOT ({$google}) AND NOT ({$meta}) AND NOT ({$wa}) AND NOT ({$chatgpt}))";
         }
 
         return '';
@@ -419,7 +439,7 @@ class LeadRepository {
      * Identifica o canal de tráfego/origem de um lead
      *
      * @param object $lead Objeto com colunas do lead
-     * @return string 'google_ads' | 'meta_ads' | 'whatsapp' | 'organico'
+     * @return string 'google_ads' | 'meta_ads' | 'whatsapp' | 'chatgpt' | 'organico'
      */
     public static function get_channel($lead) {
         if (!$lead) {
@@ -443,7 +463,27 @@ class LeadRepository {
         $wa_stat  = trim((string) ($lead->whatsapp_status ?? ''));
         $conv_id  = trim((string) ($lead->conversation_id ?? ''));
 
-        // 1. Google Ads: Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
+        // 1. ChatGPT Ads / OpenAI: Tem utm_source 'chat-ads', 'chatgpt', 'chat-gpt', 'openai' ou URL / formulário indicando ChatGPT
+        if (
+            in_array($utm_src, ['chat-ads', 'chatgpt', 'chatgpt_ads', 'chat-gpt', 'openai', 'chat_ads']) ||
+            strpos($utm_src, 'chat-ads') !== false ||
+            strpos($utm_src, 'chatgpt') !== false ||
+            strpos($utm_src, 'chat-gpt') !== false ||
+            strpos($utm_camp, 'chatgpt') !== false ||
+            strpos($utm_camp, 'chat-gpt') !== false ||
+            strpos($form, 'chat ads') !== false ||
+            strpos($form, 'chat-ads') !== false ||
+            strpos($form, 'chatgpt') !== false ||
+            strpos($origem, 'chat-gpt') !== false ||
+            strpos($origem, 'chatgpt') !== false ||
+            strpos($origem, 'utm_source=chat-ads') !== false ||
+            strpos($referrer, 'chatgpt.com') !== false ||
+            strpos($referrer, 'openai.com') !== false
+        ) {
+            return 'chatgpt';
+        }
+
+        // 2. Google Ads: Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
         if (
             !empty($gclid) ||
             !empty($gad_src) ||
@@ -473,7 +513,7 @@ class LeadRepository {
             return 'google_ads';
         }
 
-        // 2. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram (nunca fbp nem campaign_id genérico)
+        // 3. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram (nunca fbp nem campaign_id genérico)
         if (
             !empty($fbclid) ||
             (!empty($fbc) && strpos($fbc, 'fb.') !== false) ||
@@ -500,7 +540,7 @@ class LeadRepository {
             return 'meta_ads';
         }
 
-        // 3. WhatsApp Direto
+        // 4. WhatsApp Direto
         if (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id)) {
             return 'whatsapp';
         }
@@ -516,6 +556,16 @@ class LeadRepository {
      */
     public static function get_channel_info($channel) {
         switch ($channel) {
+            case 'chatgpt':
+            case 'chatgpt_ads':
+                return [
+                    'label'       => 'ChatGPT Ads',
+                    'badge_class' => 'li-badge-chatgpt',
+                    'icon'        => 'dashicons-format-chat',
+                    'dot'         => '🤖',
+                    'color'       => '#10a37f',
+                    'bg'          => '#e6f7f2',
+                ];
             case 'google_ads':
                 return [
                     'label'       => 'Google Ads',
@@ -675,12 +725,14 @@ class LeadRepository {
             $params[] = $date_end;
         }
 
-        $google_cond = self::get_channel_sql_condition('google_ads');
-        $meta_cond   = self::get_channel_sql_condition('meta_ads');
-        $wa_cond     = self::get_channel_sql_condition('whatsapp');
+        $chatgpt_cond = self::get_channel_sql_condition('chatgpt');
+        $google_cond  = self::get_channel_sql_condition('google_ads');
+        $meta_cond    = self::get_channel_sql_condition('meta_ads');
+        $wa_cond      = self::get_channel_sql_condition('whatsapp');
 
         $sql = "SELECT 
             CASE 
+                WHEN {$chatgpt_cond} THEN 'chatgpt'
                 WHEN {$google_cond} THEN 'google_ads'
                 WHEN {$meta_cond} THEN 'meta_ads'
                 WHEN {$wa_cond} THEN 'whatsapp'

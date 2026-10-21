@@ -406,6 +406,7 @@ class LeadsController {
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Canal</label>
                         <select name="canal" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Canais</option>
+                            <option value="chatgpt" <?php selected($channel, 'chatgpt'); ?>>🤖 ChatGPT Ads</option>
                             <option value="google_ads" <?php selected($channel, 'google_ads'); ?>>🟢 Google Ads</option>
                             <option value="meta_ads" <?php selected($channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
                             <option value="whatsapp" <?php selected($channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
@@ -773,11 +774,15 @@ class LeadsController {
                     html += '<p><strong>Polo / Unidade:</strong> ' + (lead.polo ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">🏢 ' + lead.polo + '</span>' : '-') + '</p>';
                     html += '</div>';
 
-                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads
+                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads / ChatGPT Ads
                     var chanBadge = '⚪ Direto / Site';
                     var src = (lead.utm_source || '').toLowerCase();
                     var form = (lead.formulario_nome || '').toLowerCase();
-                    if (lead.gclid || src === 'google' || form.indexOf('google') !== -1) {
+                    var pag = (lead.pagina_origem || '').toLowerCase();
+                    var ref = (lead.referrer || '').toLowerCase();
+                    if (['chat-ads', 'chatgpt', 'chat-gpt', 'openai', 'chat_ads'].indexOf(src) !== -1 || src.indexOf('chat-ads') !== -1 || src.indexOf('chatgpt') !== -1 || form.indexOf('chat ads') !== -1 || form.indexOf('chat-ads') !== -1 || form.indexOf('chatgpt') !== -1 || pag.indexOf('chat-gpt') !== -1 || pag.indexOf('chatgpt') !== -1 || ref.indexOf('chatgpt') !== -1) {
+                        chanBadge = '<span style="color:#10a37f; font-weight:700;">🤖 ChatGPT Ads</span>';
+                    } else if (lead.gclid || src === 'google' || form.indexOf('google') !== -1) {
                         chanBadge = '<span style="color:#1a73e8; font-weight:700;">🟢 Google Ads</span>';
                     } else if (lead.fbclid || lead.ad_id || ['meta','facebook','instagram','fb'].indexOf(src) !== -1 || form.indexOf('meta') !== -1 || form.indexOf('facebook') !== -1) {
                         chanBadge = '<span style="color:#0866ff; font-weight:700;">🔵 Meta Ads</span>';

@@ -1621,6 +1621,12 @@
     border: 1px solid rgba(22, 163, 74, 0.3) !important;
 }
 
+.li-wrap .li-badge-chatgpt {
+    background: rgba(16, 163, 127, 0.15) !important;
+    color: #10a37f !important;
+    border: 1px solid rgba(16, 163, 127, 0.35) !important;
+}
+
 .li-wrap .li-badge-direct {
     background: var(--li-bg-card-subtle) !important;
     color: var(--li-text-muted) !important;
