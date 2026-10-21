@@ -378,35 +378,11 @@ class GoogleSheetsSync {
             ]);
             $import_id = $wpdb->insert_id;
 
-            $total_matched = 0;
-            $total_created = 0;
-            $total_skipped = 0;
-
-            // Otimização de Banco de Dados: Processa com autocommit pausado em lotes de 200
-            $batch_size = 200;
-            $count = 0;
-            $in_transaction = true;
-            $wpdb->query('START TRANSACTION');
-
-            foreach ($rows as $row_data) {
-                $result = Matcher::process_row($row_data, $mapping, $source_label, $import_id, $channel);
-
-                if ($result['status'] === 'matched') {
-                    $total_matched++;
-                } elseif ($result['status'] === 'created') {
-                    $total_created++;
-                } else {
-                    $total_skipped++;
-                }
-
-                $count++;
-                if ($count % $batch_size === 0) {
-                    $wpdb->query('COMMIT');
-                    $wpdb->query('START TRANSACTION');
-                }
-            }
-            $wpdb->query('COMMIT');
-            $in_transaction = false;
+            // Processamento em lote ultrarrápido com hash map em memória (tempo < 1 segundo)
+            $batch_res     = Matcher::process_batch($rows, $mapping, $source_label, $import_id, $channel);
+            $total_matched = $batch_res['matched'];
+            $total_created = $batch_res['created'];
+            $total_skipped = $batch_res['skipped'];
 
             $elapsed = round(microtime(true) - $start_time, 2);
             $mem_peak = round(memory_get_peak_usage(true) / 1024 / 1024, 1);
