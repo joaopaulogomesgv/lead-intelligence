@@ -444,7 +444,7 @@ class ImportController {
 
                 try {
                     SpreadsheetParser::parse_all($temp_file, function ($row_data) use ($mapping, $original_filename, $import_id, &$total_processed, &$total_matched, &$total_created, &$total_skipped) {
-                        $result = Matcher::process_row($row_data, $mapping, $original_filename, $import_id);
+                        $result = Matcher::process_row($row_data, $mapping, $original_filename, $import_id, 'planilha');
 
                         $total_processed++;
                         if ($result['status'] === 'matched') {

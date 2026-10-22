@@ -335,7 +335,76 @@ class LeadRepository {
     public static function get_channel_sql_condition($channel) {
         $chan = sanitize_key($channel);
 
-        $google_condition = "(
+        // Condição para leads cuja origem cadastral é estritamente uma planilha
+        $planilha_condition = "(
+            (formulario_nome IS NOT NULL AND INSTR(LOWER(formulario_nome), 'planilha') > 0) OR
+            (pagina_origem IS NOT NULL AND INSTR(LOWER(pagina_origem), 'planilha:') > 0) OR
+            (utm_source IS NOT NULL AND (LOWER(utm_source) IN ('planilha', 'planilha_google', 'planilha_meta', 'planilha_upload', 'planilha_sheets') OR INSTR(LOWER(utm_source), 'planilha') > 0)) OR
+            (qualificacao_origem IS NOT NULL AND INSTR(LOWER(qualificacao_origem), 'planilha:') > 0 AND (formulario_id IS NULL OR formulario_id = '' OR LOWER(formulario_id) LIKE '%planilha%')) OR
+            (motivo_qualificacao IS NOT NULL AND INSTR(LOWER(motivo_qualificacao), 'planilha') > 0 AND (formulario_id IS NULL OR formulario_id = ''))
+        )";
+
+        if ($chan === 'planilha') {
+            return $planilha_condition;
+        }
+
+        if ($chan === 'planilha_google') {
+            return "({$planilha_condition} AND (INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR INSTR(LOWER(COALESCE(utm_source, '')), 'google') > 0))";
+        }
+
+        // Condição para leads vindos da Extensão Nativa de Formulário do Google Ads ou Campanhas de Formulário Google (Google Lead Form)
+        $google_lead_form_condition = "(
+            LOWER(COALESCE(utm_source, '')) IN ('google_lead_form', 'google-lead-form', 'lead_form') OR
+            INSTR(LOWER(COALESCE(utm_source, '')), 'lead_form') > 0 OR
+            LOWER(COALESCE(utm_medium, '')) IN ('lead_form', 'leadform', 'lead-form') OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'lead form') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'leadform') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'formulario google') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'formulário google') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'formulario do google') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'formulário do google') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'google lead form') > 0 OR
+            INSTR(LOWER(COALESCE(formulario_nome, '')), 'google form') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'lead form') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'formulario google') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'formulário google') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'google_lead_form') > 0 OR
+            INSTR(LOWER(COALESCE(pagina_origem, '')), 'google form') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulario google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulário google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulario_google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulario-google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulario do google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'formulário do google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'google_lead_form') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'google-lead-form') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'lead_form') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'lead form') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'leadform') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'form google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'form_google') > 0 OR
+            INSTR(LOWER(COALESCE(utm_campaign, '')), 'google form') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulario google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulário google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulario_google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulario-google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulario do google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'formulário do google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'google_lead_form') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'google-lead-form') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'lead_form') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'lead form') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'leadform') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'form google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'form_google') > 0 OR
+            INSTR(LOWER(COALESCE(campaign_name, '')), 'google form') > 0
+        )";
+
+        if ($chan === 'google_lead_form' || $chan === 'lead_form') {
+            return $google_lead_form_condition;
+        }
+
+        $google_raw = "(
             (gclid IS NOT NULL AND TRIM(gclid) != '') OR
             (gad_source IS NOT NULL AND TRIM(gad_source) != '') OR
             (gbraid IS NOT NULL AND TRIM(gbraid) != '') OR
@@ -353,8 +422,6 @@ class LeadRepository {
             INSTR(LOWER(COALESCE(utm_campaign, '')), 'google') > 0 OR
             INSTR(LOWER(COALESCE(utm_campaign, '')), 'gads') > 0 OR
             INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR
-            INSTR(LOWER(COALESCE(qualificacao_origem, '')), 'google') > 0 OR
-            INSTR(LOWER(COALESCE(motivo_qualificacao, '')), 'google') > 0 OR
             INSTR(LOWER(COALESCE(pagina_origem, '')), 'gclid=') > 0 OR
             INSTR(LOWER(COALESCE(pagina_origem, '')), 'gbraid=') > 0 OR
             INSTR(LOWER(COALESCE(pagina_origem, '')), 'wbraid=') > 0 OR
@@ -364,6 +431,8 @@ class LeadRepository {
             INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=institucional-clique') > 0 OR
             INSTR(LOWER(COALESCE(referrer, '')), 'google.') > 0
         )";
+
+        $google_condition = "({$google_raw} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
 
         if ($chan === 'google_ads') {
             return $google_condition;
@@ -393,8 +462,8 @@ class LeadRepository {
                 INSTR(LOWER(COALESCE(referrer, '')), 'facebook.com') > 0 OR
                 INSTR(LOWER(COALESCE(referrer, '')), 'instagram.com') > 0
             )";
-            // Exclusão mútua rigorosa: um lead identificado como Google Ads NUNCA cai em Meta Ads
-            return "({$meta_raw} AND NOT {$google_condition})";
+            // Exclusão mútua rigorosa: leads de Google Ads, Lead Form ou Planilha nunca caem em Meta Ads web
+            return "({$meta_raw} AND NOT {$google_condition} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
         }
 
         if ($chan === 'chatgpt' || $chan === 'chatgpt_ads') {
@@ -425,11 +494,12 @@ class LeadRepository {
         }
 
         if ($chan === 'organico') {
-            $google  = self::get_channel_sql_condition('google_ads');
-            $meta    = self::get_channel_sql_condition('meta_ads');
-            $wa      = self::get_channel_sql_condition('whatsapp');
-            $chatgpt = self::get_channel_sql_condition('chatgpt');
-            return "(NOT ({$google}) AND NOT ({$meta}) AND NOT ({$wa}) AND NOT ({$chatgpt}))";
+            $google    = self::get_channel_sql_condition('google_ads');
+            $meta      = self::get_channel_sql_condition('meta_ads');
+            $wa        = self::get_channel_sql_condition('whatsapp');
+            $chatgpt   = self::get_channel_sql_condition('chatgpt');
+            $lead_form = self::get_channel_sql_condition('google_lead_form');
+            return "(NOT ({$google}) AND NOT ({$meta}) AND NOT ({$wa}) AND NOT ({$chatgpt}) AND NOT ({$planilha_condition}) AND NOT ({$lead_form}))";
         }
 
         return '';
@@ -439,7 +509,7 @@ class LeadRepository {
      * Identifica o canal de tráfego/origem de um lead
      *
      * @param object $lead Objeto com colunas do lead
-     * @return string 'google_ads' | 'meta_ads' | 'whatsapp' | 'chatgpt' | 'organico'
+     * @return string 'google_ads' | 'google_lead_form' | 'meta_ads' | 'whatsapp' | 'chatgpt' | 'planilha' | 'planilha_google' | 'planilha_meta' | 'organico'
      */
     public static function get_channel($lead) {
         if (!$lead) {
@@ -459,11 +529,74 @@ class LeadRepository {
         $adset_id = trim((string) ($lead->adset_id ?? ''));
         $form     = strtolower(trim((string) ($lead->formulario_nome ?? '')));
         $origem   = strtolower(trim((string) ($lead->pagina_origem ?? '')));
+        $motivo   = strtolower(trim((string) ($lead->motivo_qualificacao ?? '')));
         $referrer = strtolower(trim((string) ($lead->referrer ?? '')));
         $wa_stat  = trim((string) ($lead->whatsapp_status ?? ''));
-        $conv_id  = trim((string) ($lead->conversation_id ?? ''));
+        $conv_id   = trim((string) ($lead->conversation_id ?? ''));
+        $form_id   = trim((string) ($lead->formulario_id ?? ''));
+        $camp_name = strtolower(trim((string) ($lead->campaign_name ?? '')));
+        $lead_orig = strtolower(trim((string) ($lead->origem ?? '')));
 
-        // 1. ChatGPT Ads / OpenAI: Tem utm_source 'chat-ads', 'chatgpt', 'chat-gpt', 'openai' ou URL / formulário indicando ChatGPT
+        // 1. Google Ads Lead Form (Formulário Nativo / Extensão de Anúncio / Campanha Formulário Google)
+        $is_lead_form = (
+            $utm_src === 'google_lead_form' ||
+            $utm_src === 'google-lead-form' ||
+            strpos($utm_src, 'lead_form') !== false ||
+            $utm_med === 'lead_form' ||
+            $utm_med === 'leadform' ||
+            $utm_med === 'lead-form' ||
+            strpos($form, 'lead form') !== false ||
+            strpos($form, 'leadform') !== false ||
+            strpos($form, 'formulario google') !== false ||
+            strpos($form, 'formulário google') !== false ||
+            strpos($form, 'formulario do google') !== false ||
+            strpos($form, 'formulário do google') !== false ||
+            strpos($form, 'google lead form') !== false ||
+            strpos($form, 'google form') !== false ||
+            strpos($origem, 'lead form') !== false ||
+            strpos($origem, 'formulario google') !== false ||
+            strpos($origem, 'formulário google') !== false ||
+            strpos($origem, 'google_lead_form') !== false ||
+            strpos($origem, 'google form') !== false ||
+            strpos($lead_orig, 'lead form') !== false ||
+            strpos($lead_orig, 'google ads lead form') !== false ||
+            strpos($lead_orig, 'formulario google') !== false ||
+            strpos($lead_orig, 'formulário google') !== false ||
+            strpos($utm_camp, 'formulario google') !== false ||
+            strpos($utm_camp, 'formulário google') !== false ||
+            strpos($utm_camp, 'formulario_google') !== false ||
+            strpos($utm_camp, 'formulario-google') !== false ||
+            strpos($utm_camp, 'formulario do google') !== false ||
+            strpos($utm_camp, 'formulário do google') !== false ||
+            strpos($utm_camp, 'google_lead_form') !== false ||
+            strpos($utm_camp, 'google-lead-form') !== false ||
+            strpos($utm_camp, 'lead_form') !== false ||
+            strpos($utm_camp, 'lead form') !== false ||
+            strpos($utm_camp, 'leadform') !== false ||
+            strpos($utm_camp, 'form google') !== false ||
+            strpos($utm_camp, 'form_google') !== false ||
+            strpos($utm_camp, 'google form') !== false ||
+            strpos($camp_name, 'formulario google') !== false ||
+            strpos($camp_name, 'formulário google') !== false ||
+            strpos($camp_name, 'formulario_google') !== false ||
+            strpos($camp_name, 'formulario-google') !== false ||
+            strpos($camp_name, 'formulario do google') !== false ||
+            strpos($camp_name, 'formulário do google') !== false ||
+            strpos($camp_name, 'google_lead_form') !== false ||
+            strpos($camp_name, 'google-lead-form') !== false ||
+            strpos($camp_name, 'lead_form') !== false ||
+            strpos($camp_name, 'lead form') !== false ||
+            strpos($camp_name, 'leadform') !== false ||
+            strpos($camp_name, 'form google') !== false ||
+            strpos($camp_name, 'form_google') !== false ||
+            strpos($camp_name, 'google form') !== false
+        );
+
+        if ($is_lead_form) {
+            return 'google_lead_form';
+        }
+
+        // 2. ChatGPT Ads / OpenAI
         if (
             in_array($utm_src, ['chat-ads', 'chatgpt', 'chatgpt_ads', 'chat-gpt', 'openai', 'chat_ads']) ||
             strpos($utm_src, 'chat-ads') !== false ||
@@ -483,7 +616,28 @@ class LeadRepository {
             return 'chatgpt';
         }
 
-        // 2. Google Ads: Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
+        // 3. Leads gerados diretamente a partir de Planilhas (sem formulário Elementor prévio do site)
+        $is_planilha = (
+            strpos($form, 'planilha') !== false ||
+            strpos($origem, 'planilha:') !== false ||
+            strpos($utm_src, 'planilha') !== false ||
+            in_array($utm_src, ['planilha', 'planilha_google', 'planilha_meta', 'planilha_upload', 'planilha_sheets']) ||
+            strpos($motivo, 'cadastrado via planilha') !== false ||
+            strpos($motivo, 'importado via') !== false ||
+            (!empty($lead->qualificacao_origem) && strpos(strtolower($lead->qualificacao_origem), 'planilha:') !== false && (empty($form_id) || strpos(strtolower($form_id), 'planilha') !== false))
+        );
+
+        if ($is_planilha && (empty($form_id) || strpos(strtolower($form_id), 'planilha') !== false)) {
+            if (strpos($form, 'meta') !== false || strpos($utm_src, 'meta') !== false || !empty($fbclid) || !empty($ad_id)) {
+                return 'planilha_meta';
+            }
+            if (strpos($form, 'google') !== false || strpos($utm_src, 'google') !== false || !empty($gclid) || !empty($gad_src)) {
+                return 'planilha_google';
+            }
+            return 'planilha';
+        }
+
+        // 4. Google Ads (Site / Landing Page): Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
         if (
             !empty($gclid) ||
             !empty($gad_src) ||
@@ -513,7 +667,7 @@ class LeadRepository {
             return 'google_ads';
         }
 
-        // 3. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram (nunca fbp nem campaign_id genérico)
+        // 5. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram
         if (
             !empty($fbclid) ||
             (!empty($fbc) && strpos($fbc, 'fb.') !== false) ||
@@ -540,7 +694,7 @@ class LeadRepository {
             return 'meta_ads';
         }
 
-        // 4. WhatsApp Direto
+        // 6. WhatsApp Direto
         if (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id)) {
             return 'whatsapp';
         }
@@ -552,10 +706,19 @@ class LeadRepository {
      * Retorna informações de rótulo e estilo do canal
      *
      * @param string $channel
-     * @return array ['label' => string, 'badge_class' => string, 'icon' => string, 'color' => string]
+     * @return array ['label' => string, 'badge_class' => string, 'icon' => string, 'color' => string, 'bg' => string]
      */
     public static function get_channel_info($channel) {
         switch ($channel) {
+            case 'google_lead_form':
+                return [
+                    'label'       => 'Google Lead Form',
+                    'badge_class' => 'li-badge-google-form',
+                    'icon'        => 'dashicons-feedback',
+                    'dot'         => '📋',
+                    'color'       => '#b45309',
+                    'bg'          => '#fef3c7',
+                ];
             case 'chatgpt':
             case 'chatgpt_ads':
                 return [
@@ -565,6 +728,33 @@ class LeadRepository {
                     'dot'         => '🤖',
                     'color'       => '#10a37f',
                     'bg'          => '#e6f7f2',
+                ];
+            case 'planilha_google':
+                return [
+                    'label'       => 'Planilha (Google Ads)',
+                    'badge_class' => 'li-badge-planilha',
+                    'icon'        => 'dashicons-media-spreadsheet',
+                    'dot'         => '📊',
+                    'color'       => '#7c3aed',
+                    'bg'          => '#f5f3ff',
+                ];
+            case 'planilha_meta':
+                return [
+                    'label'       => 'Planilha (Meta Ads)',
+                    'badge_class' => 'li-badge-planilha',
+                    'icon'        => 'dashicons-media-spreadsheet',
+                    'dot'         => '📊',
+                    'color'       => '#8b5cf6',
+                    'bg'          => '#f5f3ff',
+                ];
+            case 'planilha':
+                return [
+                    'label'       => 'Planilha (Importado)',
+                    'badge_class' => 'li-badge-planilha',
+                    'icon'        => 'dashicons-media-spreadsheet',
+                    'dot'         => '📊',
+                    'color'       => '#6d28d9',
+                    'bg'          => '#ede9fe',
                 ];
             case 'google_ads':
                 return [
@@ -725,14 +915,18 @@ class LeadRepository {
             $params[] = $date_end;
         }
 
-        $chatgpt_cond = self::get_channel_sql_condition('chatgpt');
-        $google_cond  = self::get_channel_sql_condition('google_ads');
-        $meta_cond    = self::get_channel_sql_condition('meta_ads');
-        $wa_cond      = self::get_channel_sql_condition('whatsapp');
+        $chatgpt_cond   = self::get_channel_sql_condition('chatgpt');
+        $planilha_cond  = self::get_channel_sql_condition('planilha');
+        $lead_form_cond = self::get_channel_sql_condition('google_lead_form');
+        $google_cond    = self::get_channel_sql_condition('google_ads');
+        $meta_cond      = self::get_channel_sql_condition('meta_ads');
+        $wa_cond        = self::get_channel_sql_condition('whatsapp');
 
         $sql = "SELECT 
             CASE 
                 WHEN {$chatgpt_cond} THEN 'chatgpt'
+                WHEN {$planilha_cond} THEN 'planilha'
+                WHEN {$lead_form_cond} THEN 'google_lead_form'
                 WHEN {$google_cond} THEN 'google_ads'
                 WHEN {$meta_cond} THEN 'meta_ads'
                 WHEN {$wa_cond} THEN 'whatsapp'
@@ -763,7 +957,7 @@ class LeadRepository {
             ];
         };
 
-        $channels = ['google_ads', 'meta_ads', 'whatsapp', 'organico'];
+        $channels = ['google_ads', 'google_lead_form', 'meta_ads', 'whatsapp', 'planilha', 'organico'];
         $formatted = [];
 
         foreach ($channels as $c) {

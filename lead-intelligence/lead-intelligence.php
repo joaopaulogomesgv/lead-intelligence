@@ -3,7 +3,7 @@
  * Plugin Name: Lead Intelligence
  * Plugin URI: https://github.com/lead-intelligence
  * Description: Central própria de inteligência e qualificação de leads Meta Ads, Elementor Pro e WhatsApp Cloud API.
- * Version: 2.6.3
+ * Version: 2.6.7
  * Author: Lead Intelligence Team
  * Author URI: https://github.com/lead-intelligence
  * Text Domain: lead-intelligence
@@ -17,7 +17,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('LEAD_INTELLIGENCE_VERSION', '2.6.3');
+define('LEAD_INTELLIGENCE_VERSION', '2.6.7');
 define('LEAD_INTELLIGENCE_PLUGIN_FILE', __FILE__);
 define('LEAD_INTELLIGENCE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('LEAD_INTELLIGENCE_PLUGIN_URL', plugin_dir_url(__FILE__));

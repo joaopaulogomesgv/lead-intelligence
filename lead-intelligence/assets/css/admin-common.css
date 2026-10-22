@@ -1310,6 +1310,69 @@
     background-color: var(--li-table-tr-hover);
 }
 
+/* ==========================================================================
+   Tabela Redimensionável Estilo Excel (Column Resizer)
+   ========================================================================== */
+.li-wrap table.li-resizable-table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+.li-wrap table.li-resizable-table th {
+    position: relative;
+    user-select: none;
+    overflow: visible;
+}
+
+.li-wrap .li-col-resizer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 8px;
+    height: 100%;
+    cursor: col-resize;
+    user-select: none;
+    z-index: 10;
+    display: block;
+    transition: background 0.15s ease;
+}
+
+.li-wrap .li-col-resizer::after {
+    content: '';
+    position: absolute;
+    top: 25%;
+    bottom: 25%;
+    right: 3px;
+    width: 2px;
+    background: rgba(148, 163, 184, 0.45);
+    border-radius: 1px;
+    transition: all 0.15s ease;
+}
+
+.li-wrap .li-col-resizer:hover::after,
+.li-wrap .li-col-resizer.is-resizing::after {
+    background: #0284c7;
+    width: 3px;
+    top: 0;
+    bottom: 0;
+    box-shadow: 0 0 6px rgba(2, 132, 199, 0.5);
+}
+
+.li-wrap .li-col-resizer:hover,
+.li-wrap .li-col-resizer.is-resizing {
+    background: rgba(2, 132, 199, 0.12);
+}
+
+body.li-is-col-resizing {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+body.li-is-col-resizing * {
+    user-select: none !important;
+    cursor: col-resize !important;
+}
+
 /* Badges de Status */
 .li-wrap .li-badge {
     display: inline-block;
@@ -1354,6 +1417,56 @@
     background: rgba(139, 92, 246, 0.15);
     color: #c084fc;
     border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Badges de Canais de Captação */
+.li-wrap .li-badge-google-form,
+.li-badge-google-form {
+    background: rgba(245, 158, 11, 0.15) !important;
+    color: #b45309 !important;
+    border: 1px solid rgba(245, 158, 11, 0.35) !important;
+}
+
+.li-wrap .li-badge-google,
+.li-badge-google {
+    background: rgba(26, 115, 232, 0.12) !important;
+    color: #1a73e8 !important;
+    border: 1px solid rgba(26, 115, 232, 0.3) !important;
+}
+
+.li-wrap .li-badge-meta,
+.li-badge-meta {
+    background: rgba(8, 102, 255, 0.12) !important;
+    color: #0866ff !important;
+    border: 1px solid rgba(8, 102, 255, 0.3) !important;
+}
+
+.li-wrap .li-badge-whatsapp,
+.li-badge-whatsapp {
+    background: rgba(16, 185, 129, 0.12) !important;
+    color: #10b981 !important;
+    border: 1px solid rgba(16, 185, 129, 0.3) !important;
+}
+
+.li-wrap .li-badge-planilha,
+.li-badge-planilha {
+    background: rgba(139, 92, 246, 0.12) !important;
+    color: #7c3aed !important;
+    border: 1px solid rgba(139, 92, 246, 0.3) !important;
+}
+
+.li-wrap .li-badge-chatgpt,
+.li-badge-chatgpt {
+    background: rgba(16, 163, 127, 0.12) !important;
+    color: #10a37f !important;
+    border: 1px solid rgba(16, 163, 127, 0.3) !important;
+}
+
+.li-wrap .li-badge-organico,
+.li-badge-organico {
+    background: rgba(100, 116, 139, 0.12) !important;
+    color: #64748b !important;
+    border: 1px solid rgba(100, 116, 139, 0.3) !important;
 }
 
 /* ==========================================================================
@@ -1625,6 +1738,13 @@
     background: rgba(16, 163, 127, 0.15) !important;
     color: #10a37f !important;
     border: 1px solid rgba(16, 163, 127, 0.35) !important;
+}
+
+.li-wrap .li-badge-planilha,
+.li-badge-planilha {
+    background: rgba(124, 58, 237, 0.15) !important;
+    color: #8b5cf6 !important;
+    border: 1px solid rgba(124, 58, 237, 0.35) !important;
 }
 
 .li-wrap .li-badge-direct {

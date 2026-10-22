@@ -200,15 +200,20 @@ class Matcher {
         }
 
         // CASO B: LEAD NÃO EXISTIA NO BANCO (Registro novo originado da planilha)
-        $form_label = 'Importação Planilha';
-        $utm_source = 'planilha';
+        $clean_file = sanitize_text_field($filename);
         if ($channel === 'google_ads') {
-            $form_label = 'Google Ads (Planilha)';
-            $utm_source = 'google';
+            $form_label     = "Planilha: Google Ads ({$clean_file})";
+            $default_source = 'planilha_google';
         } elseif ($channel === 'meta_ads') {
-            $form_label = 'Meta Ads (Planilha)';
-            $utm_source = 'meta';
+            $form_label     = "Planilha: Meta Ads ({$clean_file})";
+            $default_source = 'planilha_meta';
+        } else {
+            $form_label     = "Planilha: {$clean_file}";
+            $default_source = 'planilha';
         }
+
+        // Se houver campanha explícita mapeada na planilha, preserva; se não, usa a identificação de planilha
+        $utm_source = !empty($raw_camp) ? sanitize_text_field($raw_camp) : $default_source;
 
         $new_lead_data = [
             'uuid'                 => wp_generate_uuid4(),
@@ -222,17 +227,17 @@ class Matcher {
             'fbclid'               => sanitize_text_field($raw_fbclid),
             'ad_id'                => sanitize_text_field($raw_ad_id),
             'utm_source'           => $utm_source,
-            'utm_medium'           => 'cpc',
+            'utm_medium'           => 'planilha',
             'utm_campaign'         => sanitize_text_field($raw_camp),
             'formulario_nome'      => $form_label,
-            'pagina_origem'        => 'Planilha: ' . sanitize_text_field($filename),
+            'pagina_origem'        => 'Planilha: ' . $clean_file,
             'qualificacao_status'  => $qualificacao_status,
             'etapa_funil'          => $final_etapa,
             'qualificacao_data'    => $qualificacao_data,
-            'qualificacao_origem'  => 'planilha: ' . sanitize_text_field($filename),
+            'qualificacao_origem'  => 'planilha: ' . $clean_file,
             'qualificacao_dados'   => $json_dados,
             'score'                => 10,
-            'motivo_qualificacao'  => "Importado via {$form_label} (sem formulário Elementor prévio)",
+            'motivo_qualificacao'  => "Cadastrado via {$form_label} (Lead originado exclusivamente da planilha, sem formulário prévio)",
             'data_cadastro'        => $qualificacao_data,
             'created_at'           => current_time('mysql'),
             'updated_at'           => current_time('mysql'),
@@ -522,8 +527,19 @@ class Matcher {
 
                 $total_matched++;
             } else {
-                $form_label = ($channel === 'meta_ads') ? 'Meta Ads (Planilha)' : 'Google Ads (Planilha)';
-                $utm_source = ($channel === 'meta_ads') ? 'meta' : 'google';
+                $clean_file = sanitize_text_field($filename);
+                if ($channel === 'google_ads') {
+                    $form_label     = "Planilha: Google Ads ({$clean_file})";
+                    $default_source = 'planilha_google';
+                } elseif ($channel === 'meta_ads') {
+                    $form_label     = "Planilha: Meta Ads ({$clean_file})";
+                    $default_source = 'planilha_meta';
+                } else {
+                    $form_label     = "Planilha: {$clean_file}";
+                    $default_source = 'planilha';
+                }
+
+                $utm_source = !empty($p['raw_camp']) ? sanitize_text_field($p['raw_camp']) : $default_source;
 
                 $new_lead_data = [
                     'uuid'                 => wp_generate_uuid4(),
@@ -537,17 +553,17 @@ class Matcher {
                     'fbclid'               => sanitize_text_field($p['raw_fbclid']),
                     'ad_id'                => sanitize_text_field($p['raw_ad_id']),
                     'utm_source'           => $utm_source,
-                    'utm_medium'           => 'cpc',
+                    'utm_medium'           => 'planilha',
                     'utm_campaign'         => sanitize_text_field($p['raw_camp']),
                     'formulario_nome'      => $form_label,
-                    'pagina_origem'        => 'Planilha: ' . sanitize_text_field($filename),
+                    'pagina_origem'        => 'Planilha: ' . $clean_file,
                     'qualificacao_status'  => $p['qual_status'],
                     'etapa_funil'          => $p['final_etapa'],
                     'qualificacao_data'    => $qual_date,
-                    'qualificacao_origem'  => 'planilha: ' . sanitize_text_field($filename),
+                    'qualificacao_origem'  => 'planilha: ' . $clean_file,
                     'qualificacao_dados'   => $json_dados,
                     'score'                => 10,
-                    'motivo_qualificacao'  => "Importado via {$form_label}",
+                    'motivo_qualificacao'  => "Cadastrado via {$form_label} (Lead originado exclusivamente da planilha, sem formulário prévio)",
                     'data_cadastro'        => $qual_date,
                     'created_at'           => current_time('mysql'),
                     'updated_at'           => current_time('mysql'),

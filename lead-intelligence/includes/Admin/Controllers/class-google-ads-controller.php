@@ -74,8 +74,10 @@ class GoogleAdsController {
                 break;
         }
 
-        // Construção da Query Segura
-        $google_condition = LeadRepository::get_channel_sql_condition('google_ads');
+        // Construção da Query Segura (Abrange Google Ads de site e formulários Google Lead Form)
+        $gads_web  = LeadRepository::get_channel_sql_condition('google_ads');
+        $gads_form = LeadRepository::get_channel_sql_condition('google_lead_form');
+        $google_condition = "({$gads_web} OR {$gads_form})";
         $where_conditions = ["1=1", $google_condition];
         $params = [];
 

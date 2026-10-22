@@ -182,7 +182,7 @@ class InboundRelay {
             'formulario_nome'     => !empty($extracted['formulario_nome']) ? $extracted['formulario_nome'] : ($settings['webhook_inbound_form_name'] ?? 'Formulário Google'),
             'ip_address'          => $ip,
             'user_agent'          => $ua,
-            'utm_source'          => !empty($extracted['utm_source']) ? $extracted['utm_source'] : ($settings['webhook_inbound_utm_source'] ?? 'google_ads'),
+            'utm_source'          => !empty($extracted['utm_source']) ? $extracted['utm_source'] : 'google_lead_form',
             'utm_medium'          => !empty($extracted['utm_medium']) ? $extracted['utm_medium'] : ($settings['webhook_inbound_utm_medium'] ?? 'lead_form'),
             'utm_campaign'        => !empty($extracted['utm_campaign']) ? $extracted['utm_campaign'] : ($settings['webhook_inbound_utm_campaign'] ?? 'formulario google'),
             'utm_content'         => $extracted['utm_content'] ?? '',
@@ -439,20 +439,31 @@ class InboundRelay {
         $area_interesse = $find(['area_interesse', 'area', 'segmento']);
         $polo = $find(['polo', 'unidade', 'cidade', 'campus', 'polo_apoio']);
 
-        // Configurações padrão definidas no plugin
-        $cfg_source   = !empty($settings['webhook_inbound_utm_source']) ? trim($settings['webhook_inbound_utm_source']) : 'google_ads';
+        // Configurações padrão definidas no plugin (padrão oficial: google_lead_form)
+        $cfg_source   = !empty($settings['webhook_inbound_utm_source']) && $settings['webhook_inbound_utm_source'] !== 'google_ads' 
+            ? trim($settings['webhook_inbound_utm_source']) 
+            : 'google_lead_form';
         $cfg_medium   = !empty($settings['webhook_inbound_utm_medium']) ? trim($settings['webhook_inbound_utm_medium']) : 'lead_form';
         $cfg_campaign = !empty($settings['webhook_inbound_utm_campaign']) ? trim($settings['webhook_inbound_utm_campaign']) : 'formulario google';
         $cfg_form_nm  = !empty($settings['webhook_inbound_form_name']) ? trim($settings['webhook_inbound_form_name']) : 'Formulário Google';
 
         // Determinação das UTMs com prioridade (Query String > Payload Limpo > Configuração Padrão)
+        $raw_extracted_source = $find(['utm_source', 'source', 'origem']);
+        $raw_extracted_medium = $find(['utm_medium', 'medium', 'meio']);
+
         $utm_source = !empty($query_params['utm_source']) 
             ? $query_params['utm_source'] 
-            : ($find(['utm_source', 'source', 'origem']) ?: $cfg_source);
+            : ($raw_extracted_source ?: $cfg_source);
 
         $utm_medium = !empty($query_params['utm_medium']) 
             ? $query_params['utm_medium'] 
-            : ($find(['utm_medium', 'medium', 'meio']) ?: $cfg_medium);
+            : ($raw_extracted_medium ?: $cfg_medium);
+
+        // Se for lead nativo de formulário do Google Ads e vier com utm_source genérica 'google_ads' ou vazia, padroniza como 'google_lead_form'
+        $is_google_form_payload = (!empty($payload['user_column_data']) || !empty($payload['google_key']) || $utm_medium === 'lead_form');
+        if ($is_google_form_payload && (empty($utm_source) || $utm_source === 'google_ads' || $utm_source === 'google')) {
+            $utm_source = 'google_lead_form';
+        }
 
         // Se no payload vier campaign_id numérico (ex: 21849182), substitui pelo nome legível amigável "formulario google"
         $payload_campaign = $find(['utm_campaign', 'campaign', 'campanha', 'campaign_name']);

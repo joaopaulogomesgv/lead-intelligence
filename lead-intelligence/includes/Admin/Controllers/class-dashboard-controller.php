@@ -70,7 +70,6 @@ class DashboardController {
         }
 
         $filter_channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
-        $filter_channel   = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : $default_channel;
         $filter_campaign  = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
         $filter_curso     = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
         $filter_area      = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
@@ -653,7 +652,9 @@ class DashboardController {
                                             <label class="li-filter-lbl">Canal</label>
                                             <select name="canal" id="liSelectCanal" class="li-select">
                                                 <option value="">Todos os Canais</option>
+                                                <option value="planilha" <?php selected($filter_channel, 'planilha'); ?>>📊 Planilhas (Importados)</option>
                                                 <option value="chatgpt" <?php selected($filter_channel, 'chatgpt'); ?>>🤖 ChatGPT Ads</option>
+                                                <option value="google_lead_form" <?php selected($filter_channel, 'google_lead_form'); ?>>📋 Google Lead Form</option>
                                                 <option value="google_ads" <?php selected($filter_channel, 'google_ads'); ?>>🟢 Google Ads</option>
                                                 <option value="meta_ads" <?php selected($filter_channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
                                                 <option value="whatsapp" <?php selected($filter_channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
@@ -809,7 +810,7 @@ class DashboardController {
                                             <p class="li-card-desc" style="margin: 4px 0 0 0;">Análise comparativa limpa e em tempo real do retorno em matrículas de cada canal.</p>
                                         </div>
                                         <?php if (!empty($filter_channel)): ?>
-                                            <span class="li-badge li-badge-active-filter">Filtro ativo: <?php echo esc_html($filter_channel === 'google_ads' ? 'Google Ads' : ($filter_channel === 'meta_ads' ? 'Meta Ads' : 'WhatsApp')); ?></span>
+                                            <span class="li-badge li-badge-active-filter">Filtro ativo: <?php echo esc_html($filter_channel === 'google_lead_form' ? 'Google Lead Form' : ($filter_channel === 'google_ads' ? 'Google Ads' : ($filter_channel === 'meta_ads' ? 'Meta Ads' : ($filter_channel === 'planilha' ? 'Planilhas' : ($filter_channel === 'chatgpt' ? 'ChatGPT Ads' : 'WhatsApp'))))); ?></span>
                                         <?php endif; ?>
                                     </div>
 

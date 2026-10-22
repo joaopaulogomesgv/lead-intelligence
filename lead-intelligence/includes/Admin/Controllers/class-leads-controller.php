@@ -406,9 +406,13 @@ class LeadsController {
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Canal</label>
                         <select name="canal" style="width: 100%; height: 32px; font-size: 13px;">
                             <option value="">Todos os Canais</option>
+                            <option value="planilha" <?php selected($channel, 'planilha'); ?>>📊 Todas as Planilhas</option>
+                            <option value="planilha_google" <?php selected($channel, 'planilha_google'); ?>>📊 Planilha (Google Ads)</option>
+                            <option value="planilha_meta" <?php selected($channel, 'planilha_meta'); ?>>📊 Planilha (Meta Ads)</option>
                             <option value="chatgpt" <?php selected($channel, 'chatgpt'); ?>>🤖 ChatGPT Ads</option>
-                            <option value="google_ads" <?php selected($channel, 'google_ads'); ?>>🟢 Google Ads</option>
-                            <option value="meta_ads" <?php selected($channel, 'meta_ads'); ?>>🔵 Meta Ads</option>
+                            <option value="google_lead_form" <?php selected($channel, 'google_lead_form'); ?>>📋 Google Lead Form</option>
+                            <option value="google_ads" <?php selected($channel, 'google_ads'); ?>>🟢 Google Ads (Site)</option>
+                            <option value="meta_ads" <?php selected($channel, 'meta_ads'); ?>>🔵 Meta Ads (Site)</option>
                             <option value="whatsapp" <?php selected($channel, 'whatsapp'); ?>>💬 WhatsApp Direto</option>
                             <option value="organico" <?php selected($channel, 'organico'); ?>>⚪ Direto / Site</option>
                         </select>
@@ -486,26 +490,56 @@ class LeadsController {
                             </button>
                         </div>
 
-                        <div style="font-size: 12px; color: #64748b;">
-                            Total: <strong><?php echo number_format_i18n($total_leads); ?></strong> leads encontrados
+                        <div style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 12px;">
+                            <button type="button" id="liResetColWidths" class="button" style="font-size: 11px; height: 26px; line-height: 24px; display: inline-flex; align-items: center; gap: 4px; color: #475569; padding: 0 9px; border-color: #cbd5e1; background: #ffffff;" title="Restaura as larguras padrão de todas as colunas">
+                                <span class="dashicons dashicons-image-rotate" style="font-size: 13px; width: 13px; height: 13px; line-height: 13px; color: #64748b;"></span>
+                                Redefinir Colunas
+                            </button>
+                            <span>Total: <strong><?php echo number_format_i18n($total_leads); ?></strong> leads encontrados</span>
                         </div>
                     </div>
 
-                    <table class="wp-list-table widefat fixed striped li-table">
+                    <table id="liLeadsTable" class="wp-list-table widefat fixed striped li-table li-resizable-table">
                         <thead>
                             <tr>
-                                <th style="width: 40px; text-align: center;">
+                                <th data-col-id="check" style="width: 40px; min-width: 40px; max-width: 40px; text-align: center; position: relative;">
                                     <input type="checkbox" id="li_select_all" title="Selecionar Todos na Página">
                                 </th>
-                                <th style="width: 60px;">ID</th>
-                                <th style="width: 120px;">Data</th>
-                                <th>Nome / Contato</th>
-                                <th>Curso / Interesse</th>
-                                <th style="width: 150px;">Canal</th>
-                                <th style="width: 170px;">UTM</th>
-                                <th style="width: 150px; text-align: center;">Etapa do Funil</th>
-                                <th style="width: 120px; text-align: center;">Status</th>
-                                <th style="width: 110px; text-align: center;">Ações</th>
+                                <th data-col-id="id" style="width: 65px; min-width: 50px; position: relative;">
+                                    <span>ID</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="data" style="width: 105px; min-width: 85px; position: relative;">
+                                    <span>Data</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="nome" style="width: 250px; min-width: 150px; position: relative;">
+                                    <span>Nome / Contato</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="curso" style="width: 130px; min-width: 90px; position: relative;">
+                                    <span>Curso / Interesse</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="canal" style="width: 160px; min-width: 110px; position: relative;">
+                                    <span>Canal</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="utm" style="width: 180px; min-width: 110px; position: relative;">
+                                    <span>UTM</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="etapa" style="width: 160px; min-width: 110px; text-align: center; position: relative;">
+                                    <span>Etapa do Funil</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="status" style="width: 115px; min-width: 85px; text-align: center; position: relative;">
+                                    <span>Status</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="acoes" style="width: 90px; min-width: 80px; text-align: center; position: relative;">
+                                    <span>Ações</span>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -597,6 +631,25 @@ class LeadsController {
                                             <span><?php echo esc_html($chan_info['dot']); ?></span>
                                             <span><?php echo esc_html($chan_info['label']); ?></span>
                                         </span>
+                                        <?php if ($lead_channel === 'google_lead_form'): 
+                                            $form_lead_display = !empty($lead->formulario_nome) ? $lead->formulario_nome : (!empty($lead->origem) ? $lead->origem : 'Formulário Google');
+                                        ?>
+                                            <div style="margin-top: 3px;" title="<?php echo esc_attr($form_lead_display); ?>">
+                                                <code style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    📝 <?php echo esc_html($form_lead_display); ?>
+                                                </code>
+                                            </div>
+                                        <?php elseif (strpos($lead_channel, 'planilha') !== false): 
+                                            $plan_origin_raw = !empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'Planilha:') !== false 
+                                                ? trim(str_replace('Planilha:', '', $lead->pagina_origem)) 
+                                                : (!empty($lead->formulario_nome) ? $lead->formulario_nome : 'Planilha');
+                                        ?>
+                                            <div style="margin-top: 3px;" title="<?php echo esc_attr($plan_origin_raw); ?>">
+                                                <code style="background: #f5f3ff; color: #6d28d9; border: 1px solid #ddd6fe; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                    📁 <?php echo esc_html($plan_origin_raw); ?>
+                                                </code>
+                                            </div>
+                                        <?php endif; ?>
                                     </td>
                                     <td>
                                         <?php if (!empty($source_display)): ?>
@@ -761,7 +814,94 @@ class LeadsController {
                     var lead = JSON.parse(this.getAttribute('data-lead'));
                     document.getElementById('liModalTitle').innerText = 'Lead #' + lead.id + ' • ' + (lead.nome || 'Sem Nome');
 
-                    var html = '<div class="li-modal-sections">';
+                    var html = '';
+                    
+                    // Verificação de origem de Planilha
+                    var src = (lead.utm_source || '').toLowerCase();
+                    var med = (lead.utm_medium || '').toLowerCase();
+                    var camp = (lead.utm_campaign || '').toLowerCase();
+                    var campName = (lead.campaign_name || '').toLowerCase();
+                    var form = (lead.formulario_nome || '').toLowerCase();
+                    var pag = (lead.pagina_origem || '').toLowerCase();
+                    var ref = (lead.referrer || '').toLowerCase();
+                    var mot = (lead.motivo_qualificacao || '').toLowerCase();
+                    var qualOrigem = (lead.qualificacao_origem || '').toLowerCase();
+                    var formId = (lead.formulario_id || '').toLowerCase();
+                    var orig = (lead.origem || '').toLowerCase();
+
+                    var isPlanilha = (
+                        src.indexOf('planilha') !== -1 || 
+                        form.indexOf('planilha') !== -1 || 
+                        pag.indexOf('planilha:') !== -1 ||
+                        mot.indexOf('cadastrado via planilha') !== -1 ||
+                        (qualOrigem.indexOf('planilha:') !== -1 && (!formId || formId.indexOf('planilha') !== -1))
+                    );
+
+                    var isGoogleLeadForm = (
+                        src === 'google_lead_form' ||
+                        src === 'google-lead-form' ||
+                        src.indexOf('lead_form') !== -1 ||
+                        med === 'lead_form' ||
+                        med === 'leadform' ||
+                        form.indexOf('google lead form') !== -1 ||
+                        form.indexOf('lead form') !== -1 ||
+                        form.indexOf('leadform') !== -1 ||
+                        form.indexOf('formulario google') !== -1 ||
+                        form.indexOf('formulário google') !== -1 ||
+                        form.indexOf('formulario do google') !== -1 ||
+                        form.indexOf('formulário do google') !== -1 ||
+                        form.indexOf('google form') !== -1 ||
+                        orig.indexOf('lead form') !== -1 ||
+                        orig.indexOf('google ads lead form') !== -1 ||
+                        orig.indexOf('formulario google') !== -1 ||
+                        orig.indexOf('formulário google') !== -1 ||
+                        pag.indexOf('lead form') !== -1 ||
+                        pag.indexOf('google_lead_form') !== -1 ||
+                        pag.indexOf('formulario google') !== -1 ||
+                        pag.indexOf('formulário google') !== -1 ||
+                        camp.indexOf('formulario google') !== -1 ||
+                        camp.indexOf('formulário google') !== -1 ||
+                        camp.indexOf('formulario_google') !== -1 ||
+                        camp.indexOf('formulario-google') !== -1 ||
+                        camp.indexOf('formulario do google') !== -1 ||
+                        camp.indexOf('formulário do google') !== -1 ||
+                        camp.indexOf('google_lead_form') !== -1 ||
+                        camp.indexOf('lead_form') !== -1 ||
+                        camp.indexOf('lead form') !== -1 ||
+                        camp.indexOf('leadform') !== -1 ||
+                        camp.indexOf('form google') !== -1 ||
+                        camp.indexOf('google form') !== -1 ||
+                        campName.indexOf('formulario google') !== -1 ||
+                        campName.indexOf('formulário google') !== -1 ||
+                        campName.indexOf('formulario_google') !== -1 ||
+                        campName.indexOf('formulario-google') !== -1 ||
+                        campName.indexOf('formulario do google') !== -1 ||
+                        campName.indexOf('formulário do google') !== -1 ||
+                        campName.indexOf('google_lead_form') !== -1 ||
+                        campName.indexOf('lead_form') !== -1 ||
+                        campName.indexOf('lead form') !== -1 ||
+                        campName.indexOf('leadform') !== -1 ||
+                        campName.indexOf('form google') !== -1 ||
+                        campName.indexOf('google form') !== -1
+                    );
+
+                    if (isPlanilha) {
+                        var planSourceStr = lead.pagina_origem || lead.formulario_nome || lead.qualificacao_origem || 'Planilha';
+                        html += '<div style="background:#f5f3ff; border:1px solid #ddd6fe; border-left:4px solid #7c3aed; padding:12px 16px; border-radius:6px; margin-bottom:15px; font-size:13px; color:#5b21b6; line-height:1.5;">' +
+                                '<span class="dashicons dashicons-media-spreadsheet" style="font-size:18px; width:18px; height:18px; line-height:18px; vertical-align:middle; color:#7c3aed; margin-right:4px;"></span> ' +
+                                '<strong>Lead Originado de Planilha:</strong> Este lead não existia no banco de dados e foi inserido automaticamente a partir da planilha: ' +
+                                '<code style="background:#ffffff; border:1px solid #c4b5fd; padding:2px 7px; border-radius:4px; font-weight:700; color:#6d28d9; margin-left:4px;">' + planSourceStr + '</code>' +
+                                '</div>';
+                    } else if (isGoogleLeadForm) {
+                        var formSourceStr = lead.formulario_nome || lead.utm_campaign || lead.origem || 'Formulário Google';
+                        html += '<div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #d97706; padding:12px 16px; border-radius:6px; margin-bottom:15px; font-size:13px; color:#92400e; line-height:1.5;">' +
+                                '<span class="dashicons dashicons-forms" style="font-size:18px; width:18px; height:18px; line-height:18px; vertical-align:middle; color:#d97706; margin-right:4px;"></span> ' +
+                                '<strong>Lead de Formulário Google (Google Lead Form):</strong> Origem / Campanha identificada: ' +
+                                '<code style="background:#ffffff; border:1px solid #fde68a; padding:2px 7px; border-radius:4px; font-weight:700; color:#b45309; margin-left:4px;">' + formSourceStr + '</code>' +
+                                '</div>';
+                    }
+
+                    html += '<div class="li-modal-sections">';
                     
                     // Seção 1: Contato e Cadastro
                     html += '<div class="li-modal-box"><h4>📋 Informações Cadastrais</h4>';
@@ -774,15 +914,21 @@ class LeadsController {
                     html += '<p><strong>Polo / Unidade:</strong> ' + (lead.polo ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">🏢 ' + lead.polo + '</span>' : '-') + '</p>';
                     html += '</div>';
 
-                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads / ChatGPT Ads
+                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads / ChatGPT Ads / Planilha
                     var chanBadge = '⚪ Direto / Site';
-                    var src = (lead.utm_source || '').toLowerCase();
-                    var form = (lead.formulario_nome || '').toLowerCase();
-                    var pag = (lead.pagina_origem || '').toLowerCase();
-                    var ref = (lead.referrer || '').toLowerCase();
-                    if (['chat-ads', 'chatgpt', 'chat-gpt', 'openai', 'chat_ads'].indexOf(src) !== -1 || src.indexOf('chat-ads') !== -1 || src.indexOf('chatgpt') !== -1 || form.indexOf('chat ads') !== -1 || form.indexOf('chat-ads') !== -1 || form.indexOf('chatgpt') !== -1 || pag.indexOf('chat-gpt') !== -1 || pag.indexOf('chatgpt') !== -1 || ref.indexOf('chatgpt') !== -1) {
+                    if (isPlanilha) {
+                        if (form.indexOf('google') !== -1 || src.indexOf('google') !== -1) {
+                            chanBadge = '<span style="color:#7c3aed; font-weight:700;">📊 Planilha (Google Ads)</span>';
+                        } else if (form.indexOf('meta') !== -1 || src.indexOf('meta') !== -1) {
+                            chanBadge = '<span style="color:#8b5cf6; font-weight:700;">📊 Planilha (Meta Ads)</span>';
+                        } else {
+                            chanBadge = '<span style="color:#6d28d9; font-weight:700;">📊 Planilha (Importado)</span>';
+                        }
+                    } else if (isGoogleLeadForm) {
+                        chanBadge = '<span style="color:#b45309; font-weight:700;">📋 Google Lead Form</span>';
+                    } else if (['chat-ads', 'chatgpt', 'chat-gpt', 'openai', 'chat_ads'].indexOf(src) !== -1 || src.indexOf('chat-ads') !== -1 || src.indexOf('chatgpt') !== -1 || form.indexOf('chat ads') !== -1 || form.indexOf('chat-ads') !== -1 || form.indexOf('chatgpt') !== -1 || pag.indexOf('chat-gpt') !== -1 || pag.indexOf('chatgpt') !== -1 || ref.indexOf('chatgpt') !== -1) {
                         chanBadge = '<span style="color:#10a37f; font-weight:700;">🤖 ChatGPT Ads</span>';
-                    } else if (lead.gclid || src === 'google' || form.indexOf('google') !== -1) {
+                    } else if (lead.gclid || src === 'google' || src === 'google_ads' || form.indexOf('google') !== -1) {
                         chanBadge = '<span style="color:#1a73e8; font-weight:700;">🟢 Google Ads</span>';
                     } else if (lead.fbclid || lead.ad_id || ['meta','facebook','instagram','fb'].indexOf(src) !== -1 || form.indexOf('meta') !== -1 || form.indexOf('facebook') !== -1) {
                         chanBadge = '<span style="color:#0866ff; font-weight:700;">🔵 Meta Ads</span>';
@@ -1130,6 +1276,158 @@ class LeadsController {
             window.liSortTableByStatusMain = function() {
                 window.liSortMainTable('status');
             };
+
+            // =========================================================================
+            // REDIMENSIONADOR DE COLUNAS ESTILO EXCEL (COM PERSISTÊNCIA EM LOCALSTORAGE)
+            // =========================================================================
+            (function() {
+                var table = document.getElementById('liLeadsTable');
+                if (!table) return;
+
+                var STORAGE_KEY = 'li_leads_table_col_widths_v2';
+                var defaultWidths = {
+                    'check': 40,
+                    'id': 65,
+                    'data': 105,
+                    'nome': 250,
+                    'curso': 130,
+                    'canal': 160,
+                    'utm': 180,
+                    'etapa': 160,
+                    'status': 115,
+                    'acoes': 90
+                };
+
+                function updateTableMinWidth() {
+                    var ths = table.querySelectorAll('thead th[data-col-id]');
+                    var total = 0;
+                    ths.forEach(function(th) {
+                        var w = parseInt(th.style.width, 10) || th.getBoundingClientRect().width || 100;
+                        total += w;
+                    });
+                    if (total > 0) {
+                        table.style.minWidth = total + 'px';
+                    }
+                }
+
+                function applyWidths(widths) {
+                    var ths = table.querySelectorAll('thead th[data-col-id]');
+                    ths.forEach(function(th) {
+                        var colId = th.getAttribute('data-col-id');
+                        var w = (widths && widths[colId]) ? widths[colId] : defaultWidths[colId];
+                        if (w) {
+                            th.style.width = w + 'px';
+                            th.style.minWidth = (colId === 'check' ? 40 : Math.min(w, 60)) + 'px';
+                        }
+                    });
+                    updateTableMinWidth();
+                }
+
+                function loadSavedWidths() {
+                    try {
+                        var saved = localStorage.getItem(STORAGE_KEY);
+                        if (saved) {
+                            return JSON.parse(saved);
+                        }
+                    } catch(e) {}
+                    return null;
+                }
+
+                function saveCurrentWidths() {
+                    var widths = {};
+                    var ths = table.querySelectorAll('thead th[data-col-id]');
+                    ths.forEach(function(th) {
+                        var colId = th.getAttribute('data-col-id');
+                        var w = Math.round(th.getBoundingClientRect().width);
+                        if (colId && w > 0) {
+                            widths[colId] = w;
+                        }
+                    });
+                    try {
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(widths));
+                    } catch(e) {}
+                    updateTableMinWidth();
+                }
+
+                var saved = loadSavedWidths();
+                if (saved) {
+                    applyWidths(saved);
+                } else {
+                    applyWidths(defaultWidths);
+                }
+
+                var resetBtn = document.getElementById('liResetColWidths');
+                if (resetBtn) {
+                    resetBtn.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        try {
+                            localStorage.removeItem(STORAGE_KEY);
+                        } catch(e) {}
+                        applyWidths(defaultWidths);
+                    });
+                }
+
+                var activeTh = null;
+                var activeResizer = null;
+                var startX = 0;
+                var startWidth = 0;
+                var minWidth = 50;
+
+                table.querySelectorAll('.li-col-resizer').forEach(function(resizer) {
+                    resizer.addEventListener('dblclick', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        var th = resizer.closest('th');
+                        if (!th) return;
+                        var colId = th.getAttribute('data-col-id');
+                        var defW = defaultWidths[colId] || 120;
+                        th.style.width = defW + 'px';
+                        saveCurrentWidths();
+                    });
+
+                    resizer.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        activeResizer = resizer;
+                        activeTh = resizer.closest('th');
+                        if (!activeTh) return;
+
+                        startX = e.clientX;
+                        startWidth = activeTh.getBoundingClientRect().width;
+                        var colId = activeTh.getAttribute('data-col-id');
+                        minWidth = colId === 'check' ? 40 : 60;
+
+                        activeResizer.classList.add('is-resizing');
+                        document.body.classList.add('li-is-col-resizing');
+
+                        window.addEventListener('mousemove', onMouseMove);
+                        window.addEventListener('mouseup', onMouseUp);
+                    });
+                });
+
+                function onMouseMove(e) {
+                    if (!activeTh) return;
+                    var delta = e.clientX - startX;
+                    var newWidth = Math.max(minWidth, Math.round(startWidth + delta));
+                    activeTh.style.width = newWidth + 'px';
+                    activeTh.style.minWidth = newWidth + 'px';
+                    updateTableMinWidth();
+                }
+
+                function onMouseUp() {
+                    if (activeResizer) {
+                        activeResizer.classList.remove('is-resizing');
+                    }
+                    document.body.classList.remove('li-is-col-resizing');
+                    window.removeEventListener('mousemove', onMouseMove);
+                    window.removeEventListener('mouseup', onMouseUp);
+
+                    saveCurrentWidths();
+                    activeTh = null;
+                    activeResizer = null;
+                }
+            })();
 
             // Fecha ao clicar fora
             window.addEventListener('click', function(e) {
