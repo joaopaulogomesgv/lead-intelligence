@@ -786,15 +786,34 @@ class LeadsController {
                 </div>
             </div>
 
-            <!-- MODAL DE DETALHES DO LEAD -->
+            <!-- MODAL DE DETALHES DO LEAD (SaaS Premium Redesign) -->
             <div id="liLeadModal" class="li-modal-backdrop" style="display:none;">
                 <div class="li-modal-container">
                     <div class="li-modal-header">
-                        <h3 id="liModalTitle">Detalhes do Lead</h3>
-                        <button type="button" class="li-modal-close" onclick="closeLiModal()">&times;</button>
+                        <div class="li-modal-header-left">
+                            <div class="li-lead-avatar" id="liModalAvatar">LD</div>
+                            <div class="li-lead-title-meta">
+                                <div class="li-lead-title-row">
+                                    <h3 id="liModalTitle">Detalhes do Lead</h3>
+                                    <span class="li-lead-id-pill" id="liModalIdBadge">#0</span>
+                                </div>
+                                <div class="li-lead-subtitle-row" id="liModalSubMeta">
+                                    <span id="liModalDate"><span class="dashicons dashicons-calendar-alt"></span> -</span>
+                                    <span class="li-dot-sep">•</span>
+                                    <span id="liModalChanTag">⚪ Direto / Site</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="li-modal-header-right">
+                            <a id="liModalWhatsAppBtn" href="#" target="_blank" class="li-btn-wa-header" style="display:none;" title="Conversar no WhatsApp">
+                                <span class="dashicons dashicons-whatsapp"></span>
+                                <span>WhatsApp</span>
+                            </a>
+                            <button type="button" class="li-modal-close" onclick="closeLiModal()" title="Fechar (Esc)">&times;</button>
+                        </div>
                     </div>
                     <div class="li-modal-body" id="liModalContent">
-                        <!-- Preenchido via JavaScript -->
+                        <!-- Preenchido dinamicamente via JavaScript -->
                     </div>
                 </div>
             </div>
@@ -806,17 +825,133 @@ class LeadsController {
             };
 
             function closeLiModal() {
-                document.getElementById('liLeadModal').style.display = 'none';
+                var m = document.getElementById('liLeadModal');
+                if (m) m.style.display = 'none';
             }
+
+            // Fechar ao clicar no backdrop (fora do container)
+            var liModalBackdrop = document.getElementById('liLeadModal');
+            if (liModalBackdrop) {
+                liModalBackdrop.addEventListener('click', function(e) {
+                    if (e.target === this) {
+                        closeLiModal();
+                    }
+                });
+            }
+
+            // Fechar ao pressionar a tecla ESC
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape' || e.keyCode === 27) {
+                    var m = document.getElementById('liLeadModal');
+                    if (m && m.style.display !== 'none') {
+                        closeLiModal();
+                    }
+                }
+            });
+
+            // Função global de cópia para a área de transferência com feedback visual
+            window.liCopyToClipboard = function(text, el) {
+                if (!text || text === '-' || text === '—') return;
+                
+                function showSuccess() {
+                    if (el) {
+                        el.classList.add('li-copied');
+                        var icon = el.querySelector('.dashicons');
+                        var oldClass = icon ? icon.className : '';
+                        if (icon) icon.className = 'dashicons dashicons-yes';
+                        setTimeout(function() {
+                            el.classList.remove('li-copied');
+                            if (icon) icon.className = oldClass;
+                        }, 1400);
+                    }
+                }
+
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(showSuccess).catch(function() {
+                        fallbackCopy(text);
+                    });
+                } else {
+                    fallbackCopy(text);
+                }
+
+                function fallbackCopy(str) {
+                    var ta = document.createElement('textarea');
+                    ta.value = str;
+                    ta.style.position = 'fixed';
+                    ta.style.opacity = '0';
+                    document.body.appendChild(ta);
+                    ta.focus();
+                    ta.select();
+                    try {
+                        document.execCommand('copy');
+                        showSuccess();
+                    } catch (e) {}
+                    document.body.removeChild(ta);
+                }
+            };
 
             document.querySelectorAll('.li-open-modal-btn').forEach(function(btn) {
                 btn.addEventListener('click', function() {
                     var lead = JSON.parse(this.getAttribute('data-lead'));
-                    document.getElementById('liModalTitle').innerText = 'Lead #' + lead.id + ' • ' + (lead.nome || 'Sem Nome');
-
-                    var html = '';
                     
-                    // Verificação de origem de Planilha
+                    // Helpers de escape e formatação
+                    function escH(s) {
+                        if (s === null || s === undefined) return '';
+                        return String(s)
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#039;');
+                    }
+
+                    function truncate(str, max) {
+                        if (!str) return '';
+                        return str.length > max ? str.substring(0, max) + '...' : str;
+                    }
+
+                    function makeRow(label, valHtml, icon) {
+                        var iconHtml = icon ? '<span class="dashicons ' + icon + '" style="font-size:14px; width:14px; height:14px; line-height:14px; opacity:0.75;"></span> ' : '';
+                        return '<div class="li-modal-row">' +
+                               '<div class="li-row-label">' + iconHtml + label + '</div>' +
+                               '<div class="li-row-value">' + valHtml + '</div>' +
+                               '</div>';
+                    }
+
+                    function makeText(val, isBold) {
+                        if (!val || val === '-' || val === 'null' || val === 'undefined') {
+                            return '<span class="li-val-empty">—</span>';
+                        }
+                        return '<span class="' + (isBold ? 'li-val-bold' : '') + '">' + escH(val) + '</span>';
+                    }
+
+                    function makeCopyPill(val) {
+                        if (!val || val === '-' || val === 'null' || val === 'undefined') {
+                            return '<span class="li-val-empty">—</span>';
+                        }
+                        return '<span class="li-copy-pill" onclick="liCopyToClipboard(\'' + escH(val) + '\', this)" title="Clique para copiar: ' + escH(val) + '">' +
+                               '<span>' + escH(val) + '</span>' +
+                               '<span class="dashicons dashicons-admin-page"></span>' +
+                               '</span>';
+                    }
+
+                    // Extrair iniciais para o Avatar Monograma
+                    var nameParts = (lead.nome || '').trim().split(/\s+/);
+                    var initials = 'LD';
+                    if (nameParts.length === 1 && nameParts[0].length > 0) {
+                        initials = nameParts[0].substring(0, 2).toUpperCase();
+                    } else if (nameParts.length >= 2) {
+                        initials = (nameParts[0][0] + nameParts[nameParts.length - 1][0]).toUpperCase();
+                    }
+                    var avatarEl = document.getElementById('liModalAvatar');
+                    if (avatarEl) avatarEl.innerText = initials;
+
+                    // Título e ID Badge
+                    document.getElementById('liModalTitle').innerText = lead.nome || 'Lead sem Nome';
+                    document.getElementById('liModalIdBadge').innerText = '#' + lead.id;
+                    document.getElementById('liModalDate').innerHTML = '<span class="dashicons dashicons-calendar-alt"></span> ' + (lead.data_cadastro || '-');
+
+                    // Verificação de origem
                     var src = (lead.utm_source || '').toLowerCase();
                     var med = (lead.utm_medium || '').toLowerCase();
                     var camp = (lead.utm_campaign || '').toLowerCase();
@@ -885,112 +1020,223 @@ class LeadsController {
                         campName.indexOf('google form') !== -1
                     );
 
+                    // Badge do Canal de Origem
+                    var chanBadge = '<span class="li-badge-channel li-badge-direct">⚪ Direto / Site</span>';
+                    if (isPlanilha) {
+                        if (form.indexOf('google') !== -1 || src.indexOf('google') !== -1) {
+                            chanBadge = '<span class="li-badge-channel li-badge-planilha"><span class="dashicons dashicons-media-spreadsheet"></span> Planilha (Google Ads)</span>';
+                        } else if (form.indexOf('meta') !== -1 || src.indexOf('meta') !== -1) {
+                            chanBadge = '<span class="li-badge-channel li-badge-planilha"><span class="dashicons dashicons-media-spreadsheet"></span> Planilha (Meta Ads)</span>';
+                        } else {
+                            chanBadge = '<span class="li-badge-channel li-badge-planilha"><span class="dashicons dashicons-media-spreadsheet"></span> Planilha (Importado)</span>';
+                        }
+                    } else if (isGoogleLeadForm) {
+                        chanBadge = '<span class="li-badge-channel li-badge-gform"><span class="dashicons dashicons-forms"></span> Google Lead Form</span>';
+                    } else if (['chat-ads', 'chatgpt', 'chat-gpt', 'openai', 'chat_ads'].indexOf(src) !== -1 || src.indexOf('chat-ads') !== -1 || src.indexOf('chatgpt') !== -1 || form.indexOf('chat ads') !== -1 || form.indexOf('chat-ads') !== -1 || form.indexOf('chatgpt') !== -1 || pag.indexOf('chat-gpt') !== -1 || pag.indexOf('chatgpt') !== -1 || ref.indexOf('chatgpt') !== -1) {
+                        chanBadge = '<span class="li-badge-channel li-badge-chatgpt">🤖 ChatGPT Ads</span>';
+                    } else if (lead.gclid || src === 'google' || src === 'google_ads' || form.indexOf('google') !== -1) {
+                        chanBadge = '<span class="li-badge-channel li-badge-google"><span class="dashicons dashicons-google"></span> Google Ads</span>';
+                    } else if (lead.fbclid || lead.ad_id || ['meta','facebook','instagram','fb'].indexOf(src) !== -1 || form.indexOf('meta') !== -1 || form.indexOf('facebook') !== -1) {
+                        chanBadge = '<span class="li-badge-channel li-badge-meta"><span class="dashicons dashicons-facebook"></span> Meta Ads</span>';
+                    } else if (form.indexOf('whatsapp') !== -1 || lead.whatsapp_status || lead.conversation_id) {
+                        chanBadge = '<span class="li-badge-channel li-badge-whatsapp"><span class="dashicons dashicons-whatsapp"></span> WhatsApp Direto</span>';
+                    }
+
+                    var chanTagEl = document.getElementById('liModalChanTag');
+                    if (chanTagEl) chanTagEl.innerHTML = chanBadge;
+
+                    // Botão rápido de WhatsApp no topo
+                    var waBtn = document.getElementById('liModalWhatsAppBtn');
+                    var phoneDigits = (lead.telefone_normalizado || lead.telefone || '').replace(/\D/g, '');
+                    if (waBtn) {
+                        if (phoneDigits.length >= 10) {
+                            waBtn.href = 'https://wa.me/' + phoneDigits;
+                            waBtn.style.display = 'inline-flex';
+                        } else {
+                            waBtn.style.display = 'none';
+                        }
+                    }
+
+                    var html = '';
+
+                    // Banner de Origem (Planilha ou Google Lead Form) com Dark Glass
                     if (isPlanilha) {
                         var planSourceStr = lead.pagina_origem || lead.formulario_nome || lead.qualificacao_origem || 'Planilha';
-                        html += '<div style="background:#f5f3ff; border:1px solid #ddd6fe; border-left:4px solid #7c3aed; padding:12px 16px; border-radius:6px; margin-bottom:15px; font-size:13px; color:#5b21b6; line-height:1.5;">' +
-                                '<span class="dashicons dashicons-media-spreadsheet" style="font-size:18px; width:18px; height:18px; line-height:18px; vertical-align:middle; color:#7c3aed; margin-right:4px;"></span> ' +
-                                '<strong>Lead Originado de Planilha:</strong> Este lead não existia no banco de dados e foi inserido automaticamente a partir da planilha: ' +
-                                '<code style="background:#ffffff; border:1px solid #c4b5fd; padding:2px 7px; border-radius:4px; font-weight:700; color:#6d28d9; margin-left:4px;">' + planSourceStr + '</code>' +
+                        html += '<div class="li-modal-alert li-alert-planilha">' +
+                                '<div class="li-alert-icon"><span class="dashicons dashicons-media-spreadsheet"></span></div>' +
+                                '<div class="li-alert-body">' +
+                                '<strong>Lead Originado de Planilha:</strong> Este lead não existia no banco e foi importado automaticamente a partir da planilha: ' +
+                                '<code class="li-chip-purple">' + escH(planSourceStr) + '</code>' +
+                                '</div>' +
                                 '</div>';
                     } else if (isGoogleLeadForm) {
                         var formSourceStr = lead.formulario_nome || lead.utm_campaign || lead.origem || 'Formulário Google';
-                        html += '<div style="background:#fffbeb; border:1px solid #fde68a; border-left:4px solid #d97706; padding:12px 16px; border-radius:6px; margin-bottom:15px; font-size:13px; color:#92400e; line-height:1.5;">' +
-                                '<span class="dashicons dashicons-forms" style="font-size:18px; width:18px; height:18px; line-height:18px; vertical-align:middle; color:#d97706; margin-right:4px;"></span> ' +
+                        html += '<div class="li-modal-alert li-alert-google-form">' +
+                                '<div class="li-alert-icon"><span class="dashicons dashicons-forms"></span></div>' +
+                                '<div class="li-alert-body">' +
                                 '<strong>Lead de Formulário Google (Google Lead Form):</strong> Origem / Campanha identificada: ' +
-                                '<code style="background:#ffffff; border:1px solid #fde68a; padding:2px 7px; border-radius:4px; font-weight:700; color:#b45309; margin-left:4px;">' + formSourceStr + '</code>' +
+                                '<code class="li-chip-amber">' + escH(formSourceStr) + '</code>' +
+                                '</div>' +
                                 '</div>';
                     }
 
                     html += '<div class="li-modal-sections">';
                     
-                    // Seção 1: Contato e Cadastro
-                    html += '<div class="li-modal-box"><h4>📋 Informações Cadastrais</h4>';
-                    html += '<p><strong>Data de Cadastro:</strong> ' + lead.data_cadastro + '</p>';
-                    html += '<p><strong>Telefone Original:</strong> ' + (lead.telefone || '-') + '</p>';
-                    html += '<p><strong>Telefone Normalizado:</strong> ' + (lead.telefone_normalizado || '-') + '</p>';
-                    html += '<p><strong>E-mail:</strong> ' + (lead.email || '-') + '</p>';
-                    html += '<p><strong>Tipo de Curso:</strong> ' + (lead.tipo_curso || '-') + '</p>';
-                    html += '<p><strong>Área de Interesse:</strong> ' + (lead.area_interesse || '-') + '</p>';
-                    html += '<p><strong>Polo / Unidade:</strong> ' + (lead.polo ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; font-weight:600;">🏢 ' + lead.polo + '</span>' : '-') + '</p>';
+                    // ==========================================
+                    // Seção 1: Informações Cadastrais
+                    // ==========================================
+                    html += '<div class="li-modal-box">';
+                    html += '<h4><span class="dashicons dashicons-id"></span> Informações Cadastrais</h4>';
+                    html += makeRow('Data de Cadastro', makeText(lead.data_cadastro), 'dashicons-calendar-alt');
+                    
+                    // Telefone Original com Cópia e Link WhatsApp direto
+                    var telOrigHtml = '<span class="li-val-empty">—</span>';
+                    if (lead.telefone) {
+                        telOrigHtml = '<span class="li-copy-pill" onclick="liCopyToClipboard(\'' + escH(lead.telefone) + '\', this)" title="Clique para copiar">' +
+                                      '<span>' + escH(lead.telefone) + '</span>' +
+                                      '<span class="dashicons dashicons-admin-page"></span>' +
+                                      '</span>';
+                    }
+                    html += makeRow('Telefone Original', telOrigHtml, 'dashicons-phone');
+
+                    // Telefone Normalizado
+                    html += makeRow('Telefone Normalizado', makeCopyPill(lead.telefone_normalizado), 'dashicons-smartphone');
+
+                    // E-mail com Cópia
+                    var emailHtml = '<span class="li-val-empty">—</span>';
+                    if (lead.email) {
+                        emailHtml = '<span class="li-copy-pill" onclick="liCopyToClipboard(\'' + escH(lead.email) + '\', this)" title="Clique para copiar">' +
+                                    '<span>' + escH(lead.email) + '</span>' +
+                                    '<span class="dashicons dashicons-admin-page"></span>' +
+                                    '</span>';
+                    }
+                    html += makeRow('E-mail', emailHtml, 'dashicons-email');
+                    html += makeRow('Tipo de Curso', makeText(lead.tipo_curso, true), 'dashicons-welcome-learn-more');
+                    html += makeRow('Área de Interesse', makeText(lead.area_interesse, true), 'dashicons-tag');
+                    
+                    var poloHtml = lead.polo 
+                        ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-weight:600; padding:2px 8px; border-radius:5px;">🏢 ' + escH(lead.polo) + '</span>'
+                        : '<span class="li-val-empty">—</span>';
+                    html += makeRow('Polo / Unidade', poloHtml, 'dashicons-location');
                     html += '</div>';
 
-                    // Seção 2: UTMs e Atribuição Meta Ads / Google Ads / ChatGPT Ads / Planilha
-                    var chanBadge = '⚪ Direto / Site';
-                    if (isPlanilha) {
-                        if (form.indexOf('google') !== -1 || src.indexOf('google') !== -1) {
-                            chanBadge = '<span style="color:#7c3aed; font-weight:700;">📊 Planilha (Google Ads)</span>';
-                        } else if (form.indexOf('meta') !== -1 || src.indexOf('meta') !== -1) {
-                            chanBadge = '<span style="color:#8b5cf6; font-weight:700;">📊 Planilha (Meta Ads)</span>';
-                        } else {
-                            chanBadge = '<span style="color:#6d28d9; font-weight:700;">📊 Planilha (Importado)</span>';
-                        }
-                    } else if (isGoogleLeadForm) {
-                        chanBadge = '<span style="color:#b45309; font-weight:700;">📋 Google Lead Form</span>';
-                    } else if (['chat-ads', 'chatgpt', 'chat-gpt', 'openai', 'chat_ads'].indexOf(src) !== -1 || src.indexOf('chat-ads') !== -1 || src.indexOf('chatgpt') !== -1 || form.indexOf('chat ads') !== -1 || form.indexOf('chat-ads') !== -1 || form.indexOf('chatgpt') !== -1 || pag.indexOf('chat-gpt') !== -1 || pag.indexOf('chatgpt') !== -1 || ref.indexOf('chatgpt') !== -1) {
-                        chanBadge = '<span style="color:#10a37f; font-weight:700;">🤖 ChatGPT Ads</span>';
-                    } else if (lead.gclid || src === 'google' || src === 'google_ads' || form.indexOf('google') !== -1) {
-                        chanBadge = '<span style="color:#1a73e8; font-weight:700;">🟢 Google Ads</span>';
-                    } else if (lead.fbclid || lead.ad_id || ['meta','facebook','instagram','fb'].indexOf(src) !== -1 || form.indexOf('meta') !== -1 || form.indexOf('facebook') !== -1) {
-                        chanBadge = '<span style="color:#0866ff; font-weight:700;">🔵 Meta Ads</span>';
-                    } else if (form.indexOf('whatsapp') !== -1 || lead.whatsapp_status || lead.conversation_id) {
-                        chanBadge = '<span style="color:#15803d; font-weight:700;">💬 WhatsApp Direto</span>';
-                    }
+                    // ==========================================
+                    // Seção 2: Atribuição de Campanha & Ads
+                    // ==========================================
+                    html += '<div class="li-modal-box">';
+                    html += '<h4><span class="dashicons dashicons-chart-bar"></span> Atribuição de Campanha & Ads</h4>';
+                    html += makeRow('Canal de Origem', chanBadge, 'dashicons-share');
 
-                    html += '<div class="li-modal-box"><h4>🎯 Atribuição de Campanha & Ads</h4>';
-                    html += '<p><strong>Canal de Origem:</strong> ' + chanBadge + '</p>';
-                    html += '<p><strong>Campanha:</strong> <span id="liModalCampName" style="font-weight:600; color:#0f172a;">' + (lead.campaign_name || lead.utm_campaign || '-') + '</span></p>';
-                    html += '<p><strong>Conjunto / AdSet:</strong> <span id="liModalAdSetName" style="font-weight:600; color:#0f172a;">' + (lead.adset_name || lead.utm_content || '-') + '</span></p>';
-                    html += '<p><strong>Anúncio:</strong> <span id="liModalAdName" style="font-weight:600; color:#0f172a;">' + (lead.ad_name || lead.utm_term || '-') + '</span></p>';
-                    html += '<hr style="margin: 8px 0; border: none; border-top: 1px dashed #e2e8f0;">';
-                    html += '<p><strong>utm_source:</strong> <code>' + (lead.utm_source || '-') + '</code></p>';
-                    html += '<p><strong>utm_medium:</strong> <code>' + (lead.utm_medium || '-') + '</code></p>';
-                    html += '<p><strong>utm_campaign:</strong> <code id="liModalUtmCamp">' + (lead.utm_campaign || '-') + '</code></p>';
-                    html += '<p><strong>utm_content:</strong> <code id="liModalUtmContent">' + (lead.utm_content || '-') + '</code></p>';
-                    html += '<p><strong>utm_term:</strong> <code id="liModalUtmTerm">' + (lead.utm_term || '-') + '</code></p>';
-                    html += '<p><strong>gclid (Google Ads):</strong> <code style="word-break:break-all;">' + (lead.gclid || '-') + '</code></p>';
-                    html += '<p><strong>fbclid / CTWA:</strong> <code style="word-break:break-all;">' + (lead.fbclid || '-') + '</code></p>';
-                    html += '<p><strong>Campaign ID / Gad:</strong> <code id="liModalCampId">' + (lead.campaign_id || '-') + '</code></p>';
-                    html += '<p><strong>AdSet ID:</strong> <code id="liModalAdSetId">' + (lead.adset_id || '-') + '</code></p>';
-                    html += '<p><strong>Ad ID:</strong> <code id="liModalAdId">' + (lead.ad_id || '-') + '</code></p>';
+                    // Nomes das Campanhas com alto contraste (branco/legível)
+                    var campDisplay = lead.campaign_name || lead.utm_campaign;
+                    html += makeRow('Campanha', '<span id="liModalCampName" class="li-val-bold">' + (campDisplay ? escH(campDisplay) : '<span class="li-val-empty">—</span>') + '</span>', 'dashicons-megaphone');
+
+                    var adsetDisplay = lead.adset_name || lead.utm_content;
+                    html += makeRow('Conjunto / AdSet', '<span id="liModalAdSetName" class="li-val-bold">' + (adsetDisplay ? escH(adsetDisplay) : '<span class="li-val-empty">—</span>') + '</span>', 'dashicons-category');
+
+                    var adDisplay = lead.ad_name || lead.utm_term;
+                    html += makeRow('Anúncio', '<span id="liModalAdName" class="li-val-bold">' + (adDisplay ? escH(adDisplay) : '<span class="li-val-empty">—</span>') + '</span>', 'dashicons-format-image');
+
+                    html += '<div class="li-modal-divider"><span>Parâmetros de Rastreamento (UTMs)</span></div>';
+                    html += makeRow('utm_source', makeCopyPill(lead.utm_source));
+                    html += makeRow('utm_medium', makeCopyPill(lead.utm_medium));
+                    html += makeRow('utm_campaign', '<span id="liModalUtmCamp">' + makeCopyPill(lead.utm_campaign) + '</span>');
+                    html += makeRow('utm_content', '<span id="liModalUtmContent">' + makeCopyPill(lead.utm_content) + '</span>');
+                    html += makeRow('utm_term', '<span id="liModalUtmTerm">' + makeCopyPill(lead.utm_term) + '</span>');
+
+                    html += '<div class="li-modal-divider"><span>Identificadores de Cliques & Anúncios</span></div>';
+                    html += makeRow('gclid (Google Ads)', makeCopyPill(lead.gclid));
+                    html += makeRow('fbclid / CTWA', makeCopyPill(lead.fbclid));
+                    html += makeRow('Campaign ID / Gad', '<span id="liModalCampId">' + makeCopyPill(lead.campaign_id) + '</span>');
+                    html += makeRow('AdSet ID', '<span id="liModalAdSetId">' + makeCopyPill(lead.adset_id) + '</span>');
+                    html += makeRow('Ad ID', '<span id="liModalAdId">' + makeCopyPill(lead.ad_id) + '</span>');
 
                     if (lead.ad_id) {
-                        html += '<div style="margin-top: 14px; padding: 12px; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;">';
-                        html += '<div style="font-size: 11px; font-weight: 600; text-transform: uppercase; color: #0369a1; margin-bottom: 6px;">Sincronização com Meta Marketing API</div>';
-                        html += '<button type="button" class="button button-primary" id="liBtnSyncLeadAd" data-lead-id="' + lead.id + '" style="display:inline-flex; align-items:center; gap:6px;">';
-                        html += '<span class="dashicons dashicons-update" style="font-size:16px; width:16px; height:16px; line-height:16px;"></span> Buscar Dados Oficiais na Meta';
+                        html += '<div class="li-meta-sync-card">';
+                        html += '<div class="li-meta-sync-title"><span class="dashicons dashicons-facebook" style="font-size:14px; width:14px; height:14px; line-height:14px;"></span> Sincronização com Meta Marketing API</div>';
+                        html += '<button type="button" class="li-btn-meta-sync" id="liBtnSyncLeadAd" data-lead-id="' + lead.id + '">';
+                        html += '<span class="dashicons dashicons-update" style="font-size:15px; width:15px; height:15px; line-height:15px;"></span> Buscar Dados Oficiais na Meta';
                         html += '</button>';
                         html += '<div id="liSyncLeadResult" style="margin-top:8px; font-size:12px; display:none;"></div>';
                         html += '</div>';
                     }
                     html += '</div>';
 
-                    // Seção 3: Qualificação e WhatsApp
+                    // ==========================================
+                    // Seção 3: Qualificação & Funil
+                    // ==========================================
                     var etapaFunil = lead.etapa_funil || (lead.qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : (lead.qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
-                    html += '<div class="li-modal-box"><h4>⭐ Qualificação & WhatsApp</h4>';
-                    html += '<p><strong>Status de Qualificação:</strong> ' + lead.qualificacao_status + '</p>';
-                    html += '<p><strong>Etapa do Funil:</strong> <span class="li-badge" style="background:#e0f2fe; color:#0369a1; font-weight:700;">🎯 ' + etapaFunil + '</span></p>';
-                    html += '<p><strong>Data da Qualificação:</strong> ' + (lead.qualificacao_data || '-') + '</p>';
-                    html += '<p><strong>Origem da Qualificação:</strong> ' + (lead.qualificacao_origem || '-') + '</p>';
-                    html += '<p><strong>Score:</strong> ' + lead.score + '</p>';
-                    html += '<p><strong>Status WhatsApp:</strong> ' + (lead.whatsapp_status || '-') + '</p>';
-                    html += '<p><strong>Mensagens Recebidas:</strong> ' + lead.mensagens_recebidas + '</p>';
+                    
+                    var statusQualBadge = '<span class="li-pill-qual-wait"><span class="dashicons dashicons-clock"></span> Pendente</span>';
+                    if (lead.qualificacao_status === 'qualificado') {
+                        statusQualBadge = '<span class="li-pill-qual-ok"><span class="dashicons dashicons-yes-alt"></span> Venda / Qualificado</span>';
+                    } else if (lead.qualificacao_status === 'nao_qualificado') {
+                        statusQualBadge = '<span class="li-pill-qual-no"><span class="dashicons dashicons-dismiss"></span> Desqualificado</span>';
+                    }
+
+                    html += '<div class="li-modal-box">';
+                    html += '<h4><span class="dashicons dashicons-star-filled"></span> Qualificação & WhatsApp</h4>';
+                    html += makeRow('Status de Qualificação', statusQualBadge, 'dashicons-awards');
+                    html += makeRow('Etapa do Funil', '<span class="li-pill-stage">🎯 ' + escH(etapaFunil) + '</span>', 'dashicons-filter');
+                    html += makeRow('Data da Qualificação', makeText(lead.qualificacao_data), 'dashicons-calendar');
+                    html += makeRow('Origem da Qualificação', makeText(lead.qualificacao_origem), 'dashicons-database');
+                    
+                    var scoreVal = (lead.score !== undefined && lead.score !== null) ? lead.score : '0';
+                    html += makeRow('Score do Lead', '<span class="li-score-badge">★ ' + scoreVal + '</span>', 'dashicons-performance');
+
+                    var waStatusHtml = lead.whatsapp_status 
+                        ? '<span class="li-badge" style="background:#f0fdf4; color:#15803d; border:1px solid #bbf7d0; font-weight:600; padding:2px 7px; border-radius:5px;">' + escH(lead.whatsapp_status) + '</span>'
+                        : '<span class="li-val-empty">—</span>';
+                    html += makeRow('Status WhatsApp', waStatusHtml, 'dashicons-whatsapp');
+
+                    var msgCount = parseInt(lead.mensagens_recebidas, 10) || 0;
+                    var msgHtml = msgCount > 0 
+                        ? '<span class="li-badge-channel li-badge-whatsapp">💬 ' + msgCount + ' ' + (msgCount === 1 ? 'mensagem' : 'mensagens') + '</span>'
+                        : '<span class="li-val-empty">0 mensagens</span>';
+                    html += makeRow('Mensagens Recebidas', msgHtml, 'dashicons-format-chat');
                     html += '</div>';
 
+                    // ==========================================
                     // Seção 4: Metadados Técnicos
-                    html += '<div class="li-modal-box"><h4>🌐 Metadados Técnicos</h4>';
-                    html += '<p><strong>Formulário:</strong> ' + (lead.formulario_nome || '-') + ' (' + (lead.formulario_id || '-') + ')</p>';
-                    html += '<p><strong>Página de Origem:</strong> <a href="' + (lead.pagina_origem || '#') + '" target="_blank" style="word-break:break-all; font-size:12px;">' + (lead.pagina_origem || '-') + '</a></p>';
-                    html += '<p><strong>Referrer Externo:</strong> <span style="word-break:break-all; font-size:12px; color:#475569;">' + (lead.referrer || '-') + '</span></p>';
-                    html += '<p><strong>Endereço IP:</strong> ' + (lead.ip_address || '-') + '</p>';
-                    html += '<p><strong>User Agent:</strong> <span style="font-size:11px; word-break:break-all;">' + (lead.user_agent || '-') + '</span></p>';
+                    // ==========================================
+                    html += '<div class="li-modal-box">';
+                    html += '<h4><span class="dashicons dashicons-admin-site-alt3"></span> Metadados Técnicos</h4>';
+                    
+                    var formDisplay = '<span class="li-val-empty">—</span>';
+                    if (lead.formulario_nome) {
+                        formDisplay = '<span class="li-val-bold">' + escH(lead.formulario_nome) + '</span>' + (lead.formulario_id ? ' <small style="color:#64748b;">(' + escH(lead.formulario_id) + ')</small>' : '');
+                    }
+                    html += makeRow('Formulário', formDisplay, 'dashicons-feedback');
+
+                    var pagHtml = '<span class="li-val-empty">—</span>';
+                    if (lead.pagina_origem) {
+                        pagHtml = '<a href="' + escH(lead.pagina_origem) + '" target="_blank" class="li-link-out" title="' + escH(lead.pagina_origem) + '">' +
+                                  '<span>' + escH(truncate(lead.pagina_origem, 34)) + '</span>' +
+                                  '<span class="dashicons dashicons-external"></span>' +
+                                  '</a>';
+                    }
+                    html += makeRow('Página de Origem', pagHtml, 'dashicons-admin-links');
+
+                    var refHtml = '<span class="li-val-empty">—</span>';
+                    if (lead.referrer) {
+                        refHtml = '<span style="color:#94a3b8; font-size:12px;" title="' + escH(lead.referrer) + '">' + escH(truncate(lead.referrer, 34)) + '</span>';
+                    }
+                    html += makeRow('Referrer Externo', refHtml, 'dashicons-migrate');
+                    html += makeRow('Endereço IP', makeCopyPill(lead.ip_address), 'dashicons-networking');
+                    
+                    var uaHtml = '<span class="li-val-empty">—</span>';
+                    if (lead.user_agent) {
+                        uaHtml = '<div class="li-ua-box" title="' + escH(lead.user_agent) + '">' + escH(lead.user_agent) + '</div>';
+                    }
+                    html += makeRow('User Agent', uaHtml, 'dashicons-desktop');
                     html += '</div>';
 
-                    html += '</div>';
+                    html += '</div>'; // fim li-modal-sections
 
                     document.getElementById('liModalContent').innerHTML = html;
                     document.getElementById('liLeadModal').style.display = 'flex';
 
-                    // Handler do botão de sincronização individual
+                    // Handler do botão de sincronização individual com a Meta
                     var syncBtn = document.getElementById('liBtnSyncLeadAd');
                     if (syncBtn) {
                         syncBtn.addEventListener('click', function() {
@@ -1000,7 +1246,7 @@ class LeadsController {
                             btn.disabled = true;
                             btn.innerHTML = '<span class="dashicons dashicons-update" style="animation:spin 1s infinite linear;"></span> Consultando Meta...';
                             resultDiv.style.display = 'block';
-                            resultDiv.innerHTML = '<span style="color:#64748b;">Aguarde, comunicando com a Meta Marketing API...</span>';
+                            resultDiv.innerHTML = '<span style="color:#94a3b8;">Aguarde, comunicando com a Meta Marketing API...</span>';
 
                             var formData = new FormData();
                             formData.append('action', 'li_sync_lead_ad');
@@ -1018,24 +1264,24 @@ class LeadsController {
                                 if (res.success && res.data) {
                                     var d = res.data.data || res.data.meta || {};
                                     var l = res.data.lead || {};
-                                    resultDiv.innerHTML = '<div style="background:#dcfce7; color:#15803d; padding:8px 10px; border-radius:4px; font-weight:500;">✔ ' + (res.data.message || 'Dados sincronizados com sucesso!') + '</div>';
-                                    if (document.getElementById('liModalCampName')) document.getElementById('liModalCampName').innerText = l.campaign_name || d.campaign_name || '-';
-                                    if (document.getElementById('liModalAdSetName')) document.getElementById('liModalAdSetName').innerText = l.adset_name || d.adset_name || '-';
-                                    if (document.getElementById('liModalAdName')) document.getElementById('liModalAdName').innerText = l.ad_name || d.ad_name || '-';
-                                    if (document.getElementById('liModalCampId')) document.getElementById('liModalCampId').innerText = l.campaign_id || d.campaign_id || '-';
-                                    if (document.getElementById('liModalAdSetId')) document.getElementById('liModalAdSetId').innerText = l.adset_id || d.adset_id || '-';
-                                    if (document.getElementById('liModalUtmCamp')) document.getElementById('liModalUtmCamp').innerText = l.utm_campaign || d.campaign_name || '-';
-                                    if (document.getElementById('liModalUtmContent')) document.getElementById('liModalUtmContent').innerText = l.utm_content || d.adset_name || '-';
-                                    if (document.getElementById('liModalUtmTerm')) document.getElementById('liModalUtmTerm').innerText = l.utm_term || d.ad_name || '-';
+                                    resultDiv.innerHTML = '<div style="background:rgba(16,185,129,0.15); border:1px solid rgba(16,185,129,0.3); color:#34d399; padding:8px 10px; border-radius:6px; font-weight:500;">✔ ' + (res.data.message || 'Dados sincronizados com sucesso!') + '</div>';
+                                    if (document.getElementById('liModalCampName')) document.getElementById('liModalCampName').innerText = l.campaign_name || d.campaign_name || '—';
+                                    if (document.getElementById('liModalAdSetName')) document.getElementById('liModalAdSetName').innerText = l.adset_name || d.adset_name || '—';
+                                    if (document.getElementById('liModalAdName')) document.getElementById('liModalAdName').innerText = l.ad_name || d.ad_name || '—';
+                                    if (document.getElementById('liModalCampId')) document.getElementById('liModalCampId').innerHTML = makeCopyPill(l.campaign_id || d.campaign_id);
+                                    if (document.getElementById('liModalAdSetId')) document.getElementById('liModalAdSetId').innerHTML = makeCopyPill(l.adset_id || d.adset_id);
+                                    if (document.getElementById('liModalUtmCamp')) document.getElementById('liModalUtmCamp').innerHTML = makeCopyPill(l.utm_campaign || d.campaign_name);
+                                    if (document.getElementById('liModalUtmContent')) document.getElementById('liModalUtmContent').innerHTML = makeCopyPill(l.utm_content || d.adset_name);
+                                    if (document.getElementById('liModalUtmTerm')) document.getElementById('liModalUtmTerm').innerHTML = makeCopyPill(l.utm_term || d.ad_name);
                                 } else {
                                     var err = (res.data && res.data.message) ? res.data.message : 'Erro ao consultar a Meta.';
-                                    resultDiv.innerHTML = '<div style="background:#fee2e2; color:#b91c1c; padding:8px 10px; border-radius:4px;">❌ ' + err + '<br><small style="color:#7f1d1d; display:block; margin-top:4px;">Dica: certifique-se de que o token possua a permissão <strong>ads_read</strong> e a Conta de Anúncios esteja associada ao System User no Meta Business Suite.</small></div>';
+                                    resultDiv.innerHTML = '<div style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#f87171; padding:8px 10px; border-radius:6px;">❌ ' + err + '<br><small style="color:#fca5a5; display:block; margin-top:4px;">Dica: certifique-se de que o token possua a permissão <strong>ads_read</strong> e a Conta de Anúncios esteja associada ao System User no Meta Business Suite.</small></div>';
                                 }
                             })
                             .catch(function(e) {
                                 btn.disabled = false;
                                 btn.innerHTML = '<span class="dashicons dashicons-update"></span> Buscar Dados Oficiais na Meta';
-                                resultDiv.innerHTML = '<div style="background:#fee2e2; color:#b91c1c; padding:8px 10px; border-radius:4px;">❌ Falha na requisição: ' + e.message + '</div>';
+                                resultDiv.innerHTML = '<div style="background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); color:#f87171; padding:8px 10px; border-radius:6px;">❌ Falha na requisição: ' + e.message + '</div>';
                             });
                         });
                     }
