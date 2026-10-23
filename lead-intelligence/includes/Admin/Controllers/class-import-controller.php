@@ -129,6 +129,8 @@ class ImportController {
                 'status'         => sanitize_text_field(wp_unslash($_POST['map_status'] ?? '')),
                 'etapa'          => sanitize_text_field(wp_unslash($_POST['map_etapa'] ?? 'etapa_funil')),
                 'data'           => sanitize_text_field(wp_unslash($_POST['map_data'] ?? '')),
+                'instancia'      => sanitize_text_field(wp_unslash($_POST['map_instancia'] ?? '')),
+                'leadid'         => sanitize_text_field(wp_unslash($_POST['map_leadid'] ?? '')),
                 'campanha'       => sanitize_text_field(wp_unslash($_POST['map_campanha'] ?? '')),
                 'curso'          => sanitize_text_field(wp_unslash($_POST['map_curso'] ?? '')),
                 'area'           => sanitize_text_field(wp_unslash($_POST['map_area'] ?? '')),
@@ -415,6 +417,8 @@ class ImportController {
                     'status'         => sanitize_text_field(wp_unslash($_POST['map_status'] ?? '')),
                     'etapa'          => sanitize_text_field(wp_unslash($_POST['map_etapa'] ?? 'etapa_funil')),
                     'data'           => sanitize_text_field(wp_unslash($_POST['map_data'] ?? '')),
+                    'instancia'      => sanitize_text_field(wp_unslash($_POST['map_instancia'] ?? '')),
+                    'leadid'         => sanitize_text_field(wp_unslash($_POST['map_leadid'] ?? '')),
                     'curso'          => sanitize_text_field(wp_unslash($_POST['map_curso'] ?? '')),
                     'area'           => sanitize_text_field(wp_unslash($_POST['map_area'] ?? '')),
                     'gclid'          => sanitize_text_field(wp_unslash($_POST['map_gclid'] ?? '')),
@@ -1001,9 +1005,18 @@ class ImportController {
                                 </tr>
 
                                 <tr>
-                                    <th scope="row"><label for="map_area">Instância / Polo / Unidade</label></th>
+                                    <th scope="row"><label for="map_instancia">Instância (onde o lead foi)</label></th>
                                     <td>
-                                        <?php echo self::render_select('map_area', $headers_list, ['instancia', 'polo', 'unidade', 'area'], $mapping['area'] ?? 'Instancia'); ?>
+                                        <?php echo self::render_select('map_instancia', $headers_list, ['instancia', 'intancia', 'polo', 'unidade', 'filial'], $mapping['instancia'] ?? 'Instancia'); ?>
+                                        <p class="description">Coluna com a instância onde o lead foi alocado (ex: <code>São Paulo</code>, <code>Faveni</code>, <code>Uniabeu</code>, <code>Cerquilho</code>).</p>
+                                    </td>
+                                </tr>
+
+                                <tr>
+                                    <th scope="row"><label for="map_leadid">Lead ID da Planilha (leadid)</label></th>
+                                    <td>
+                                        <?php echo self::render_select('map_leadid', $headers_list, ['leadid', 'lead_id', 'id_lead', 'lead id', 'id'], $mapping['leadid'] ?? 'leadid'); ?>
+                                        <p class="description">Identificador único do lead gerado pela planilha ou CRM externo.</p>
                                     </td>
                                 </tr>
 
@@ -1171,8 +1184,12 @@ class ImportController {
                                     <td><?php echo self::render_select('map_data', $preview_data['headers'], ['datacriação', 'data', 'date', 'data_matricula']); ?></td>
                                 </tr>
                                 <tr>
-                                    <th scope="row"><label for="map_area">Instância / Polo / Área</label></th>
-                                    <td><?php echo self::render_select('map_area', $preview_data['headers'], ['instancia', 'area', 'area_interesse', 'polo']); ?></td>
+                                    <th scope="row"><label for="map_instancia">Instância (onde o lead foi)</label></th>
+                                    <td><?php echo self::render_select('map_instancia', $preview_data['headers'], ['instancia', 'intancia', 'polo', 'unidade', 'filial']); ?></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><label for="map_leadid">Lead ID da Planilha (leadid)</label></th>
+                                    <td><?php echo self::render_select('map_leadid', $preview_data['headers'], ['leadid', 'lead_id', 'id_lead', 'lead id', 'id']); ?></td>
                                 </tr>
                                 <tr>
                                     <th scope="row"><label for="map_curso">Tipo de Curso / Modalidade</label></th>

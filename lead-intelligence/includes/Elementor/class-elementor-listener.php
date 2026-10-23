@@ -91,7 +91,7 @@ class ElementorListener {
                     continue;
                 }
 
-                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source'] as $tk) {
+                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source', 'oppref', 'obref'] as $tk) {
                     if ($f_key === $tk || $f_title === $tk || strpos($f_key, $tk) !== false || strpos($f_title, $tk) !== false) {
                         $form_tracking[$tk] = sanitize_text_field($f_val);
                     }
@@ -109,12 +109,14 @@ class ElementorListener {
             }
         }
 
-        // 3. Captura consolidada de parâmetros UTM e Meta Clicks (Cookies + Server-Side)
+        // 3. Captura consolidada de parâmetros UTM e Meta/OpenAI Clicks (Cookies + Server-Side)
         $tracking = UtmTracker::get_current_tracking_data();
 
         // Mapeamentos unificados com máxima prioridade (Form Fields > URL Query > Tracker Cookies)
         $gclid          = !empty($form_tracking['gclid']) ? $form_tracking['gclid'] : (!empty($url_params['gclid']) ? sanitize_text_field($url_params['gclid']) : (!empty($tracking['gclid']) ? $tracking['gclid'] : ''));
         $fbclid         = !empty($form_tracking['fbclid']) ? $form_tracking['fbclid'] : (!empty($url_params['fbclid']) ? sanitize_text_field($url_params['fbclid']) : (!empty($tracking['fbclid']) ? $tracking['fbclid'] : ''));
+        $oppref         = !empty($form_tracking['oppref']) ? $form_tracking['oppref'] : (!empty($url_params['oppref']) ? sanitize_text_field($url_params['oppref']) : (!empty($tracking['oppref']) ? $tracking['oppref'] : ''));
+        $obref          = !empty($form_tracking['obref']) ? $form_tracking['obref'] : (!empty($url_params['obref']) ? sanitize_text_field($url_params['obref']) : (!empty($tracking['obref']) ? $tracking['obref'] : ''));
         $referrer_final = !empty($form_tracking['referrer']) ? $form_tracking['referrer'] : (!empty($tracking['referrer']) ? $tracking['referrer'] : '');
         $gad_source     = !empty($form_tracking['gad_source']) ? $form_tracking['gad_source'] : (!empty($url_params['gad_source']) ? sanitize_text_field($url_params['gad_source']) : (!empty($tracking['gad_source']) ? $tracking['gad_source'] : ''));
 
@@ -155,6 +157,8 @@ class ElementorListener {
             'fbclid'          => $fbclid,
             'fbc'             => $tracking['fbc'],
             'fbp'             => $tracking['fbp'],
+            'oppref'          => $oppref,
+            'obref'           => $obref,
             'campaign_id'     => $campaign_id,
             'adset_id'        => $tracking['adset_id'],
             'ad_id'           => $tracking['ad_id'],
@@ -168,6 +172,9 @@ class ElementorListener {
 
         // Agenda envio do evento 'Lead' para Meta Conversions API (se ativo nas configurações)
         CapiQueue::enqueue_lead($lead_id);
+
+        // Agenda envio do evento 'lead_created' para OpenAI Conversions API (se ativo nas configurações)
+        \LeadIntelligence\OpenAiCapi\OpenAiCapiQueue::enqueue_lead($lead_id);
 
         Logger::info('Elementor', "Lead capturado com sucesso do Elementor Form '{$form_name}' (ID Lead #{$lead_id}).", [
             'form_name' => $form_name,

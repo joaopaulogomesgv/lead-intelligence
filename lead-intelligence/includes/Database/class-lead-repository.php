@@ -248,7 +248,10 @@ class LeadRepository {
 
         if (!empty($args['search'])) {
             $search = '%' . $wpdb->esc_like(trim($args['search'])) . '%';
-            $where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR area_interesse LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR pagina_origem LIKE %s)";
+            $where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR area_interesse LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR pagina_origem LIKE %s OR instancia LIKE %s OR leadid LIKE %s OR polo LIKE %s)";
+            $params[] = $search;
+            $params[] = $search;
+            $params[] = $search;
             $params[] = $search;
             $params[] = $search;
             $params[] = $search;
@@ -1485,6 +1488,8 @@ class LeadRepository {
                 $updated_lead->capi_qualified_sent = 1;
                 $updated_lead->capi_qualified_time = $now;
             }
+            // Disparo na OpenAI CAPI
+            \LeadIntelligence\OpenAiCapi\OpenAiCapiQueue::enqueue_qualified($lead_id);
         } elseif ($meta_event_to_send === 'Purchase') {
             if (empty($updated_lead->capi_qualified_sent)) {
                 $q_res = \LeadIntelligence\MetaCapi\CapiService::send_lead_qualified_event($updated_lead);
@@ -1507,6 +1512,9 @@ class LeadRepository {
                 $updated_lead->capi_purchase_sent = 1;
                 $updated_lead->capi_purchase_time = $now;
             }
+
+            // Disparo na OpenAI CAPI (evento order_created)
+            \LeadIntelligence\OpenAiCapi\OpenAiCapiQueue::enqueue_purchase($lead_id, $valor_venda);
         }
 
         Logger::info('Leads', "Lead #{$lead_id} teve status atualizado para '{$action}' via Painel Meta Ads.", [

@@ -3,7 +3,7 @@
  * Plugin Name: Lead Intelligence
  * Plugin URI: https://github.com/lead-intelligence
  * Description: Central própria de inteligência e qualificação de leads Meta Ads, Elementor Pro e WhatsApp Cloud API.
- * Version: 2.6.9
+ * Version: 2.8.1
  * Author: Lead Intelligence Team
  * Author URI: https://github.com/lead-intelligence
  * Text Domain: lead-intelligence
@@ -17,11 +17,11 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('LEAD_INTELLIGENCE_VERSION', '2.6.9');
+define('LEAD_INTELLIGENCE_VERSION', '2.8.1');
 define('LEAD_INTELLIGENCE_PLUGIN_FILE', __FILE__);
 define('LEAD_INTELLIGENCE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('LEAD_INTELLIGENCE_PLUGIN_URL', plugin_dir_url(__FILE__));
-define('LEAD_INTELLIGENCE_DB_VERSION', '1.1.1');
+define('LEAD_INTELLIGENCE_DB_VERSION', '1.1.3');
 
 // Autoloader
 require_once LEAD_INTELLIGENCE_PLUGIN_DIR . 'includes/class-autoloader.php';
@@ -57,7 +57,7 @@ function lead_intelligence_init() {
     // Inicializa listener do Elementor Pro (não-intrusivo)
     \LeadIntelligence\Elementor\ElementorListener::init();
 
-    // Inicializa rastreador e preservador de UTMs e parâmetros Meta
+    // Inicializa rastreador e preservador de UTMs e parâmetros Meta/OpenAI
     \LeadIntelligence\Tracking\UtmTracker::init();
 
     // Inicializa Webhook próprio da Meta WhatsApp Cloud API
@@ -68,6 +68,9 @@ function lead_intelligence_init() {
 
     // Inicializa fila assíncrona da Meta Conversions API
     \LeadIntelligence\MetaCapi\CapiQueue::init();
+
+    // Inicializa fila assíncrona da OpenAI Conversions API (ChatGPT Ads)
+    \LeadIntelligence\OpenAiCapi\OpenAiCapiQueue::init();
 
     // Inicializa sincronização e OAuth com Google Sheets API v4
     \LeadIntelligence\Qualification\GoogleSheetsSync::init();

@@ -799,6 +799,15 @@ class ElementorCrossAnalyzer {
                 if (empty($existing->fbclid) && !empty($lead['fbclid'])) {
                     $update_data['fbclid'] = sanitize_text_field($lead['fbclid']);
                 }
+                if (!empty($lead['polo_qualificado'])) {
+                    $update_data['instancia'] = sanitize_text_field($lead['polo_qualificado']);
+                    if (empty($existing->polo)) {
+                        $update_data['polo'] = sanitize_text_field($lead['polo_qualificado']);
+                    }
+                }
+                if (!empty($lead['lead_id'])) {
+                    $update_data['leadid'] = sanitize_text_field($lead['lead_id']);
+                }
 
                 $wpdb->update($leads_table, $update_data, ['id' => $lead_id]);
                 $updated_existing++;
@@ -815,6 +824,8 @@ class ElementorCrossAnalyzer {
                     'telefone_normalizado' => $phone_norm,
                     'tipo_curso'           => sanitize_text_field($lead['tipo_curso']),
                     'area_interesse'       => sanitize_text_field($lead['area_interesse']),
+                    'instancia'            => !empty($lead['polo_qualificado']) ? sanitize_text_field($lead['polo_qualificado']) : '',
+                    'leadid'               => !empty($lead['lead_id']) ? sanitize_text_field($lead['lead_id']) : '',
                     'data_cadastro'        => !empty($lead['data_primeiro_envio']) ? $lead['data_primeiro_envio'] : current_time('mysql'),
                     'formulario_nome'      => !empty($lead['formulario_nome']) ? sanitize_text_field($lead['formulario_nome']) : 'Elementor Form',
                     'pagina_origem'        => !empty($lead['page_url']) ? esc_url_raw($lead['page_url']) : '',

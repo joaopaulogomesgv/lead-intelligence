@@ -6,6 +6,7 @@ use LeadIntelligence\Database\LeadRepository;
 use LeadIntelligence\PhoneNormalizer;
 use LeadIntelligence\Logger;
 use LeadIntelligence\MetaCapi\CapiQueue;
+use LeadIntelligence\OpenAiCapi\OpenAiCapiQueue;
 
 if (!defined('ABSPATH')) {
     exit;
@@ -46,10 +47,15 @@ class Matcher {
             $raw_etapa = $raw_status;
         }
 
-        $raw_gclid   = self::get_mapped_value($row_data, $mapping, 'gclid');
-        $raw_fbclid  = self::get_mapped_value($row_data, $mapping, 'fbclid');
-        $raw_ad_id   = self::get_mapped_value($row_data, $mapping, 'ad_id');
-        $raw_camp    = self::get_mapped_value($row_data, $mapping, 'campanha');
+        $raw_gclid     = self::get_mapped_value($row_data, $mapping, 'gclid');
+        $raw_fbclid    = self::get_mapped_value($row_data, $mapping, 'fbclid');
+        $raw_ad_id     = self::get_mapped_value($row_data, $mapping, 'ad_id');
+        $raw_camp      = self::get_mapped_value($row_data, $mapping, 'campanha');
+        $raw_instancia = self::get_mapped_value($row_data, $mapping, 'instancia');
+        if (empty($raw_instancia)) {
+            $raw_instancia = $raw_area;
+        }
+        $raw_leadid    = self::get_mapped_value($row_data, $mapping, 'leadid');
 
         $phone_norm = !empty($raw_phone) ? PhoneNormalizer::normalize($raw_phone) : '';
         $email_norm = !empty($raw_email) ? sanitize_email($raw_email) : '';
@@ -146,6 +152,15 @@ class Matcher {
             if (empty($existing->utm_campaign) && !empty($raw_camp)) {
                 $update_data['utm_campaign'] = sanitize_text_field($raw_camp);
             }
+            if (!empty($raw_instancia)) {
+                $update_data['instancia'] = sanitize_text_field($raw_instancia);
+                if (empty($existing->polo)) {
+                    $update_data['polo'] = sanitize_text_field($raw_instancia);
+                }
+            }
+            if (!empty($raw_leadid)) {
+                $update_data['leadid'] = sanitize_text_field($raw_leadid);
+            }
 
             // Preserva e calcula dados de ciclo longo (Lead Time em dias)
             $date_first = !empty($existing->data_primeira_captura) ? $existing->data_primeira_captura : (!empty($existing->data_cadastro) ? $existing->data_cadastro : '');
@@ -192,6 +207,11 @@ class Matcher {
                 CapiQueue::enqueue_qualified($lead_id);
             }
 
+            // Dispara evento para OpenAI CAPI se o status for qualificado
+            if ($qualificacao_status === 'qualificado') {
+                OpenAiCapiQueue::enqueue_qualified($lead_id);
+            }
+
             return [
                 'status'  => 'matched',
                 'lead_id' => $lead_id,
@@ -223,6 +243,9 @@ class Matcher {
             'telefone_normalizado' => $phone_norm,
             'tipo_curso'           => sanitize_text_field($raw_course),
             'area_interesse'       => sanitize_text_field($raw_area),
+            'instancia'            => sanitize_text_field($raw_instancia),
+            'polo'                 => sanitize_text_field($raw_instancia),
+            'leadid'               => sanitize_text_field($raw_leadid),
             'gclid'                => sanitize_text_field($raw_gclid),
             'fbclid'               => sanitize_text_field($raw_fbclid),
             'ad_id'                => sanitize_text_field($raw_ad_id),
@@ -259,6 +282,11 @@ class Matcher {
         // Dispara evento LeadQualified para a Meta CAPI se o status for qualificado (apenas canal Meta Ads)
         if ($qualificacao_status === 'qualificado' && $channel === 'meta_ads') {
             CapiQueue::enqueue_qualified($new_id);
+        }
+
+        // Dispara evento para OpenAI CAPI se o status for qualificado
+        if ($qualificacao_status === 'qualificado') {
+            OpenAiCapiQueue::enqueue_qualified($new_id);
         }
 
         return [
@@ -361,21 +389,29 @@ class Matcher {
                 $final_etapa = ($qual_status === 'qualificado') ? 'Matrícula Realizada' : (($qual_status === 'nao_qualificado') ? 'Desqualificado' : 'Formulário Enviado');
             }
 
+            $raw_instancia = !empty($col_map['instancia']) ? ($row_data[$col_map['instancia']] ?? '') : '';
+            if (empty($raw_instancia) && !empty($col_map['area'])) {
+                $raw_instancia = $row_data[$col_map['area']] ?? '';
+            }
+            $raw_leadid = !empty($col_map['leadid']) ? ($row_data[$col_map['leadid']] ?? '') : '';
+
             $prepared_rows[] = [
-                'raw_phone'   => $raw_phone,
-                'phone_norm'  => $phone_norm,
-                'email_norm'  => $email_norm,
-                'raw_name'    => !empty($col_map['nome']) ? ($row_data[$col_map['nome']] ?? '') : '',
-                'raw_date'    => !empty($col_map['data']) ? ($row_data[$col_map['data']] ?? '') : '',
-                'raw_course'  => !empty($col_map['curso']) ? ($row_data[$col_map['curso']] ?? '') : '',
-                'raw_area'    => !empty($col_map['area']) ? ($row_data[$col_map['area']] ?? '') : '',
-                'raw_gclid'   => !empty($col_map['gclid']) ? ($row_data[$col_map['gclid']] ?? '') : '',
-                'raw_fbclid'  => !empty($col_map['fbclid']) ? ($row_data[$col_map['fbclid']] ?? '') : '',
-                'raw_ad_id'   => !empty($col_map['ad_id']) ? ($row_data[$col_map['ad_id']] ?? '') : '',
-                'raw_camp'    => !empty($col_map['campanha']) ? ($row_data[$col_map['campanha']] ?? '') : '',
-                'qual_status' => $qual_status,
-                'final_etapa' => $final_etapa,
-                'row_data'    => $row_data,
+                'raw_phone'     => $raw_phone,
+                'phone_norm'    => $phone_norm,
+                'email_norm'    => $email_norm,
+                'raw_name'      => !empty($col_map['nome']) ? ($row_data[$col_map['nome']] ?? '') : '',
+                'raw_date'      => !empty($col_map['data']) ? ($row_data[$col_map['data']] ?? '') : '',
+                'raw_course'    => !empty($col_map['curso']) ? ($row_data[$col_map['curso']] ?? '') : '',
+                'raw_area'      => !empty($col_map['area']) ? ($row_data[$col_map['area']] ?? '') : '',
+                'raw_instancia' => $raw_instancia,
+                'raw_leadid'    => $raw_leadid,
+                'raw_gclid'     => !empty($col_map['gclid']) ? ($row_data[$col_map['gclid']] ?? '') : '',
+                'raw_fbclid'    => !empty($col_map['fbclid']) ? ($row_data[$col_map['fbclid']] ?? '') : '',
+                'raw_ad_id'     => !empty($col_map['ad_id']) ? ($row_data[$col_map['ad_id']] ?? '') : '',
+                'raw_camp'      => !empty($col_map['campanha']) ? ($row_data[$col_map['campanha']] ?? '') : '',
+                'qual_status'   => $qual_status,
+                'final_etapa'   => $final_etapa,
+                'row_data'      => $row_data,
             ];
 
             if (!empty($phone_norm)) {
@@ -509,6 +545,15 @@ class Matcher {
                 if (empty($existing->fbclid) && !empty($p['raw_fbclid'])) $update_data['fbclid'] = sanitize_text_field($p['raw_fbclid']);
                 if (empty($existing->ad_id) && !empty($p['raw_ad_id'])) $update_data['ad_id'] = sanitize_text_field($p['raw_ad_id']);
                 if (empty($existing->utm_campaign) && !empty($p['raw_camp'])) $update_data['utm_campaign'] = sanitize_text_field($p['raw_camp']);
+                if (!empty($p['raw_instancia'])) {
+                    $update_data['instancia'] = sanitize_text_field($p['raw_instancia']);
+                    if (empty($existing->polo)) {
+                        $update_data['polo'] = sanitize_text_field($p['raw_instancia']);
+                    }
+                }
+                if (!empty($p['raw_leadid'])) {
+                    $update_data['leadid'] = sanitize_text_field($p['raw_leadid']);
+                }
 
                 $wpdb->update($leads_table, $update_data, ['id' => $lead_id]);
 
@@ -549,6 +594,9 @@ class Matcher {
                     'telefone_normalizado' => $p['phone_norm'],
                     'tipo_curso'           => sanitize_text_field($p['raw_course']),
                     'area_interesse'       => sanitize_text_field($p['raw_area']),
+                    'instancia'            => sanitize_text_field($p['raw_instancia']),
+                    'polo'                 => sanitize_text_field($p['raw_instancia']),
+                    'leadid'               => sanitize_text_field($p['raw_leadid']),
                     'gclid'                => sanitize_text_field($p['raw_gclid']),
                     'fbclid'               => sanitize_text_field($p['raw_fbclid']),
                     'ad_id'                => sanitize_text_field($p['raw_ad_id']),
@@ -593,7 +641,7 @@ class Matcher {
      * Resolve o mapa de colunas uma única vez para toda a planilha
      */
     public static function resolve_column_map(array $first_row, array $mapping) {
-        $keys = ['telefone', 'email', 'nome', 'data', 'curso', 'area', 'status', 'etapa', 'gclid', 'fbclid', 'ad_id', 'campanha'];
+        $keys = ['telefone', 'email', 'nome', 'data', 'curso', 'area', 'status', 'etapa', 'gclid', 'fbclid', 'ad_id', 'campanha', 'instancia', 'leadid'];
         $resolved = [];
         foreach ($keys as $k) {
             $resolved[$k] = self::detect_column_key($first_row, $mapping, $k);
@@ -621,19 +669,21 @@ class Matcher {
         }
 
         $alias_map = [
-            'etapa'    => ['etapa_funil', 'etapadofunil', 'etapafunil', 'etapa', 'fase', 'funil', 'estagio', 'situacao_lead', 'situacao', 'motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'desqualificacao', 'substatus', 'desfecho', 'resultado', 'motivo_da_perda', 'motivodaperda', 'fase_do_lead', 'fasedolead', 'tentativa_de_contato', 'tentativadecontato'],
-            'telefone' => ['telefone', 'whatsapp', 'celular', 'phone', 'tel', 'contato', 'fone', 'numero'],
-            'email'    => ['email', 'e-mail', 'e_mail', 'correio_eletronico'],
-            'nome'     => ['nome', 'name', 'cliente', 'aluno', 'lead_nome', 'nome_completo', 'nomecompleto'],
-            'status'   => ['status', 'situacao', 'estado', 'perda', 'qualificacao', 'fase', 'fasedolead', 'fase_do_lead', 'status_lead', 'statusdolead', 'desfecho', 'resultado'],
-            'data'     => ['datacriação', 'datacriacao', 'data_criacao', 'data', 'date', 'data_cadastro', 'datamodificacao', 'data_modificacao', 'data_do_lead', 'datadolead'],
-            'gclid'    => ['gclid', 'google_click_id', 'google_click'],
-            'fbclid'   => ['fbclid', 'meta_click_id', 'fb_click'],
-            'ad_id'    => ['adid', 'ad_id', 'id_anuncio', 'anuncio_id'],
-            'campanha' => ['campanha', 'campaign', 'utm_campaign', 'nome_campanha', 'anuncio'],
-            'curso'    => ['curso', 'tipo_curso', 'modalidade'],
-            'area'     => ['instancia', 'polo', 'unidade', 'area', 'area_interesse'],
-            'motivo'   => ['motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'justificativa', 'motivo_da_perda', 'motivodaperda'],
+            'etapa'     => ['etapa_funil', 'etapadofunil', 'etapafunil', 'etapa', 'fase', 'funil', 'estagio', 'situacao_lead', 'situacao', 'motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'desqualificacao', 'substatus', 'desfecho', 'resultado', 'motivo_da_perda', 'motivodaperda', 'fase_do_lead', 'fasedolead', 'tentativa_de_contato', 'tentativadecontato'],
+            'telefone'  => ['telefone', 'whatsapp', 'celular', 'phone', 'tel', 'contato', 'fone', 'numero'],
+            'email'     => ['email', 'e-mail', 'e_mail', 'correio_eletronico'],
+            'nome'      => ['nome', 'name', 'cliente', 'aluno', 'lead_nome', 'nome_completo', 'nomecompleto'],
+            'status'    => ['status', 'situacao', 'estado', 'perda', 'qualificacao', 'fase', 'fasedolead', 'fase_do_lead', 'status_lead', 'statusdolead', 'desfecho', 'resultado'],
+            'data'      => ['datacriação', 'datacriacao', 'data_criacao', 'data', 'date', 'data_cadastro', 'datamodificacao', 'data_modificacao', 'data_do_lead', 'datadolead'],
+            'gclid'     => ['gclid', 'google_click_id', 'google_click'],
+            'fbclid'    => ['fbclid', 'meta_click_id', 'fb_click'],
+            'ad_id'     => ['adid', 'ad_id', 'id_anuncio', 'anuncio_id'],
+            'campanha'  => ['campanha', 'campaign', 'utm_campaign', 'nome_campanha', 'anuncio'],
+            'curso'     => ['curso', 'tipo_curso', 'modalidade'],
+            'instancia' => ['instancia', 'intancia', 'polo', 'unidade', 'filial', 'cidade', 'campus'],
+            'leadid'    => ['leadid', 'lead_id', 'id_lead', 'lead id', 'lead-id', 'idlead', 'id_externo', 'id_planilha'],
+            'area'      => ['instancia', 'intancia', 'polo', 'unidade', 'area', 'area_interesse'],
+            'motivo'    => ['motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'justificativa', 'motivo_da_perda', 'motivodaperda'],
         ];
 
         $candidates = $alias_map[$key] ?? [];

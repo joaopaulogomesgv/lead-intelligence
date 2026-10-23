@@ -66,6 +66,8 @@ class DbSchema {
             telefone_normalizado varchar(50) DEFAULT '',
             tipo_curso varchar(100) DEFAULT '',
             area_interesse varchar(100) DEFAULT '',
+            instancia varchar(150) DEFAULT '',
+            leadid varchar(100) DEFAULT '',
             data_cadastro datetime DEFAULT CURRENT_TIMESTAMP,
             formulario_id varchar(100) DEFAULT '',
             formulario_nome varchar(255) DEFAULT '',
@@ -112,6 +114,15 @@ class DbSchema {
             capi_purchase_time datetime DEFAULT NULL,
             valor_venda decimal(10,2) DEFAULT NULL,
             capi_event_id varchar(100) DEFAULT '',
+            oppref varchar(255) DEFAULT '',
+            obref varchar(255) DEFAULT '',
+            openai_capi_lead_sent tinyint(1) DEFAULT 0,
+            openai_capi_lead_time datetime DEFAULT NULL,
+            openai_capi_qualified_sent tinyint(1) DEFAULT 0,
+            openai_capi_qualified_time datetime DEFAULT NULL,
+            openai_capi_purchase_sent tinyint(1) DEFAULT 0,
+            openai_capi_purchase_time datetime DEFAULT NULL,
+            openai_capi_event_id varchar(100) DEFAULT '',
             utm_source_first varchar(255) DEFAULT '',
             data_primeira_captura datetime DEFAULT NULL,
             dias_para_conversao int(11) DEFAULT NULL,
@@ -127,6 +138,9 @@ class DbSchema {
             KEY etapa_funil (etapa_funil(50)),
             KEY utm_campaign (utm_campaign(191)),
             KEY polo (polo(100)),
+            KEY instancia (instancia(100)),
+            KEY oppref (oppref(100)),
+            KEY leadid (leadid),
             KEY created_at (created_at)
         ) {$charset_collate};";
 
@@ -362,10 +376,21 @@ class DbSchema {
                         $master->qualificacao_status    = 'nao_qualificado';
                     }
 
-                    // Herda polo se informado
+                    // Herda polo e instancia se informado
                     if (empty($master->polo) && !empty($other->polo)) {
                         $updates['polo'] = $other->polo;
                         $master->polo    = $other->polo;
+                    }
+                    if (empty($master->instancia) && !empty($other->instancia)) {
+                        $updates['instancia'] = $other->instancia;
+                        $master->instancia    = $other->instancia;
+                    } elseif (empty($master->instancia) && !empty($other->polo)) {
+                        $updates['instancia'] = $other->polo;
+                        $master->instancia    = $other->polo;
+                    }
+                    if (empty($master->leadid) && !empty($other->leadid)) {
+                        $updates['leadid'] = $other->leadid;
+                        $master->leadid    = $other->leadid;
                     }
 
                     // Herda UTMs ricas se o master estiver sem ou com genérico ('google', 'meta', 'planilha')
@@ -493,6 +518,12 @@ class DbSchema {
                     }
                     if (empty($m_row->telefone_normalizado) && !empty($s_row->telefone_normalizado)) {
                         $e_updates['telefone_normalizado'] = $s_row->telefone_normalizado;
+                    }
+                    if (empty($m_row->instancia) && !empty($s_row->instancia)) {
+                        $e_updates['instancia'] = $s_row->instancia;
+                    }
+                    if (empty($m_row->leadid) && !empty($s_row->leadid)) {
+                        $e_updates['leadid'] = $s_row->leadid;
                     }
                 }
 

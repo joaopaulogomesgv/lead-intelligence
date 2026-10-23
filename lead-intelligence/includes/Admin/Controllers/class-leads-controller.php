@@ -175,16 +175,33 @@ class LeadsController {
             }
         }
 
-        // Tratamento de Período (Padrão: Hoje)
-        $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
-        $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
-        $periodo     = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : 'today';
+        // Tratamento de Período (Padrão: Hoje, ou Todo se houver pesquisa ativa)
+        $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $search           = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $has_custom_dates = (!empty($custom_from) || !empty($custom_to));
+        $explicit_period  = isset($_GET['periodo']) && $_GET['periodo'] !== '';
+        $is_period_fixed  = !empty($_GET['li_explicit_period']);
 
-        if ($periodo !== 'custom') {
-            $custom_from = '';
-            $custom_to   = '';
-        } elseif (empty($custom_from) && empty($custom_to)) {
-            $periodo = 'today';
+        if ($has_custom_dates) {
+            $periodo = 'custom';
+        } elseif ($explicit_period) {
+            $periodo = sanitize_text_field(wp_unslash($_GET['periodo']));
+            if ($periodo !== 'custom') {
+                $custom_from = '';
+                $custom_to   = '';
+            }
+            // Se o usuário digitou uma busca textual (nome, email, telefone, etc.) e o período veio como 'today'
+            // sem que ele tenha clicado explicitamente no botão de período, libera para 'all'
+            // para que a janela de 24h não sobreponha e oculte o contato procurado!
+            if (!empty($search) && $periodo === 'today' && !$is_period_fixed) {
+                $periodo = 'all';
+            }
+        } else {
+            // Sem período informado na URL:
+            // Se há pesquisa por texto (nome, email, telefone, leadid), busca em todo o histórico ('all')
+            // Se não há pesquisa, o padrão operacional diário é 'today' (Hoje)
+            $periodo = !empty($search) ? 'all' : 'today';
         }
 
         $date_start = '';
@@ -343,8 +360,12 @@ class LeadsController {
 
             <!-- CARD DE FILTRO LIMPO EM LINHA ÚNICA (PADRÃO NATIVO WORDPRESS) -->
             <div class="li-card" style="margin-bottom: 20px; padding: 16px 20px;">
-                <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+                <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" id="liFilterForm" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end;">
                     <input type="hidden" name="page" value="<?php echo esc_attr($current_page); ?>">
+                    <input type="hidden" name="periodo" id="liFilterPeriodo" value="<?php echo esc_attr($periodo); ?>">
+                    <?php if ($is_period_fixed): ?>
+                        <input type="hidden" name="li_explicit_period" value="1">
+                    <?php endif; ?>
 
                     <!-- Seletor de Período -->
                     <div>
@@ -361,7 +382,7 @@ class LeadsController {
                                 'custom'    => 'Personalizado'
                             ];
                             foreach ($periods as $k => $label): ?>
-                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'canal' => $channel, 'status' => $status, 's' => $search], remove_query_arg(['from', 'to']))); ?>" 
+                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'canal' => $channel, 'status' => $status, 's' => $search, 'li_explicit_period' => 1], remove_query_arg(['from', 'to']))); ?>" 
                                    class="button-link" 
                                    style="padding: 4px 10px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 4px; <?php echo $periodo === $k ? 'background: #0073aa; color: #fff;' : 'color: #334155;'; ?>">
                                     <?php echo esc_html($label); ?>
@@ -442,6 +463,47 @@ class LeadsController {
                 </form>
             </div>
 
+            <script>
+            (function() {
+                var form = document.getElementById('liFilterForm');
+                if (!form) return;
+                form.addEventListener('submit', function() {
+                    var sInput = form.querySelector('input[name="s"]');
+                    var pInput = document.getElementById('liFilterPeriodo');
+                    var expInput = form.querySelector('input[name="li_explicit_period"]');
+                    // Se o usuário está buscando por termo textual e o período estava como 'today' sem fixação explícita, expande para 'all'
+                    if (sInput && sInput.value.trim() !== '') {
+                        if (!expInput && pInput && pInput.value === 'today') {
+                            pInput.value = 'all';
+                        }
+                    }
+                });
+            })();
+            </script>
+
+            <!-- CARD DE DESTAQUE: FILTRO ATIVO POR PESQUISA -->
+            <?php if (!empty($search)): ?>
+                <div style="margin-bottom: 15px; padding: 12px 18px; background: #f0fdf4; border: 1px solid #86efac; border-left: 4px solid #16a34a; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                        <span style="font-size: 18px;">🔍</span>
+                        <div style="font-size: 13px; color: #15803d;">
+                            Pesquisa ativa: <strong>"<?php echo esc_html($search); ?>"</strong>
+                            <span style="margin-left: 10px; color: #374151; font-weight: 500;">
+                                (Período: <strong><?php echo esc_html($periods[$periodo] ?? 'Personalizado'); ?></strong>)
+                            </span>
+                            <span style="margin-left: 12px; color: #0f172a; font-weight: 600;">
+                                📊 Encontrados: <strong><?php echo (int) $total_leads; ?> lead(s)</strong>
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <a href="<?php echo esc_url(remove_query_arg(['s', 'paged'])); ?>" class="button button-secondary button-small" style="color: #b91c1c; border-color: #fca5a5;">
+                            ✕ Limpar Pesquisa
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <!-- CARD DE DESTAQUE: FILTRO ATIVO POR UTM SOURCE -->
             <?php if (!empty($utm_source)): ?>
                 <div style="margin-bottom: 15px; padding: 12px 18px; background: #f0f9ff; border: 1px solid #7dd3fc; border-left: 4px solid #0284c7; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
@@ -505,39 +567,47 @@ class LeadsController {
                                 <th data-col-id="check" style="width: 40px; min-width: 40px; max-width: 40px; text-align: center; position: relative;">
                                     <input type="checkbox" id="li_select_all" title="Selecionar Todos na Página">
                                 </th>
-                                <th data-col-id="id" style="width: 65px; min-width: 50px; position: relative;">
+                                <th data-col-id="id" style="width: 60px; min-width: 48px; position: relative;">
                                     <span>ID</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="data" style="width: 105px; min-width: 85px; position: relative;">
+                                <th data-col-id="leadid" style="width: 85px; min-width: 65px; position: relative;">
+                                    <span>Lead ID</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="data" style="width: 100px; min-width: 80px; position: relative;">
                                     <span>Data</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="nome" style="width: 250px; min-width: 150px; position: relative;">
+                                <th data-col-id="nome" style="width: 230px; min-width: 140px; position: relative;">
                                     <span>Nome / Contato</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="curso" style="width: 130px; min-width: 90px; position: relative;">
+                                <th data-col-id="instancia" style="width: 120px; min-width: 85px; position: relative;">
+                                    <span>Instância</span>
+                                    <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
+                                </th>
+                                <th data-col-id="curso" style="width: 120px; min-width: 85px; position: relative;">
                                     <span>Curso / Interesse</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="canal" style="width: 160px; min-width: 110px; position: relative;">
+                                <th data-col-id="canal" style="width: 150px; min-width: 100px; position: relative;">
                                     <span>Canal</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="utm" style="width: 180px; min-width: 110px; position: relative;">
+                                <th data-col-id="utm" style="width: 160px; min-width: 100px; position: relative;">
                                     <span>UTM</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="etapa" style="width: 160px; min-width: 110px; text-align: center; position: relative;">
+                                <th data-col-id="etapa" style="width: 150px; min-width: 100px; text-align: center; position: relative;">
                                     <span>Etapa do Funil</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="status" style="width: 115px; min-width: 85px; text-align: center; position: relative;">
+                                <th data-col-id="status" style="width: 110px; min-width: 80px; text-align: center; position: relative;">
                                     <span>Status</span>
                                     <span class="li-col-resizer" title="Arraste para redimensionar coluna (duplo clique para restaurar)"></span>
                                 </th>
-                                <th data-col-id="acoes" style="width: 90px; min-width: 80px; text-align: center; position: relative;">
+                                <th data-col-id="acoes" style="width: 85px; min-width: 75px; text-align: center; position: relative;">
                                     <span>Ações</span>
                                 </th>
                             </tr>
@@ -545,10 +615,23 @@ class LeadsController {
                         <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="10" style="text-align: center; padding: 40px 20px; color: #64748b;">
+                                <td colspan="12" style="text-align: center; padding: 40px 20px; color: #64748b;">
                                     <span class="dashicons dashicons-id-alt" style="font-size: 36px; width: 36px; height: 36px; color: #94a3b8; margin-bottom: 10px;"></span>
-                                    <p style="font-size: 15px; margin: 0;">Nenhum lead encontrado com os filtros selecionados.</p>
-                                    <p style="font-size: 13px; margin: 5px 0 0;">Verifique os filtros de canal, período ou importe novas planilhas.</p>
+                                    <p style="font-size: 15px; margin: 0; font-weight: 600; color: #334155;">Nenhum lead encontrado com os filtros selecionados.</p>
+                                    <p style="font-size: 13px; margin: 5px 0 15px;">
+                                        <?php if (!empty($search)): ?>
+                                            Nenhum contato coincide com a busca "<strong><?php echo esc_html($search); ?></strong>"<?php echo ($periodo !== 'all') ? ' no período <strong>' . esc_html($periods[$periodo] ?? $periodo) . '</strong>' : ''; ?>.
+                                        <?php else: ?>
+                                            Verifique os filtros de canal, período ou importe novas planilhas.
+                                        <?php endif; ?>
+                                    </p>
+                                    <?php if ($periodo !== 'all'): ?>
+                                        <div style="margin-top: 10px;">
+                                            <a href="<?php echo esc_url(add_query_arg(['periodo' => 'all'], remove_query_arg(['from', 'to']))); ?>" class="button button-primary" style="font-size: 13px; font-weight: 600;">
+                                                🔍 Buscar em Todo o Período
+                                            </a>
+                                        </div>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php else: ?>
@@ -599,6 +682,15 @@ class LeadsController {
                                     </td>
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
+                                        <?php if (!empty($lead->leadid)): ?>
+                                            <code style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;" title="Lead ID da Planilha: <?php echo esc_attr($lead->leadid); ?>">
+                                                #<?php echo esc_html($lead->leadid); ?>
+                                            </code>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
                                         <div style="font-size: 12px; font-weight: 600;">
                                             <?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?>
                                         </div>
@@ -621,6 +713,18 @@ class LeadsController {
                                             <div style="font-size: 11px; color: #64748b;">
                                                 <?php echo esc_html($lead->email); ?>
                                             </div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php 
+                                        $inst_val = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
+                                        ?>
+                                        <?php if (!empty($inst_val)): ?>
+                                            <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
+                                                <span>🏛️</span> <?php echo esc_html($inst_val); ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -1114,10 +1218,13 @@ class LeadsController {
                     html += makeRow('Tipo de Curso', makeText(lead.tipo_curso, true), 'dashicons-welcome-learn-more');
                     html += makeRow('Área de Interesse', makeText(lead.area_interesse, true), 'dashicons-tag');
                     
-                    var poloHtml = lead.polo 
-                        ? '<span class="li-badge" style="background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; font-weight:600; padding:2px 8px; border-radius:5px;">🏢 ' + escH(lead.polo) + '</span>'
+                    var instVal = lead.instancia || lead.polo;
+                    var instHtml = instVal 
+                        ? '<span class="li-badge" style="background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; font-weight:600; padding:2px 8px; border-radius:5px; text-transform:capitalize;">🏛️ ' + escH(instVal) + '</span>'
                         : '<span class="li-val-empty">—</span>';
-                    html += makeRow('Polo / Unidade', poloHtml, 'dashicons-location');
+                    html += makeRow('Instância (Planilha)', instHtml, 'dashicons-building');
+
+                    html += makeRow('Lead ID (Planilha)', makeCopyPill(lead.leadid), 'dashicons-id');
                     html += '</div>';
 
                     // ==========================================
@@ -1530,18 +1637,20 @@ class LeadsController {
                 var table = document.getElementById('liLeadsTable');
                 if (!table) return;
 
-                var STORAGE_KEY = 'li_leads_table_col_widths_v2';
+                var STORAGE_KEY = 'li_leads_table_col_widths_v3';
                 var defaultWidths = {
                     'check': 40,
-                    'id': 65,
-                    'data': 105,
-                    'nome': 250,
-                    'curso': 130,
-                    'canal': 160,
-                    'utm': 180,
-                    'etapa': 160,
-                    'status': 115,
-                    'acoes': 90
+                    'id': 60,
+                    'leadid': 85,
+                    'data': 100,
+                    'nome': 230,
+                    'instancia': 120,
+                    'curso': 120,
+                    'canal': 150,
+                    'utm': 160,
+                    'etapa': 150,
+                    'status': 110,
+                    'acoes': 85
                 };
 
                 function updateTableMinWidth() {

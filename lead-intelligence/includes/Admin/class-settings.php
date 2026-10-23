@@ -65,6 +65,12 @@ class Settings {
             'google_ads_refresh_token'     => '',
             'google_ads_connected'         => 0,
             'enable_google_ads_costs_sync' => 1,
+            'openai_capi_enabled'          => 0,
+            'openai_pixel_id'              => '',
+            'openai_api_key'               => '',
+            'enable_openai_capi_lead'      => 1,
+            'enable_openai_capi_qualified' => 1,
+            'enable_openai_capi_purchase'  => 1,
         ];
 
         $saved = get_option('lead_intelligence_settings', []);
@@ -308,6 +314,17 @@ class Settings {
         }
         $enable_gads_sync   = isset($_POST['enable_google_ads_costs_sync']) ? 1 : (isset($_POST['has_gads_form']) ? 0 : ($current['enable_google_ads_costs_sync'] ?? 1));
 
+        // Parâmetros da OpenAI Conversions API (ChatGPT Ads)
+        $openai_capi_enabled = isset($_POST['has_openai_tab']) ? (isset($_POST['openai_capi_enabled']) ? 1 : 0) : ($current['openai_capi_enabled'] ?? 0);
+        $openai_pixel_id     = sanitize_text_field($_POST['openai_pixel_id'] ?? ($current['openai_pixel_id'] ?? ''));
+        $openai_api_key      = sanitize_text_field($_POST['openai_api_key'] ?? '');
+        if (strpos($openai_api_key, '••••') !== false || empty($openai_api_key)) {
+            $openai_api_key = $current['openai_api_key'] ?? '';
+        }
+        $enable_oai_lead     = isset($_POST['has_openai_tab']) ? (isset($_POST['enable_openai_capi_lead']) ? 1 : 0) : ($current['enable_openai_capi_lead'] ?? 1);
+        $enable_oai_qual     = isset($_POST['has_openai_tab']) ? (isset($_POST['enable_openai_capi_qualified']) ? 1 : 0) : ($current['enable_openai_capi_qualified'] ?? 1);
+        $enable_oai_purch    = isset($_POST['has_openai_tab']) ? (isset($_POST['enable_openai_capi_purchase']) ? 1 : 0) : ($current['enable_openai_capi_purchase'] ?? 1);
+
         $new_settings = [
             'enable_whatsapp_capture'  => isset($_POST['has_whatsapp_form']) ? (isset($_POST['enable_whatsapp_capture']) ? 1 : 0) : ($current['enable_whatsapp_capture'] ?? 1),
             'enable_elementor_capture' => isset($_POST['has_forms_tab']) ? $enable_elementor : $current['enable_elementor_capture'],
@@ -327,6 +344,12 @@ class Settings {
             'capi_test_event_code'     => $capi_test_event_code,
             'enable_capi_lead'         => $enable_capi_lead,
             'enable_capi_qualified'    => $enable_capi_qual,
+            'openai_capi_enabled'          => $openai_capi_enabled,
+            'openai_pixel_id'              => $openai_pixel_id,
+            'openai_api_key'               => $openai_api_key,
+            'enable_openai_capi_lead'      => $enable_oai_lead,
+            'enable_openai_capi_qualified' => $enable_oai_qual,
+            'enable_openai_capi_purchase'  => $enable_oai_purch,
             'logo_dark'                => isset($_POST['logo_dark']) ? esc_url_raw($_POST['logo_dark']) : $current['logo_dark'],
             'logo_light'               => isset($_POST['logo_light']) ? esc_url_raw($_POST['logo_light']) : $current['logo_light'],
             'logo_compact'             => isset($_POST['logo_compact']) ? esc_url_raw($_POST['logo_compact']) : $current['logo_compact'],
@@ -362,7 +385,7 @@ class Settings {
         $settings = self::get_settings();
 
         $active_tab = sanitize_key($_GET['tab'] ?? 'whatsapp');
-        $allowed_tabs = ['whatsapp', 'meta', 'google_ads_api', 'forms', 'capi', 'branding'];
+        $allowed_tabs = ['whatsapp', 'meta', 'google_ads_api', 'openai_capi', 'forms', 'capi', 'branding'];
         if (!in_array($active_tab, $allowed_tabs, true)) {
             $active_tab = 'whatsapp';
         }
@@ -374,7 +397,7 @@ class Settings {
             $test_result = WabaClient::test_connection($target_phone_id);
         }
 
-        // Teste CAPI (se disparado)
+        // Teste CAPI Meta (se disparado)
         $capi_test_result = null;
         if (isset($_POST['li_test_capi_fire']) && check_admin_referer('li_capi_test_verify', 'li_nonce')) {
             $dummy_lead = (object) [
@@ -385,6 +408,12 @@ class Settings {
                 'tipo_curso' => 'Pós-Graduação',
             ];
             $capi_test_result = CapiService::send_event('Lead', $dummy_lead);
+        }
+
+        // Teste OpenAI CAPI (se disparado com validate_only)
+        $openai_test_result = null;
+        if (isset($_POST['li_test_openai_capi']) && check_admin_referer('li_openai_test_verify', 'li_nonce')) {
+            $openai_test_result = \LeadIntelligence\OpenAiCapi\OpenAiCapiService::test_connection();
         }
 
         // Teste Google Ads API
@@ -472,6 +501,10 @@ class Settings {
                    class="nav-tab <?php echo $active_tab === 'capi' ? 'nav-tab-active' : ''; ?>" style="font-weight: 600;">
                     🎯 Meta Conversions API (CAPI)
                 </a>
+                <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings&tab=openai_capi')); ?>" 
+                   class="nav-tab <?php echo $active_tab === 'openai_capi' ? 'nav-tab-active' : ''; ?>" style="font-weight: 600;">
+                    🤖 OpenAI CAPI (ChatGPT Ads)
+                </a>
                 <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings&tab=branding')); ?>" 
                    class="nav-tab <?php echo $active_tab === 'branding' ? 'nav-tab-active' : ''; ?>" style="font-weight: 600;">
                     🎨 Aparência &amp; Logos
@@ -495,6 +528,9 @@ class Settings {
                     break;
                 case 'capi':
                     self::render_tab_capi($settings, $capi_test_result);
+                    break;
+                case 'openai_capi':
+                    self::render_tab_openai_capi($settings, $openai_test_result);
                     break;
                 case 'branding':
                     self::render_tab_branding($settings);
@@ -1149,6 +1185,135 @@ class Settings {
                     <?php wp_nonce_field('li_capi_test_verify', 'li_nonce'); ?>
                     <button type="submit" name="li_test_capi_fire" class="button button-secondary">
                         🚀 Disparar Evento 'Lead' de Teste Agora
+                    </button>
+                </form>
+            </div>
+        <?php endif; ?>
+        <?php
+    }
+
+    /**
+     * ABA: OpenAI Conversions API (ChatGPT Ads)
+     */
+    private static function render_tab_openai_capi($settings, $openai_test_result = null) {
+        ?>
+        <?php if ($openai_test_result): ?>
+            <?php if (!empty($openai_test_result['success'])): ?>
+                <div class="notice notice-success is-dismissible" style="margin-bottom: 20px; padding: 12px 16px; border-left-color: #10b981;">
+                    <strong style="font-size: 14px;">✔ Teste da OpenAI Conversions API Concluído com Sucesso!</strong>
+                    <div style="margin-top: 4px; font-size: 12px; color: #047857;">
+                        <?php echo esc_html($openai_test_result['message']); ?> O payload com <code>validate_only: true</code> foi aceito e validado pelos servidores da OpenAI sem salvar dados reais.
+                    </div>
+                </div>
+            <?php else: ?>
+                <div class="notice notice-error is-dismissible" style="margin-bottom: 20px; padding: 12px 16px;">
+                    <strong style="font-size: 14px;">❌ Falha no Teste OpenAI CAPI: <?php echo esc_html($openai_test_result['message'] ?? 'Erro desconhecido'); ?></strong>
+                    <?php if (!empty($openai_test_result['response'])): ?>
+                        <pre style="margin-top: 8px; background: #fff1f2; padding: 8px; border-radius: 4px; font-size: 11px; overflow-x: auto;"><?php echo esc_html(wp_json_encode($openai_test_result['response'], JSON_PRETTY_PRINT)); ?></pre>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+        <?php endif; ?>
+
+        <form method="post" action="">
+            <?php wp_nonce_field('li_settings_verify', 'li_nonce'); ?>
+            <input type="hidden" name="current_tab" value="openai_capi">
+            <input type="hidden" name="has_openai_tab" value="1">
+
+            <div class="li-card" style="margin-bottom: 20px;">
+                <h3 class="li-card-title" style="display: flex; align-items: center; gap: 8px;">
+                    <span>🤖</span> OpenAI Ads &bull; Conversions API (CAPI)
+                </h3>
+                <p class="li-card-desc">
+                    Transmissão servidor-para-servidor oficial para a <strong>OpenAI (ChatGPT Ads)</strong> via endpoint <code>https://bzr.openai.com/v1/events?pid=&lt;PIXEL-ID&gt;</code>.<br>
+                    Suporta anonimização estrita SHA-256 em UTF-8, preservação do token de atribuição <code>oppref</code> e leitura do cookie nativo <code>__obref</code>.
+                </p>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Ativar OpenAI Conversions API</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="openai_capi_enabled" value="1" <?php checked(!empty($settings['openai_capi_enabled'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Habilita a transmissão de eventos de conversão diretamente para o Gerenciador de Anúncios da OpenAI.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="openai_pixel_id">OpenAI Pixel ID (PID) <span style="color:#ef4444;">*</span></label></th>
+                        <td>
+                            <input type="text" id="openai_pixel_id" name="openai_pixel_id" value="<?php echo esc_attr($settings['openai_pixel_id'] ?? ''); ?>" class="regular-text" placeholder="Ex: px_abc123xyz">
+                            <p class="description">Provisionado na aba &ldquo;Conversões&rdquo; do Gerenciador de Anúncios da OpenAI.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="openai_api_key">OpenAI API Key (Bearer Token) <span style="color:#ef4444;">*</span></label></th>
+                        <td>
+                            <input type="password" id="openai_api_key" name="openai_api_key" value="<?php echo !empty($settings['openai_api_key']) ? '••••••••••••••••' : ''; ?>" class="large-text" placeholder="Ex: sk-ads-...">
+                            <p class="description">Chave de API com permissão para despacho de conversões.</p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="li-card" style="margin-bottom: 20px;">
+                <h3 class="li-card-title">Eventos Automatizados</h3>
+                <p class="li-card-desc">Selecione quais etapas do funil de vendas devem disparar conversões para a OpenAI.</p>
+
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Disparar Evento 'lead_created'</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="enable_openai_capi_lead" value="1" <?php checked(!empty($settings['enable_openai_capi_lead'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Dispara <code>lead_created</code> assim que o formulário do Elementor Pro ou Landing Page for enviado.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Disparar Evento 'lead_qualified'</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="enable_openai_capi_qualified" value="1" <?php checked(!empty($settings['enable_openai_capi_qualified'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Dispara evento customizado <code>lead_qualified</code> quando o lead for marcado como qualificado via importação de planilha.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Disparar Evento 'order_created' (Venda)</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="enable_openai_capi_purchase" value="1" <?php checked(!empty($settings['enable_openai_capi_purchase'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Dispara <code>order_created</code> com o valor da matrícula/curso quando o status do lead for alterado para matriculado.</p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+
+            <p class="submit">
+                <button type="submit" name="li_save_settings" class="button button-primary button-large">
+                    Salvar Configurações da OpenAI
+                </button>
+            </p>
+        </form>
+
+        <?php if (!empty($settings['openai_pixel_id']) && !empty($settings['openai_api_key'])): ?>
+            <div class="li-card" style="border-left: 4px solid #10b981; margin-top: 24px;">
+                <h3 class="li-card-title" style="color: #047857;">🧪 Teste de Conexão com OpenAI CAPI (Dry-Run Seguro)</h3>
+                <p class="li-card-desc">
+                    Valida as credenciais e o formato do payload diretamente com os servidores da OpenAI utilizando o parâmetro oficial <code>validate_only: true</code>.
+                    Nenhum dado fictício ou conversão real será gravada na sua conta de anúncios.
+                </p>
+
+                <form method="post" action="">
+                    <?php wp_nonce_field('li_openai_test_verify', 'li_nonce'); ?>
+                    <button type="submit" name="li_test_openai_capi" class="button button-secondary">
+                        🤖 Validar Conexão OpenAI CAPI Agora
                     </button>
                 </form>
             </div>

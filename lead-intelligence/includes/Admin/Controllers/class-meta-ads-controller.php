@@ -138,8 +138,8 @@ class MetaAdsController {
                 </button>
             </div>
 
-            <!-- STATUS META CAPI PILL -->
-            <div class="li-meta-sync-status" style="font-size: 10px; line-height: 1.2;">
+            <!-- STATUS META E OPENAI CAPI PILLS -->
+            <div class="li-meta-sync-status" style="font-size: 10px; line-height: 1.3; display: flex; flex-direction: column; gap: 2px; align-items: center;">
                 <?php if ($has_capi_purchase): ?>
                     <span class="li-capi-pill" style="display: inline-block; background: #dcfce7; color: #15803d; border: 1px solid #86efac; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento Purchase confirmado pela Meta">
                         🔵 Meta: Venda Enviada
@@ -152,9 +152,24 @@ class MetaAdsController {
                     <span class="li-capi-pill" style="display: inline-block; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 10px; padding: 1px 7px;" title="Evento Lead recebido da captação">
                         ⚪ Meta: Lead
                     </span>
-                <?php else: ?>
-                    <span class="li-capi-pill" style="display: inline-block; background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; border-radius: 10px; padding: 1px 7px;" title="Ainda não sincronizado com Meta CAPI">
-                        ⚪ Meta: Pendente
+                <?php endif; ?>
+
+                <?php 
+                $has_oai_purchase = !empty($lead->openai_capi_purchase_sent);
+                $has_oai_qual     = !empty($lead->openai_capi_qualified_sent);
+                $has_oai_lead     = !empty($lead->openai_capi_lead_sent);
+                ?>
+                <?php if ($has_oai_purchase): ?>
+                    <span class="li-capi-pill" style="display: inline-block; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento order_created confirmado pela OpenAI">
+                        🤖 OpenAI: Venda Enviada
+                    </span>
+                <?php elseif ($has_oai_qual): ?>
+                    <span class="li-capi-pill" style="display: inline-block; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento lead_qualified confirmado pela OpenAI">
+                        🤖 OpenAI: Qualificado
+                    </span>
+                <?php elseif ($has_oai_lead): ?>
+                    <span class="li-capi-pill" style="display: inline-block; background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; border-radius: 10px; padding: 1px 7px;" title="Evento lead_created recebido pela OpenAI">
+                        🤖 OpenAI: Lead
                     </span>
                 <?php endif; ?>
             </div>
@@ -167,21 +182,25 @@ class MetaAdsController {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
-        // 1. Tratamento de Período (Padrão: Hoje)
-        $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
-        $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
-        $periodo     = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : 'today';
+        // 1. Tratamento de Período (Padrão: Hoje, ou Todo se houver pesquisa ativa)
+        $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $search_term      = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $filter_status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
+        $utm_source       = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
+        $has_custom_dates = (!empty($custom_from) || !empty($custom_to));
+        $is_period_fixed  = !empty($_GET['li_explicit_period']);
 
-        if ($periodo !== 'custom') {
-            $custom_from = '';
-            $custom_to   = '';
-        } elseif (empty($custom_from) && empty($custom_to)) {
-            $periodo = 'today';
+        if ($has_custom_dates) {
+            $periodo = 'custom';
+        } elseif (isset($_GET['periodo']) && $_GET['periodo'] !== '') {
+            $periodo = sanitize_text_field(wp_unslash($_GET['periodo']));
+            if (!empty($search_term) && $periodo === 'today' && !$is_period_fixed) {
+                $periodo = 'all';
+            }
+        } else {
+            $periodo = !empty($search_term) ? 'all' : 'today';
         }
-
-        $search_term   = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-        $filter_status = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
-        $utm_source    = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
         $available_utm_sources = LeadRepository::get_distinct_utm_sources();
 
         // Cálculo de datas
@@ -275,8 +294,8 @@ class MetaAdsController {
 
         if (!empty($search_term)) {
             $like = '%' . $wpdb->esc_like(trim($search_term)) . '%';
-            $list_where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR ad_name LIKE %s OR campaign_name LIKE %s)";
-            $list_params = array_merge($list_params, [$like, $like, $like, $like, $like, $like, $like, $like]);
+            $list_where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR ad_name LIKE %s OR campaign_name LIKE %s OR leadid LIKE %s OR instancia LIKE %s OR polo LIKE %s)";
+            $list_params = array_merge($list_params, [$like, $like, $like, $like, $like, $like, $like, $like, $like, $like, $like]);
         }
 
         if (!empty($utm_source)) {
@@ -361,6 +380,10 @@ class MetaAdsController {
                 <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;">
                     <input type="hidden" name="page" value="lead-intelligence-meta">
                     <input type="hidden" name="view" value="leads">
+                    <input type="hidden" name="periodo" value="<?php echo esc_attr($periodo); ?>">
+                    <?php if ($is_period_fixed): ?>
+                        <input type="hidden" name="li_explicit_period" value="1">
+                    <?php endif; ?>
 
                     <!-- Seletor de Período -->
                     <div>
@@ -377,7 +400,7 @@ class MetaAdsController {
                                 'custom'    => 'Personalizado'
                             ];
                             foreach ($periods as $k => $label): ?>
-                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'view' => 'leads'], remove_query_arg(['from', 'to']))); ?>" 
+                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'view' => 'leads', 's' => $search_term, 'status' => $filter_status, 'utm_source' => $utm_source, 'li_explicit_period' => 1], remove_query_arg(['from', 'to']))); ?>" 
                                    class="button-link" 
                                    style="padding: 4px 10px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 4px; <?php echo $periodo === $k ? 'background: #0073aa; color: #fff;' : 'color: #334155;'; ?>">
                                     <?php echo esc_html($label); ?>
@@ -476,21 +499,23 @@ class MetaAdsController {
                     <thead>
                         <tr>
                             <th style="width: 55px;">ID</th>
-                            <th style="width: 110px;">Data</th>
+                            <th style="width: 95px;">Lead ID</th>
+                            <th style="width: 105px;">Data</th>
                             <th>Nome / Lead</th>
-                            <th style="width: 150px;">Telefone / WhatsApp</th>
-                            <th style="width: 130px; text-align: center;">Origem Meta</th>
+                            <th style="width: 140px;">Telefone / WhatsApp</th>
+                            <th style="width: 130px;">Instância</th>
+                            <th style="width: 120px; text-align: center;">Origem Meta</th>
                             <th>Curso / Interesse</th>
-                            <th style="width: 120px;">UTM</th>
-                            <th style="width: 130px; text-align: center;">Etapa do Funil</th>
-                            <th style="width: 110px; text-align: center;">Status</th>
-                            <th style="width: 260px; text-align: center;">Qualificação &amp; Meta CAPI</th>
+                            <th style="width: 110px;">UTM</th>
+                            <th style="width: 120px; text-align: center;">Etapa do Funil</th>
+                            <th style="width: 100px; text-align: center;">Status</th>
+                            <th style="width: 240px; text-align: center;">Qualificação &amp; Meta CAPI</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="10" style="text-align: center; padding: 35px; color: #64748b;">
+                                <td colspan="12" style="text-align: center; padding: 35px; color: #64748b;">
                                     Nenhum lead Meta encontrado no período selecionado.
                                 </td>
                             </tr>
@@ -516,6 +541,15 @@ class MetaAdsController {
                                 <tr id="li-lead-row-<?php echo esc_attr($lead->id); ?>">
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
+                                        <?php if (!empty($lead->leadid)): ?>
+                                            <code style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;" title="Lead ID da Planilha: <?php echo esc_attr($lead->leadid); ?>">
+                                                #<?php echo esc_html($lead->leadid); ?>
+                                            </code>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
                                         <div style="font-size: 12px; font-weight: 600;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
                                         <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
                                     </td>
@@ -532,6 +566,18 @@ class MetaAdsController {
                                             </a>
                                         <?php else: ?>
                                             <span style="color: #94a3b8;">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php 
+                                        $inst_val = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
+                                        ?>
+                                        <?php if (!empty($inst_val)): ?>
+                                            <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
+                                                <span>🏛️</span> <?php echo esc_html($inst_val); ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td style="text-align: center;">

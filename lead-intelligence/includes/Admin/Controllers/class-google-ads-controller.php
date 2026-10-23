@@ -18,20 +18,24 @@ class GoogleAdsController {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
-        // 1. Tratamento de Período (Padrão: Hoje)
-        $custom_from = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
-        $custom_to   = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
-        $periodo     = isset($_GET['periodo']) ? sanitize_text_field(wp_unslash($_GET['periodo'])) : 'today';
+        // 1. Tratamento de Período (Padrão: Hoje, ou Todo se houver pesquisa ativa)
+        $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $search_term      = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $filter_status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
+        $has_custom_dates = (!empty($custom_from) || !empty($custom_to));
+        $is_period_fixed  = !empty($_GET['li_explicit_period']);
 
-        if ($periodo !== 'custom') {
-            $custom_from = '';
-            $custom_to   = '';
-        } elseif (empty($custom_from) && empty($custom_to)) {
-            $periodo = 'today';
+        if ($has_custom_dates) {
+            $periodo = 'custom';
+        } elseif (isset($_GET['periodo']) && $_GET['periodo'] !== '') {
+            $periodo = sanitize_text_field(wp_unslash($_GET['periodo']));
+            if (!empty($search_term) && $periodo === 'today' && !$is_period_fixed) {
+                $periodo = 'all';
+            }
+        } else {
+            $periodo = !empty($search_term) ? 'all' : 'today';
         }
-
-        $search_term = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
-        $filter_status = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
 
         // Cálculo de datas
         $now = current_time('mysql');
@@ -113,8 +117,8 @@ class GoogleAdsController {
 
         if (!empty($search_term)) {
             $like = '%' . $wpdb->esc_like(trim($search_term)) . '%';
-            $list_where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR utm_term LIKE %s)";
-            $list_params = array_merge($list_params, [$like, $like, $like, $like, $like, $like, $like]);
+            $list_where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR utm_term LIKE %s OR leadid LIKE %s OR instancia LIKE %s OR polo LIKE %s)";
+            $list_params = array_merge($list_params, [$like, $like, $like, $like, $like, $like, $like, $like, $like, $like]);
         }
 
         if (!empty($filter_status)) {
@@ -293,6 +297,10 @@ class GoogleAdsController {
             <div class="li-card" style="margin-bottom: 20px; padding: 16px 20px;">
                 <form method="get" action="<?php echo esc_url(admin_url('admin.php')); ?>" style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end;">
                     <input type="hidden" name="page" value="lead-intelligence-google">
+                    <input type="hidden" name="periodo" value="<?php echo esc_attr($periodo); ?>">
+                    <?php if ($is_period_fixed): ?>
+                        <input type="hidden" name="li_explicit_period" value="1">
+                    <?php endif; ?>
 
                     <!-- Seletor de Período -->
                     <div>
@@ -309,7 +317,7 @@ class GoogleAdsController {
                                 'custom'    => 'Personalizado'
                             ];
                             foreach ($periods as $k => $label): ?>
-                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k], remove_query_arg(['from', 'to']))); ?>" 
+                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 's' => $search_term, 'status' => $filter_status, 'li_explicit_period' => 1], remove_query_arg(['from', 'to']))); ?>" 
                                    class="button-link" 
                                    style="padding: 4px 10px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 4px; <?php echo $periodo === $k ? 'background: #0073aa; color: #fff;' : 'color: #334155;'; ?>">
                                     <?php echo esc_html($label); ?>
@@ -335,7 +343,7 @@ class GoogleAdsController {
                     <!-- Campo de Busca -->
                     <div style="flex: 1 1 200px;">
                         <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Pesquisar</label>
-                        <input type="text" name="s" value="<?php echo esc_attr($search_term); ?>" placeholder="Filtrar por nome, telefone ou UTM..." style="width: 100%; height: 32px; font-size: 13px;">
+                        <input type="text" name="s" value="<?php echo esc_attr($search_term); ?>" placeholder="Buscar por nome, telefone, Lead ID ou instância..." style="width: 100%; height: 32px; font-size: 13px;">
                     </div>
 
                     <!-- Botões -->
@@ -424,20 +432,22 @@ class GoogleAdsController {
                 <table class="wp-list-table widefat fixed striped li-table">
                     <thead>
                         <tr>
-                            <th style="width: 60px;">ID</th>
-                            <th style="width: 120px;">Data</th>
+                            <th style="width: 55px;">ID</th>
+                            <th style="width: 100px;">Lead ID</th>
+                            <th style="width: 110px;">Data</th>
                             <th>Nome / Lead</th>
-                            <th style="width: 160px;">Telefone / WhatsApp</th>
+                            <th style="width: 150px;">Telefone / WhatsApp</th>
+                            <th style="width: 135px;">Instância</th>
                             <th>Curso / Interesse</th>
-                            <th style="width: 190px;">UTM</th>
-                            <th style="width: 150px; text-align: center;">Etapa do Funil</th>
-                            <th style="width: 120px; text-align: center;">Status</th>
+                            <th style="width: 160px;">UTM</th>
+                            <th style="width: 140px; text-align: center;">Etapa do Funil</th>
+                            <th style="width: 110px; text-align: center;">Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="8" style="text-align: center; padding: 35px; color: #64748b;">
+                                <td colspan="10" style="text-align: center; padding: 35px; color: #64748b;">
                                     Nenhum lead Google Ads encontrado no período selecionado.
                                 </td>
                             </tr>
@@ -482,6 +492,15 @@ class GoogleAdsController {
                                 <tr>
                                     <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
                                     <td>
+                                        <?php if (!empty($lead->leadid)): ?>
+                                            <code style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;" title="Lead ID da Planilha: <?php echo esc_attr($lead->leadid); ?>">
+                                                #<?php echo esc_html($lead->leadid); ?>
+                                            </code>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
                                         <div style="font-size: 12px; font-weight: 600;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
                                         <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
                                     </td>
@@ -498,6 +517,18 @@ class GoogleAdsController {
                                             </a>
                                         <?php else: ?>
                                             <span style="color: #94a3b8;">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php 
+                                        $inst_val = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
+                                        ?>
+                                        <?php if (!empty($inst_val)): ?>
+                                            <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
+                                                <span>🏛️</span> <?php echo esc_html($inst_val); ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
                                     <td>

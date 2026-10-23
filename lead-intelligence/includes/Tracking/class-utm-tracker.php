@@ -35,6 +35,8 @@ class UtmTracker {
         'campaign_name',
         'adset_name',
         'ad_name',
+        'oppref',
+        'obref',
     ];
 
     public static function init() {
@@ -184,6 +186,11 @@ class UtmTracker {
             }
             if ($key === 'fbp' && empty($val) && !empty($_COOKIE['_fbp'])) {
                 $val = sanitize_text_field(wp_unslash($_COOKIE['_fbp']));
+            }
+
+            // Tratamento especial para obref da OpenAI Ads (cookie nativo __obref)
+            if ($key === 'obref' && empty($val) && !empty($_COOKIE['__obref'])) {
+                $val = sanitize_text_field(wp_unslash($_COOKIE['__obref']));
             }
 
             // Se tem fbclid mas não tem fbc, formata no padrão da Meta Conversions API

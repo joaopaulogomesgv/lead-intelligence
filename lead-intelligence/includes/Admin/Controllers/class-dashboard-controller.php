@@ -33,6 +33,7 @@ class DashboardController {
         $show_chart           = array_key_exists('show_chart', $options) ? (bool) $options['show_chart'] : true;
         $show_campaigns       = array_key_exists('show_campaigns', $options) ? (bool) $options['show_campaigns'] : true;
         $show_creatives       = array_key_exists('show_creatives', $options) ? (bool) $options['show_creatives'] : true;
+        $show_instances       = array_key_exists('show_instances', $options) ? (bool) $options['show_instances'] : true;
         $custom_title         = !empty($options['title']) ? sanitize_text_field($options['title']) : 'Lead Intelligence • Dashboard de Qualidade';
         $custom_subtitle      = !empty($options['subtitle']) ? sanitize_text_field($options['subtitle']) : 'Análise avançada da qualidade dos leads gerados pelas campanhas da Meta Ads.';
         $is_full_width        = !empty($options['full_width']);
@@ -73,6 +74,7 @@ class DashboardController {
         $filter_campaign  = isset($_GET['campanha']) ? sanitize_text_field(wp_unslash($_GET['campanha'])) : '';
         $filter_curso     = isset($_GET['curso']) ? sanitize_text_field(wp_unslash($_GET['curso'])) : '';
         $filter_area      = isset($_GET['area']) ? sanitize_text_field(wp_unslash($_GET['area'])) : '';
+        $filter_instancia = isset($_GET['instancia']) ? sanitize_text_field(wp_unslash($_GET['instancia'])) : '';
 
         // Filtros específicos e independentes da tabela de leads
         $tbl_nome   = isset($_GET['tbl_nome']) ? sanitize_text_field(wp_unslash($_GET['tbl_nome'])) : (isset($_GET['lead_nome']) ? sanitize_text_field(wp_unslash($_GET['lead_nome'])) : '');
@@ -81,7 +83,7 @@ class DashboardController {
         $tbl_utm    = isset($_GET['tbl_utm']) ? sanitize_text_field(wp_unslash($_GET['tbl_utm'])) : (isset($_GET['lead_utm']) ? sanitize_text_field(wp_unslash($_GET['lead_utm'])) : '');
 
         if ($is_frontend) {
-            $form_action = remove_query_arg(['periodo', 'canal', 'campanha', 'curso', 'area', 'from', 'to', 'tbl_nome', 'tbl_data', 'tbl_status', 'tbl_utm', 'lead_nome', 'lead_data', 'lead_status', 'lead_utm']);
+            $form_action = remove_query_arg(['periodo', 'canal', 'campanha', 'curso', 'area', 'instancia', 'from', 'to', 'tbl_nome', 'tbl_data', 'tbl_status', 'tbl_utm', 'lead_nome', 'lead_data', 'lead_status', 'lead_utm']);
             $reset_url   = $form_action;
         } else {
             $current_page = isset($_GET['page']) ? sanitize_key($_GET['page']) : 'lead-intelligence';
@@ -163,6 +165,11 @@ class DashboardController {
         if (!empty($filter_area)) {
             $where_base[] = "area_interesse = %s";
             $params_base[] = $filter_area;
+        }
+        if (!empty($filter_instancia)) {
+            $where_base[] = "(instancia = %s OR polo = %s)";
+            $params_base[] = $filter_instancia;
+            $params_base[] = $filter_instancia;
         }
 
         // Construção do WHERE geral para o Dashboard (inclui filtro manual de canal se selecionado)
@@ -256,18 +263,55 @@ class DashboardController {
         $ads             = is_array($ads) ? $ads : [];
 
         // Listas para os filtros dropdown
-        $all_campaigns = $wpdb->get_col("SELECT DISTINCT utm_campaign FROM {$table} WHERE utm_campaign != '' ORDER BY utm_campaign ASC");
-        $all_cursos    = $wpdb->get_col("SELECT DISTINCT tipo_curso FROM {$table} WHERE tipo_curso != '' ORDER BY tipo_curso ASC");
-        $all_areas     = $wpdb->get_col("SELECT DISTINCT area_interesse FROM {$table} WHERE area_interesse != '' ORDER BY area_interesse ASC");
-        $all_campaigns = is_array($all_campaigns) ? $all_campaigns : [];
-        $all_cursos    = is_array($all_cursos) ? $all_cursos : [];
-        $all_areas     = is_array($all_areas) ? $all_areas : [];
+        $all_campaigns  = $wpdb->get_col("SELECT DISTINCT utm_campaign FROM {$table} WHERE utm_campaign != '' ORDER BY utm_campaign ASC");
+        $all_cursos     = $wpdb->get_col("SELECT DISTINCT tipo_curso FROM {$table} WHERE tipo_curso != '' ORDER BY tipo_curso ASC");
+        $all_areas      = $wpdb->get_col("SELECT DISTINCT area_interesse FROM {$table} WHERE area_interesse != '' ORDER BY area_interesse ASC");
+        $all_instancias = $wpdb->get_col("SELECT DISTINCT COALESCE(NULLIF(instancia, ''), NULLIF(polo, '')) as inst FROM {$table} WHERE (instancia IS NOT NULL AND instancia != '') OR (polo IS NOT NULL AND polo != '') ORDER BY inst ASC");
+        $all_campaigns  = is_array($all_campaigns) ? $all_campaigns : [];
+        $all_cursos     = is_array($all_cursos) ? $all_cursos : [];
+        $all_areas      = is_array($all_areas) ? $all_areas : [];
+        $all_instancias = is_array($all_instancias) ? array_values(array_filter($all_instancias)) : [];
 
         $max_daily = 1;
         foreach ($daily_evolution as $d) {
             if ($d->total > $max_daily) {
                 $max_daily = $d->total;
             }
+        }
+
+        // 6. Distribuição por Instância / Polo (Agrupamento executivo respeitando filtros ativos)
+        $inst_query = "SELECT 
+            COALESCE(NULLIF(instancia, ''), NULLIF(polo, ''), 'Não Definida / Sem Instância') as nome_instancia,
+            COUNT(*) as total,
+            SUM(CASE WHEN (qualificacao_status = 'qualificado' OR etapa_funil LIKE '%venda%' OR etapa_funil LIKE '%matr%') THEN 1 ELSE 0 END) as qualificados,
+            SUM(CASE WHEN qualificacao_status = 'nao_qualificado' THEN 1 ELSE 0 END) as desqualificados,
+            SUM(CASE WHEN (qualificacao_status = 'pendente' OR qualificacao_status IS NULL OR qualificacao_status = '') THEN 1 ELSE 0 END) as pendentes
+            FROM {$table} 
+            WHERE {$where_sql} 
+            GROUP BY nome_instancia 
+            ORDER BY total DESC";
+
+        if (!empty($params)) {
+            $inst_query = $wpdb->prepare($inst_query, $params);
+        }
+        $instances_data = $wpdb->get_results($inst_query);
+        $instances_data = is_array($instances_data) ? $instances_data : [];
+
+        $max_instance_leads   = 1;
+        $total_instance_leads = 0;
+        $leader_instance      = null;
+        foreach ($instances_data as $inst_row) {
+            $row_tot = (int) $inst_row->total;
+            $total_instance_leads += $row_tot;
+            if ($row_tot > $max_instance_leads) {
+                $max_instance_leads = $row_tot;
+            }
+            if ($leader_instance === null && $inst_row->nome_instancia !== 'Não Definida / Sem Instância' && $row_tot > 0) {
+                $leader_instance = $inst_row;
+            }
+        }
+        if ($leader_instance === null && !empty($instances_data) && (int) $instances_data[0]->total > 0) {
+            $leader_instance = $instances_data[0];
         }
 
         // =========================================================================
@@ -382,8 +426,37 @@ class DashboardController {
             'taxa'             => $g_taxa,
         ];
 
+        // Distribuição de Leads por Instância no Google Ads
+        $g_inst_query = "SELECT 
+            COALESCE(NULLIF(instancia, ''), NULLIF(polo, ''), 'Não Definida / Sem Instância') as nome_instancia,
+            COUNT(*) as total,
+            SUM(CASE WHEN (qualificacao_status = 'qualificado' OR etapa_funil LIKE '%venda%' OR etapa_funil LIKE '%matr%') THEN 1 ELSE 0 END) as qualificados,
+            SUM(CASE WHEN qualificacao_status = 'nao_qualificado' THEN 1 ELSE 0 END) as desqualificados,
+            SUM(CASE WHEN (qualificacao_status = 'pendente' OR qualificacao_status IS NULL OR qualificacao_status = '') THEN 1 ELSE 0 END) as pendentes
+            FROM {$table} 
+            WHERE {$where_google_sql} 
+            GROUP BY nome_instancia 
+            ORDER BY total DESC";
 
+        $g_instances_data = !empty($params_base) ? $wpdb->get_results($wpdb->prepare($g_inst_query, $params_base)) : $wpdb->get_results($g_inst_query);
+        $g_instances_data = is_array($g_instances_data) ? $g_instances_data : [];
 
+        $g_max_instance_leads   = 1;
+        $g_total_instance_leads = 0;
+        $g_leader_instance      = null;
+        foreach ($g_instances_data as $inst_row) {
+            $row_tot = (int) $inst_row->total;
+            $g_total_instance_leads += $row_tot;
+            if ($row_tot > $g_max_instance_leads) {
+                $g_max_instance_leads = $row_tot;
+            }
+            if ($g_leader_instance === null && $inst_row->nome_instancia !== 'Não Definida / Sem Instância' && $row_tot > 0) {
+                $g_leader_instance = $inst_row;
+            }
+        }
+        if ($g_leader_instance === null && !empty($g_instances_data) && (int) $g_instances_data[0]->total > 0) {
+            $g_leader_instance = $g_instances_data[0];
+        }
 
         // Totais históricos gerais por canal (sem restrição de datas, para avisos de contexto)
         $g_total_geral = (int) $wpdb->get_var("SELECT COUNT(*) FROM {$table} WHERE {$google_condition}");
@@ -685,6 +758,21 @@ class DashboardController {
                                                     <?php foreach ($all_cursos as $c): ?>
                                                         <option value="<?php echo esc_attr($c); ?>" <?php selected($filter_curso, $c); ?>>
                                                             <?php echo esc_html($c); ?>
+                                                        </option>
+                                                    <?php endforeach; ?>
+                                                </select>
+                                            </div>
+                                        <?php endif; ?>
+
+                                        <!-- INSTÂNCIA -->
+                                        <?php if (!empty($all_instancias)): ?>
+                                            <div class="li-filter-col li-filter-col-instancia">
+                                                <label class="li-filter-lbl">Instância</label>
+                                                <select name="instancia" class="li-select">
+                                                    <option value="">Todas as Instâncias</option>
+                                                    <?php foreach ($all_instancias as $inst): ?>
+                                                        <option value="<?php echo esc_attr($inst); ?>" <?php selected($filter_instancia, $inst); ?>>
+                                                            <?php echo esc_html($inst); ?>
                                                         </option>
                                                     <?php endforeach; ?>
                                                 </select>
@@ -1736,8 +1824,127 @@ class DashboardController {
                                 </div>
                             </div>
 
+                            <?php if ($show_instances): ?>
+                                <!-- GRÁFICO DE DISTRIBUIÇÃO DE LEADS POR INSTÂNCIA (GOOGLE ADS) -->
+                                <div id="li-sec-instances-google" class="li-card li-card-instances" style="margin-top: 24px;">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px;">
+                                        <div>
+                                            <h3 class="li-card-title" style="margin: 0; font-size: 16px; display: flex; align-items: center; gap: 8px;">
+                                                <svg class="li-brand-icon li-brand-google" viewBox="0 0 24 24" width="20" height="20" fill="none" style="flex-shrink: 0;"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17Z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24Z"/><path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 10.03 0 12s.45 3.82 1.25 5.42l4.03-3.15Z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98Z"/></svg>
+                                                Distribuição de Leads por Instância / Polo (Google Ads)
+                                            </h3>
+                                            <p class="li-card-desc" style="margin: 4px 0 0 0;">Volume de captação e taxa de conversão em tempo real de cada polo/instância nas campanhas Google Ads.</p>
+                                        </div>
+                                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                                            <?php if (!empty($g_leader_instance) && (int) $g_leader_instance->total > 0): ?>
+                                                <span class="li-badge-winner" title="Instância líder em volume de captação Google Ads">
+                                                    🏆 Líder: <strong><?php echo esc_html($g_leader_instance->nome_instancia); ?></strong> (<?php echo number_format_i18n($g_leader_instance->total); ?> leads)
+                                                </span>
+                                            <?php endif; ?>
+                                            <span class="li-badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; font-weight: 700; border: 1px solid rgba(16, 185, 129, 0.3); padding: 5px 12px; border-radius: 20px; font-size: 12px;">
+                                                📍 <?php echo count($g_instances_data); ?> <?php echo count($g_instances_data) === 1 ? 'Instância Ativa' : 'Instâncias Ativas'; ?>
+                                            </span>
+                                        </div>
+                                    </div>
 
+                                    <?php if (empty($g_instances_data) || ($g_total_instance_leads === 0)): ?>
+                                        <div style="text-align: center; padding: 36px 20px; color: var(--li-text-dim); background: var(--li-bg-card-subtle); border-radius: 12px; border: 1px dashed var(--li-border);">
+                                            <svg viewBox="0 0 24 24" width="42" height="42" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 10px; opacity: 0.6; color: var(--li-brand);"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                            <div style="font-size: 15px; font-weight: 600; color: var(--li-text-main); margin-bottom: 4px;">Nenhuma instância vinculada aos leads Google Ads deste período</div>
+                                            <div style="font-size: 13px;">Importe uma planilha contendo a coluna <strong>Instância</strong> ou ajuste o filtro de período acima.</div>
+                                        </div>
+                                    <?php else: ?>
+                                        <div class="li-instances-chart-list">
+                                            <?php 
+                                            $g_inst_rank = 0;
+                                            $g_visible_limit = 10;
+                                            $g_has_more = count($g_instances_data) > $g_visible_limit;
 
+                                            foreach ($g_instances_data as $inst): 
+                                                $g_inst_rank++;
+                                                $row_tot   = (int) $inst->total;
+                                                $row_qual  = (int) $inst->qualificados;
+                                                $pct_max   = $g_max_instance_leads > 0 ? round(($row_tot / $g_max_instance_leads) * 100) : 0;
+                                                $pct_total = $g_total_instance_leads > 0 ? round(($row_tot / $g_total_instance_leads) * 100, 1) : 0;
+                                                $taxa_inst = $row_tot > 0 ? round(($row_qual / $row_tot) * 100, 1) : 0;
+                                                $is_hidden = $g_inst_rank > $g_visible_limit;
+                                                
+                                                $rank_badge = '';
+                                                if ($g_inst_rank === 1) {
+                                                    $rank_badge = '<span style="background: linear-gradient(135deg, #FFE082, #FFB300); color: #5D4037; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px; box-shadow: 0 2px 4px rgba(255,179,0,0.25); display: inline-flex; align-items: center; gap: 3px;">🥇 1º</span>';
+                                                } elseif ($g_inst_rank === 2) {
+                                                    $rank_badge = '<span style="background: linear-gradient(135deg, #ECEFF1, #CFD8DC); color: #37474F; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px;">🥈 2º</span>';
+                                                } elseif ($g_inst_rank === 3) {
+                                                    $rank_badge = '<span style="background: linear-gradient(135deg, #FFE0B2, #FFB74D); color: #BF360C; font-weight: 800; font-size: 11px; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 3px;">🥉 3º</span>';
+                                                } else {
+                                                    $rank_badge = '<span style="background: var(--li-bg-app); color: var(--li-text-dim); font-weight: 700; font-size: 11px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--li-border); min-width: 32px; text-align: center;">' . $g_inst_rank . 'º</span>';
+                                                }
+                                            ?>
+                                                <div class="li-instance-row <?php echo $is_hidden ? 'li-g-instance-overflow' : ''; ?>" style="<?php echo $is_hidden ? 'display: none;' : ''; ?>">
+                                                    <div class="li-instance-row-top">
+                                                        <div class="li-instance-left">
+                                                            <?php echo $rank_badge; ?>
+                                                            <span class="li-instance-name">
+                                                                <?php echo esc_html($inst->nome_instancia); ?>
+                                                            </span>
+                                                            <?php if ($inst->nome_instancia === 'Não Definida / Sem Instância'): ?>
+                                                                <span style="font-size: 11px; color: var(--li-text-dim); font-style: italic;">(Aguardando classificação)</span>
+                                                            <?php endif; ?>
+                                                        </div>
+
+                                                        <div class="li-instance-right-metrics">
+                                                            <!-- Vendas / Matrículas -->
+                                                            <div class="li-instance-metric-sales" title="Alunos com matrícula confirmada ou venda qualificada no Google Ads">
+                                                                <span style="color: var(--li-brand); font-weight: 700; font-size: 14px;"><?php echo number_format_i18n($row_qual); ?></span>
+                                                                <span style="color: var(--li-text-muted); font-size: 12px;"><?php echo $row_qual === 1 ? 'matrícula' : 'matrículas'; ?></span>
+                                                                <?php if ($row_qual > 0): ?>
+                                                                    <span style="background: rgba(16, 130, 76, 0.12); color: var(--li-brand); padding: 2px 7px; border-radius: 12px; font-size: 11px; font-weight: 700; margin-left: 2px;"><?php echo $taxa_inst; ?>% conv.</span>
+                                                                <?php endif; ?>
+                                                            </div>
+
+                                                            <!-- Total de Leads -->
+                                                            <div class="li-instance-metric-leads" title="Total de contatos recebidos do Google Ads para esta instância">
+                                                                <strong style="font-size: 15px; color: var(--li-text-main);"><?php echo number_format_i18n($row_tot); ?></strong>
+                                                                <span style="color: var(--li-text-dim); font-size: 12px;"><?php echo $row_tot === 1 ? 'lead' : 'leads'; ?></span>
+                                                                <span style="font-size: 11px; color: var(--li-text-dim); font-weight: 600;">(<?php echo $pct_total; ?>%)</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Barra de Progresso Proporcional com Gradiente -->
+                                                    <div class="li-instance-bar-bg" title="<?php echo esc_attr("{$inst->nome_instancia}: {$row_tot} leads Google Ads ({$pct_total}% do total)"); ?>">
+                                                        <div class="li-instance-bar-fill" style="width: <?php echo max(2, $pct_max); ?>%;"></div>
+                                                    </div>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
+
+                                        <?php if ($g_has_more): ?>
+                                            <div style="text-align: center; margin-top: 14px;">
+                                                <button type="button" class="button button-secondary" id="liToggleGInstancesBtn" onclick="liToggleMoreGInstances()" style="font-size: 12px; font-weight: 600; padding: 4px 16px; border-radius: 8px;">
+                                                    Ver todas as <?php echo count($g_instances_data); ?> instâncias (+<?php echo count($g_instances_data) - $g_visible_limit; ?>) ↓
+                                                </button>
+                                            </div>
+                                            <script>
+                                            function liToggleMoreGInstances() {
+                                                var rows = document.querySelectorAll('.li-g-instance-overflow');
+                                                var btn = document.getElementById('liToggleGInstancesBtn');
+                                                if (!rows.length) return;
+                                                var isExpanded = rows[0].style.display !== 'none';
+                                                rows.forEach(function(r) {
+                                                    r.style.display = isExpanded ? 'none' : 'block';
+                                                });
+                                                if (btn) {
+                                                    btn.innerHTML = isExpanded 
+                                                        ? 'Ver todas as <?php echo count($g_instances_data); ?> instâncias (+<?php echo count($g_instances_data) - $g_visible_limit; ?>) ↓'
+                                                        : 'Recolher para as 10 principais ↑';
+                                                }
+                                            }
+                                            </script>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
 
                             <!-- TABELA 3: LEADS RECENTES GOOGLE ADS -->
                             <div class="li-card" style="padding: 0; overflow-x: auto; margin-top: 24px;">
@@ -1855,6 +2062,12 @@ class DashboardController {
                                                     <span class="li-sort-icon">⇅</span>
                                                 </div>
                                             </th>
+                                            <th id="liTh_google_instance" class="li-sortable-th" style="width: 140px;" onclick="liSortTable('google', 'instance')" title="Clique para ordenar por Instância: A-Z | Z-A | Original">
+                                                <div class="li-th-sort-wrapper">
+                                                    <span class="li-col-label">Instância / Polo</span>
+                                                    <span class="li-sort-icon">⇅</span>
+                                                </div>
+                                            </th>
                                             <th id="liTh_google_utm" class="li-sortable-th" style="min-width: 170px;" onclick="liSortTable('google', 'utm')" title="Clique para ordenar por Origem / UTM: A-Z | Z-A | Original">
                                                 <div class="li-th-sort-wrapper">
                                                     <span class="li-col-label">UTM</span>
@@ -1878,7 +2091,7 @@ class DashboardController {
                                     <tbody>
                                         <!-- LINHA DE RESULTADO VAZIO FILTRADO VIA JS -->
                                         <tr id="liNoMatchRowGoogle" style="display: none;">
-                                            <td colspan="8" style="text-align: center; padding: 35px 20px; color: #64748b;">
+                                            <td colspan="9" style="text-align: center; padding: 35px 20px; color: #64748b;">
                                                 <div style="font-size: 24px; margin-bottom: 8px;">🔍</div>
                                                 <div style="font-weight: 600; color: #334155; margin-bottom: 4px;">Nenhum lead encontrado com os filtros aplicados</div>
                                                 <div style="font-size: 12px; color: #64748b; margin-bottom: 12px;">Tente ajustar o nome, a data ou a UTM pesquisada.</div>
@@ -1887,7 +2100,7 @@ class DashboardController {
                                         </tr>
                                         <?php if (empty($leads_google_list)): ?>
                                             <tr>
-                                                <td colspan="8" style="text-align: center; padding: 35px; color: #64748b;">
+                                                <td colspan="9" style="text-align: center; padding: 35px; color: #64748b;">
                                                     Nenhum lead Google Ads identificado no período selecionado.
                                                 </td>
                                             </tr>
@@ -1897,9 +2110,10 @@ class DashboardController {
                                                 $lead_camp = !empty($lead->campaign_name) ? $lead->campaign_name : (!empty($lead->utm_campaign) ? $lead->utm_campaign : (!empty($lead->formulario_nome) ? $lead->formulario_nome : ''));
                                                 $lead_course = $lead->tipo_curso ?: ($lead->area_interesse ?: '');
                                                 $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
+                                                $lead_inst = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
                                             ?>
                                                 <tr class="li-lead-row li-lead-row-google" 
-                                                    data-lead-name="<?php echo esc_attr(strtolower(($lead->nome ?? '') . ' ' . ($lead->email ?? '') . ' ' . ($lead->telefone ?? '') . ' ' . ($lead->telefone_normalizado ?? ''))); ?>"
+                                                    data-lead-name="<?php echo esc_attr(strtolower(($lead->nome ?? '') . ' ' . ($lead->email ?? '') . ' ' . ($lead->telefone ?? '') . ' ' . ($lead->telefone_normalizado ?? '') . ' ' . $lead_inst)); ?>"
                                                     data-lead-date="<?php echo esc_attr(substr($lead->data_cadastro, 0, 10)); ?>"
                                                     data-lead-date-br="<?php echo esc_attr(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?>"
                                                     data-lead-utm="<?php echo esc_attr(strtolower(($lead->utm_source ?? '') . ' ' . ($lead->utm_campaign ?? '') . ' ' . ($lead->utm_medium ?? '') . ' ' . ($lead->utm_term ?? '') . ' ' . ($lead->utm_content ?? '') . ' ' . ($lead->campaign_name ?? '') . ' ' . ($lead->ad_name ?? '') . ' ' . ($lead->formulario_nome ?? '') . ' ' . ($lead->gclid ?? '') . ' ' . ($lead->pagina_origem ?? ''))); ?>"
@@ -1910,6 +2124,7 @@ class DashboardController {
                                                     data-lead-phone-raw="<?php echo esc_attr($lead_phone_clean); ?>"
                                                     data-lead-campaign-raw="<?php echo esc_attr(strtolower($lead_camp)); ?>"
                                                     data-lead-course-raw="<?php echo esc_attr(strtolower($lead_course)); ?>"
+                                                    data-lead-instance-raw="<?php echo esc_attr(strtolower($lead_inst)); ?>"
                                                     data-lead-utm-raw="<?php echo esc_attr(strtolower(($lead->utm_campaign ?? '') . ' ' . ($lead->utm_source ?? '') . ' ' . ($lead->utm_medium ?? '') . ' ' . ($lead->utm_content ?? '') . ' ' . ($lead->utm_term ?? ''))); ?>"
                                                     data-lead-etapa="<?php echo esc_attr(strtolower($etapa_raw)); ?>"
                                                 >
@@ -1935,6 +2150,16 @@ class DashboardController {
                                                     </td>
                                                     <td>
                                                         <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead->tipo_curso ?: ($lead->area_interesse ?: '-')); ?></span>
+                                                    </td>
+                                                    <td>
+                                                        <?php if (!empty($lead_inst)): ?>
+                                                            <span class="li-pill-tag" style="background: rgba(16, 130, 76, 0.08); color: #047857; border: 1px solid rgba(16, 130, 76, 0.25); font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px;" title="Instância / Polo: <?php echo esc_attr($lead_inst); ?>">
+                                                                <span>📍</span>
+                                                                <span><?php echo esc_html($lead_inst); ?></span>
+                                                            </span>
+                                                        <?php else: ?>
+                                                            <span style="color: #94a3b8; font-size: 12px;">-</span>
+                                                        <?php endif; ?>
                                                     </td>
                                                     <td>
                                                         <?php
@@ -2651,6 +2876,8 @@ class DashboardController {
                                 badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
                             } else if (columnKey === 'course') {
                                 badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
+                            } else if (columnKey === 'instance') {
+                                badgeText = isAsc ? '▲ A-Z' : '▼ Z-A';
                             } else if (columnKey === 'utm') {
                                 badgeText = isAsc ? '▲ Com UTM' : '▼ Sem UTM';
                             } else if (columnKey === 'etapa') {
@@ -2715,6 +2942,12 @@ class DashboardController {
                             if (!csA && csB) return 1;
                             if (csA && !csB) return -1;
                             res = isAsc ? csA.localeCompare(csB, 'pt-BR') : csB.localeCompare(csA, 'pt-BR');
+                        } else if (columnKey === 'instance') {
+                            var inA = (a.getAttribute('data-lead-instance-raw') || '').trim();
+                            var inB = (b.getAttribute('data-lead-instance-raw') || '').trim();
+                            if (!inA && inB) return 1;
+                            if (inA && !inB) return -1;
+                            res = isAsc ? inA.localeCompare(inB, 'pt-BR') : inB.localeCompare(inA, 'pt-BR');
                         } else if (columnKey === 'utm') {
                             var uA = (a.getAttribute('data-lead-utm-raw') || a.getAttribute('data-lead-utm') || '').trim();
                             var uB = (b.getAttribute('data-lead-utm-raw') || b.getAttribute('data-lead-utm') || '').trim();

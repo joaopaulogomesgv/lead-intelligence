@@ -14,7 +14,7 @@
             'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
             'fbclid', 'gclid', 'gbraid', 'wbraid', 'gad_source', 'gad_campaignid',
             'referrer', 'page_url', 'fbc', 'fbp', 'campaign_id', 'adset_id', 'ad_id',
-            'campaign_name', 'adset_name', 'ad_name'
+            'campaign_name', 'adset_name', 'ad_name', 'oppref', 'obref'
         ]
     };
 
@@ -111,6 +111,24 @@
             }
         }
 
+        // Tratamento especial para oppref da OpenAI Ads (ChatGPT Ads)
+        if (urlParams.oppref) {
+            var oppref = urlParams.oppref;
+            setCookie(config.cookiePrefix + 'oppref', oppref, config.cookieDays);
+            if (storageAvailable) {
+                localStorage.setItem('li_oppref', oppref);
+            }
+        }
+
+        // Captura cookie nativo __obref do Pixel da OpenAI quando presente
+        var nativeObref = getCookie('__obref');
+        if (nativeObref) {
+            setCookie(config.cookiePrefix + 'obref', nativeObref, config.cookieDays);
+            if (storageAvailable) {
+                localStorage.setItem('li_obref', nativeObref);
+            }
+        }
+
         // Garante cookie _fbp (navegador/dispositivo) se não existir
         if (!getCookie('_fbp')) {
             var randomId = Math.floor(Math.random() * 8999999999 + 1000000000);
@@ -134,7 +152,7 @@
     }
 
     /**
-     * Obtém o valor consolidado de uma chave (Cookie > LocalStorage > Meta Cookies)
+     * Obtém o valor consolidado de uma chave (Cookie > LocalStorage > Meta/OpenAI Cookies)
      */
     function getStoredValue(key) {
         var val = getCookie(config.cookiePrefix + key);
@@ -142,12 +160,15 @@
             val = localStorage.getItem('li_' + key);
         }
 
-        // Fallbacks para cookies nativos da Meta
+        // Fallbacks para cookies nativos da Meta e OpenAI
         if (!val && key === 'fbc') {
             val = getCookie('_fbc');
         }
         if (!val && key === 'fbp') {
             val = getCookie('_fbp');
+        }
+        if (!val && key === 'obref') {
+            val = getCookie('__obref');
         }
 
         return val || '';
