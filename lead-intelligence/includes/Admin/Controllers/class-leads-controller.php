@@ -765,12 +765,20 @@ class LeadsController {
                                         </span>
                                         <?php if ($lead_channel === 'google_lead_form'): 
                                             $form_lead_display = !empty($lead->formulario_nome) ? $lead->formulario_nome : (!empty($lead->origem) ? $lead->origem : 'Formulário Google');
+                                            $camp_lead_display = !empty($lead->campaign_name) ? $lead->campaign_name : (!empty($lead->utm_campaign) && strcasecmp(trim($lead->utm_campaign), 'formulario google') !== 0 ? $lead->utm_campaign : (!empty($lead->campaign_id) ? 'Campanha #' . $lead->campaign_id : ''));
                                         ?>
-                                            <div style="margin-top: 3px;" title="<?php echo esc_attr($form_lead_display); ?>">
+                                            <div style="margin-top: 3px;" title="Formulário: <?php echo esc_attr($form_lead_display); ?>">
                                                 <code style="background: #fffbeb; color: #b45309; border: 1px solid #fde68a; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                                                     📝 <?php echo esc_html($form_lead_display); ?>
                                                 </code>
                                             </div>
+                                            <?php if (!empty($camp_lead_display)): ?>
+                                                <div style="margin-top: 2px;" title="Campanha: <?php echo esc_attr($camp_lead_display); ?>">
+                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                        📢 <?php echo esc_html($camp_lead_display); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
                                         <?php elseif (strpos($lead_channel, 'planilha') !== false): 
                                             $plan_origin_raw = !empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'Planilha:') !== false 
                                                 ? trim(str_replace('Planilha:', '', $lead->pagina_origem)) 
@@ -1216,12 +1224,15 @@ class LeadsController {
                                 '</div>' +
                                 '</div>';
                     } else if (isGoogleLeadForm) {
-                        var formSourceStr = lead.formulario_nome || lead.utm_campaign || lead.origem || 'Formulário Google';
+                        var formSourceStr = lead.formulario_nome || lead.origem || 'Formulário Google';
+                        var campExtraStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : (lead.campaign_id ? '#' + lead.campaign_id : ''));
                         html += '<div class="li-modal-alert li-alert-google-form">' +
                                 '<div class="li-alert-icon"><span class="dashicons dashicons-forms"></span></div>' +
                                 '<div class="li-alert-body">' +
-                                '<strong>Lead de Formulário Google (Google Lead Form):</strong> Origem / Campanha identificada: ' +
-                                '<code class="li-chip-amber">' + escH(formSourceStr) + '</code>' +
+                                '<strong>Lead de Formulário Google (Google Lead Form):</strong> ' +
+                                'Formulário: <code class="li-chip-amber">' + escH(formSourceStr) + '</code>' +
+                                (campExtraStr ? ' | Campanha: <code class="li-chip-green" style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:2px 6px; border-radius:4px; font-weight:700;">' + escH(campExtraStr) + '</code>' : '') +
+                                (lead.instancia ? ' | Instância: <code class="li-chip-blue" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
                                 '</div>' +
                                 '</div>';
                     }

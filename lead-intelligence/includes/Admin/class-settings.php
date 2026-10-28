@@ -65,6 +65,7 @@ class Settings {
             'google_ads_refresh_token'     => '',
             'google_ads_connected'         => 0,
             'enable_google_ads_costs_sync' => 1,
+            'google_lead_form_mappings'    => [],
             'openai_capi_enabled'          => 0,
             'openai_pixel_id'              => '',
             'openai_api_key'               => '',
@@ -296,6 +297,25 @@ class Settings {
         $inbound_medium   = !empty($_POST['webhook_inbound_utm_medium']) ? sanitize_text_field(trim($_POST['webhook_inbound_utm_medium'])) : ($current['webhook_inbound_utm_medium'] ?? 'lead_form');
         $inbound_form_nm  = !empty($_POST['webhook_inbound_form_name']) ? sanitize_text_field(trim($_POST['webhook_inbound_form_name'])) : ($current['webhook_inbound_form_name'] ?? 'Formulário Google');
 
+        // Mapeamentos De-Para do Google Ads Lead Form (ID da Campanha / ID do Formulário)
+        $google_mappings = $current['google_lead_form_mappings'] ?? [];
+        if (isset($_POST['has_forms_tab'])) {
+            $google_mappings = [];
+            if (!empty($_POST['gform_mapping_id']) && is_array($_POST['gform_mapping_id'])) {
+                foreach ($_POST['gform_mapping_id'] as $idx => $id_val) {
+                    $id_clean = sanitize_text_field(trim($id_val));
+                    if (empty($id_clean)) continue;
+                    $google_mappings[] = [
+                        'id_google'     => $id_clean,
+                        'tipo_id'       => in_array($_POST['gform_mapping_tipo'][$idx] ?? '', ['campaign', 'form']) ? $_POST['gform_mapping_tipo'][$idx] : 'campaign',
+                        'nome_amigavel' => sanitize_text_field($_POST['gform_mapping_nome'][$idx] ?? ''),
+                        'instancia'     => sanitize_text_field($_POST['gform_mapping_instancia'][$idx] ?? ''),
+                        'tipo_curso'    => sanitize_text_field($_POST['gform_mapping_curso'][$idx] ?? ''),
+                    ];
+                }
+            }
+        }
+
         // Google Ads API
         $gads_dev_token = sanitize_text_field($_POST['google_ads_developer_token'] ?? '');
         if (strpos($gads_dev_token, '••••') !== false || empty($gads_dev_token)) {
@@ -360,6 +380,7 @@ class Settings {
             'webhook_inbound_utm_source'   => $inbound_source,
             'webhook_inbound_utm_medium'   => $inbound_medium,
             'webhook_inbound_form_name'    => $inbound_form_nm,
+            'google_lead_form_mappings'    => $google_mappings,
             'google_ads_developer_token'   => $gads_dev_token,
             'google_ads_client_id'         => $gads_client_id,
             'google_ads_client_secret'     => $gads_client_secret,
@@ -1036,6 +1057,31 @@ class Settings {
                         </div>
                         <p class="description" style="margin: 4px 0 0 0;">Esta é a chave padrão definida para validação das extensões de formulário de leads do Google Ads e Meta Ads.</p>
                     </div>
+
+                    <!-- GUIA VISUAL DE PARÂMETROS NA URL DO GOOGLE ADS -->
+                    <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; margin-top: 6px;">
+                        <div style="font-size: 12px; font-weight: 700; color: #0f172a; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                            <span>💡</span> Como identificar Campanhas, Formulários e Instâncias diretamente na URL do Webhook do Google Ads:
+                        </div>
+                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #475569; line-height: 1.5;">
+                            No Google Ads, ao criar a extensão de formulário de lead, você pode adicionar parâmetros na URL do Webhook. O plugin captura automaticamente esses valores e preenche os campos do lead:
+                        </p>
+                        <?php 
+                        $example_url = $inbound_relay_url . '?utm_campaign=pos-graduacao-2026&formulario_nome=Formul%C3%A1rio+P%C3%B3s+01&instancia=Faveni&tipo_curso=P%C3%B3s-Gradua%C3%A7%C3%A3o';
+                        ?>
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <code style="font-size: 11px; background: #f1f5f9; color: #0f766e; padding: 6px 10px; border-radius: 4px; border: 1px solid #e2e8f0; flex: 1; overflow-x: auto; white-space: nowrap; font-family: monospace;">
+                                <?php echo esc_html($example_url); ?>
+                            </code>
+                            <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($example_url); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar Exemplo'}, 2000);">Copiar Exemplo</button>
+                        </div>
+                        <div style="display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: #64748b;">
+                            <span>• <code>utm_campaign</code>: Nome amigável da campanha</span>
+                            <span>• <code>formulario_nome</code>: Nome do recurso de formulário</span>
+                            <span>• <code>instancia</code>: Faveni, Sao Paulo, Cerquilho, etc.</span>
+                            <span>• <code>tipo_curso</code>: Pós-Graduação, Graduação, etc.</span>
+                        </div>
+                    </div>
                 </div>
 
                 <table class="form-table">
@@ -1085,6 +1131,97 @@ class Settings {
                         </td>
                     </tr>
                 </table>
+            </div>
+
+            <div class="li-card" style="margin-bottom: 20px; border-left: 4px solid #10b981;">
+                <h3 class="li-card-title">4. De-Para Inteligente de Formulários e Campanhas do Google Ads</h3>
+                <p class="li-card-desc">
+                    O Google Ads envia identificadores numéricos no payload (ex: <code>campaign_id: 24381253178</code> e <code>form_id: 432482534580</code>). Cadastre aqui regras de correspondência para dar nomes amigáveis às suas campanhas e formulários, além de definir automaticamente a <strong>Instância</strong> e o <strong>Curso</strong>.
+                </p>
+
+                <?php 
+                $gform_mappings = !empty($settings['google_lead_form_mappings']) && is_array($settings['google_lead_form_mappings']) 
+                    ? $settings['google_lead_form_mappings'] 
+                    : [];
+                ?>
+
+                <div style="overflow-x: auto; margin-bottom: 12px;">
+                    <table class="wp-list-table widefat fixed striped" id="li_gform_mapping_table" style="border: 1px solid #cbd5e1; border-radius: 6px;">
+                        <thead>
+                            <tr style="background: #f8fafc;">
+                                <th style="width: 25%; font-weight: 600;">ID do Google Ads (campaign_id / form_id)</th>
+                                <th style="width: 18%; font-weight: 600;">Tipo de ID</th>
+                                <th style="width: 22%; font-weight: 600;">Nome Amigável / Campanha</th>
+                                <th style="width: 16%; font-weight: 600;">Instância</th>
+                                <th style="width: 14%; font-weight: 600;">Tipo de Curso</th>
+                                <th style="width: 5%; text-align: center; font-weight: 600;">Remover</th>
+                            </tr>
+                        </thead>
+                        <tbody id="li_gform_mapping_tbody">
+                            <?php if (!empty($gform_mappings)): ?>
+                                <?php foreach ($gform_mappings as $idx => $map): ?>
+                                    <tr>
+                                        <td>
+                                            <input type="text" name="gform_mapping_id[]" value="<?php echo esc_attr($map['id_google'] ?? ''); ?>" placeholder="Ex: 24381253178" class="regular-text" style="width: 100%; font-family: monospace; font-weight: 600;">
+                                        </td>
+                                        <td>
+                                            <select name="gform_mapping_tipo[]" style="width: 100%;">
+                                                <option value="campaign" <?php selected(($map['tipo_id'] ?? 'campaign'), 'campaign'); ?>>📢 Campanha (campaign_id)</option>
+                                                <option value="form" <?php selected(($map['tipo_id'] ?? ''), 'form'); ?>>📝 Formulário (form_id)</option>
+                                            </select>
+                                        </td>
+                                        <td>
+                                            <input type="text" name="gform_mapping_nome[]" value="<?php echo esc_attr($map['nome_amigavel'] ?? ''); ?>" placeholder="Ex: Pós-Graduação Faveni 2026" style="width: 100%;">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="gform_mapping_instancia[]" value="<?php echo esc_attr($map['instancia'] ?? ''); ?>" placeholder="Ex: Faveni" style="width: 100%;">
+                                        </td>
+                                        <td>
+                                            <input type="text" name="gform_mapping_curso[]" value="<?php echo esc_attr($map['tipo_curso'] ?? ''); ?>" placeholder="Ex: Pós-Graduação" style="width: 100%;">
+                                        </td>
+                                        <td style="text-align: center; vertical-align: middle;">
+                                            <button type="button" class="button button-small" onclick="this.closest('tr').remove();" style="color: #dc2626;" title="Remover regra">&times;</button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <tr id="li_gform_empty_row">
+                                    <td colspan="6" style="text-align: center; color: #64748b; padding: 18px;">
+                                        Nenhuma regra de mapeamento cadastrada. Adicione uma regra abaixo ou passe parâmetros via query string na URL do webhook.
+                                    </td>
+                                </tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+
+                <button type="button" class="button" id="li_add_gform_mapping_btn" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                    <span class="dashicons dashicons-plus-alt2" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px;"></span>
+                    Adicionar Regra de Mapeamento
+                </button>
+            </div>
+
+            <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                var addBtn = document.getElementById('li_add_gform_mapping_btn');
+                var tbody = document.getElementById('li_gform_mapping_tbody');
+                if (addBtn && tbody) {
+                    addBtn.addEventListener('click', function() {
+                        var emptyRow = document.getElementById('li_gform_empty_row');
+                        if (emptyRow) emptyRow.remove();
+
+                        var tr = document.createElement('tr');
+                        tr.innerHTML = '<td><input type="text" name="gform_mapping_id[]" value="" placeholder="Ex: 24381253178" class="regular-text" style="width: 100%; font-family: monospace; font-weight: 600;" required></td>' +
+                            '<td><select name="gform_mapping_tipo[]" style="width: 100%;"><option value="campaign">📢 Campanha (campaign_id)</option><option value="form">📝 Formulário (form_id)</option></select></td>' +
+                            '<td><input type="text" name="gform_mapping_nome[]" value="" placeholder="Ex: Pós-Graduação Faveni 2026" style="width: 100%;"></td>' +
+                            '<td><input type="text" name="gform_mapping_instancia[]" value="" placeholder="Ex: Faveni" style="width: 100%;"></td>' +
+                            '<td><input type="text" name="gform_mapping_curso[]" value="" placeholder="Ex: Pós-Graduação" style="width: 100%;"></td>' +
+                            '<td style="text-align: center; vertical-align: middle;"><button type="button" class="button button-small" onclick="this.closest(\'tr\').remove();" style="color: #dc2626;" title="Remover regra">&times;</button></td>';
+                        tbody.appendChild(tr);
+                    });
+                }
+            });
+            </script>
             </div>
 
             <p class="submit">

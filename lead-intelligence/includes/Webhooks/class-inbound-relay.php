@@ -136,12 +136,20 @@ class InboundRelay {
             ], 200);
         }
 
-        // Parâmetros opcionais passados na query string da URL (ex: ?utm_campaign=formulario google)
+        // Parâmetros opcionais passados na query string da URL (ex: ?utm_campaign=pos-faveni&formulario_nome=Form+Pos&instancia=Faveni&tipo_curso=Pos)
         $query_params = [
             'utm_source'      => sanitize_text_field($request->get_param('utm_source') ?: ''),
             'utm_medium'      => sanitize_text_field($request->get_param('utm_medium') ?: ''),
             'utm_campaign'    => sanitize_text_field($request->get_param('utm_campaign') ?: ''),
             'formulario_nome' => sanitize_text_field($request->get_param('formulario_nome') ?: ($request->get_param('form_name') ?: '')),
+            'instancia'       => sanitize_text_field($request->get_param('instancia') ?: ($request->get_param('instance') ?: '')),
+            'polo'            => sanitize_text_field($request->get_param('polo') ?: ''),
+            'tipo_curso'      => sanitize_text_field($request->get_param('tipo_curso') ?: ($request->get_param('curso') ?: '')),
+            'area_interesse'  => sanitize_text_field($request->get_param('area_interesse') ?: ($request->get_param('area') ?: '')),
+            'utm_content'     => sanitize_text_field($request->get_param('utm_content') ?: ''),
+            'utm_term'        => sanitize_text_field($request->get_param('utm_term') ?: ''),
+            'campaign_id'     => sanitize_text_field($request->get_param('campaign_id') ?: ''),
+            'form_id'         => sanitize_text_field($request->get_param('form_id') ?: ''),
         ];
 
         // 1. Extração flexível dos dados do lead (Google Ads, Meta Ads ou formulários genéricos)
@@ -179,6 +187,8 @@ class InboundRelay {
             'tipo_curso'          => $extracted['tipo_curso'],
             'area_interesse'      => $extracted['area_interesse'],
             'polo'                => $extracted['polo'],
+            'instancia'           => $extracted['instancia'] ?? '',
+            'formulario_id'       => $extracted['formulario_id'] ?? '',
             'formulario_nome'     => !empty($extracted['formulario_nome']) ? $extracted['formulario_nome'] : ($settings['webhook_inbound_form_name'] ?? 'Formulário Google'),
             'ip_address'          => $ip,
             'user_agent'          => $ua,
@@ -187,6 +197,11 @@ class InboundRelay {
             'utm_campaign'        => !empty($extracted['utm_campaign']) ? $extracted['utm_campaign'] : ($settings['webhook_inbound_utm_campaign'] ?? 'formulario google'),
             'utm_content'         => $extracted['utm_content'] ?? '',
             'utm_term'            => $extracted['utm_term'] ?? '',
+            'campaign_id'         => $extracted['campaign_id'] ?? '',
+            'campaign_name'       => $extracted['campaign_name'] ?? '',
+            'adset_id'            => $extracted['adset_id'] ?? '',
+            'ad_id'               => $extracted['ad_id'] ?? '',
+            'leadid'              => $extracted['leadid'] ?? '',
             'gclid'               => $extracted['gclid'] ?? '',
             'fbclid'              => $extracted['fbclid'] ?? '',
             'gad_source'          => $extracted['gad_source'] ?? '',
@@ -202,16 +217,19 @@ class InboundRelay {
         $saved_lead = LeadRepository::find_by_id($lead_id);
 
         Logger::info('InboundRelay', "Lead #{$lead_id} salvo com sucesso via Inbound Webhook ({$lead_data['utm_campaign']}).", [
-            'lead_id'      => $lead_id,
-            'nome'         => $extracted['nome'],
-            'telefone'     => PhoneNormalizer::format_display($extracted['telefone']),
-            'email'        => $extracted['email'],
-            'curso'        => $extracted['tipo_curso'],
-            'utm_campaign' => $lead_data['utm_campaign'],
-            'utm_source'   => $lead_data['utm_source'],
-            'utm_medium'   => $lead_data['utm_medium'],
-            'formulario'   => $lead_data['formulario_nome'],
-            'origem'       => !empty($payload['user_column_data']) ? 'Google Ads Lead Form' : 'Inbound Webhook',
+            'lead_id'       => $lead_id,
+            'nome'          => $extracted['nome'],
+            'telefone'      => PhoneNormalizer::format_display($extracted['telefone']),
+            'email'         => $extracted['email'],
+            'curso'         => $extracted['tipo_curso'],
+            'instancia'     => $lead_data['instancia'],
+            'campaign_id'   => $lead_data['campaign_id'],
+            'formulario_id' => $lead_data['formulario_id'],
+            'utm_campaign'  => $lead_data['utm_campaign'],
+            'utm_source'    => $lead_data['utm_source'],
+            'utm_medium'    => $lead_data['utm_medium'],
+            'formulario'    => $lead_data['formulario_nome'],
+            'origem'        => !empty($payload['user_column_data']) ? 'Google Ads Lead Form' : 'Inbound Webhook',
         ]);
 
         // 4. Repasse (Relay) para o webhook do n8n (se configurado e ativo)
@@ -385,9 +403,21 @@ class InboundRelay {
                             $flat['cidade'] = $val;
                             break;
                         default:
-                            $col_name = strtolower(str_replace(' ', '_', trim((string) ($col['column_name'] ?? ''))));
+                            $col_name   = strtolower(str_replace(' ', '_', trim((string) ($col['column_name'] ?? ''))));
+                            $col_id_raw = strtolower(trim((string) ($col['column_id'] ?? '')));
                             if ($col_name) {
                                 $flat[$col_name] = $val;
+                            }
+                            if ($col_id_raw) {
+                                $flat[$col_id_raw] = $val;
+                            }
+                            // Identificação inteligente de curso/grau/nível acadêmico caso ainda não preenchido
+                            if (empty($flat['tipo_curso']) && preg_match('/(curso|nivel|n[ií]vel|acad[eê]mico|gradua[cç][aã]o|p[oó]s|especializa)/iu', $col_name . ' ' . $col_id_raw)) {
+                                $flat['tipo_curso'] = $val;
+                            }
+                            // Identificação inteligente de polo/unidade/cidade caso ainda não preenchido
+                            if (empty($flat['polo']) && preg_match('/(polo|unidade|cidade|campus)/iu', $col_name . ' ' . $col_id_raw)) {
+                                $flat['polo'] = $val;
                             }
                             break;
                     }
@@ -439,6 +469,53 @@ class InboundRelay {
         $area_interesse = $find(['area_interesse', 'area', 'segmento']);
         $polo = $find(['polo', 'unidade', 'cidade', 'campus', 'polo_apoio']);
 
+        // Extrai identificadores nativos do Google Ads / Webhook Inbound
+        $raw_campaign_id = (string) ($payload['campaign_id'] ?? ($payload['campaignid'] ?? ($flat['campaign_id'] ?? ($query_params['campaign_id'] ?? ''))));
+        $raw_form_id     = (string) ($payload['form_id'] ?? ($payload['formid'] ?? ($flat['form_id'] ?? ($flat['formulario_id'] ?? ($query_params['form_id'] ?? '')))));
+        $raw_adgroup_id  = (string) ($payload['adgroup_id'] ?? ($payload['adgroupid'] ?? ($flat['adgroup_id'] ?? ($flat['adset_id'] ?? ''))));
+        $raw_creative_id = (string) ($payload['creative_id'] ?? ($payload['creativeid'] ?? ($flat['creative_id'] ?? ($flat['ad_id'] ?? ''))));
+        $raw_gcl_id      = (string) ($payload['gcl_id'] ?? ($payload['gclid'] ?? ($flat['gcl_id'] ?? ($flat['gclid'] ?? ''))));
+        $raw_lead_id     = (string) ($payload['lead_id'] ?? ($payload['leadid'] ?? ($flat['lead_id'] ?? ($flat['leadid'] ?? ''))));
+
+        // Mapeamento De-Para inteligente configurado no painel do Lead Intelligence
+        $mappings = !empty($settings['google_lead_form_mappings']) && is_array($settings['google_lead_form_mappings'])
+            ? $settings['google_lead_form_mappings']
+            : [];
+
+        $mapped_campaign_name = '';
+        $mapped_form_name     = '';
+        $mapped_instancia     = '';
+        $mapped_curso         = '';
+
+        foreach ($mappings as $rule) {
+            $rule_id = trim((string) ($rule['id_google'] ?? ''));
+            if ($rule_id === '') continue;
+            $rule_tipo = $rule['tipo_id'] ?? 'campaign';
+
+            if ($rule_tipo === 'campaign' && !empty($raw_campaign_id) && $rule_id === (string) $raw_campaign_id) {
+                if (!empty($rule['nome_amigavel']))  $mapped_campaign_name = trim($rule['nome_amigavel']);
+                if (!empty($rule['instancia']))      $mapped_instancia     = trim($rule['instancia']);
+                if (!empty($rule['tipo_curso']))     $mapped_curso         = trim($rule['tipo_curso']);
+            } elseif ($rule_tipo === 'form' && !empty($raw_form_id) && $rule_id === (string) $raw_form_id) {
+                if (!empty($rule['nome_amigavel']))  $mapped_form_name = trim($rule['nome_amigavel']);
+                if (!empty($rule['instancia']) && empty($mapped_instancia)) $mapped_instancia = trim($rule['instancia']);
+                if (!empty($rule['tipo_curso']) && empty($mapped_curso))    $mapped_curso     = trim($rule['tipo_curso']);
+            }
+        }
+
+        // Se a campanha não foi mapeada via De-Para, tenta buscar na tabela de custos li_campaign_costs
+        if (empty($mapped_campaign_name) && !empty($raw_campaign_id)) {
+            global $wpdb;
+            $costs_table = DbSchema::get_costs_table();
+            $db_camp_name = $wpdb->get_var($wpdb->prepare(
+                "SELECT campaign_name FROM {$costs_table} WHERE campaign_id = %s AND campaign_name != '' LIMIT 1",
+                $raw_campaign_id
+            ));
+            if (!empty($db_camp_name)) {
+                $mapped_campaign_name = trim($db_camp_name);
+            }
+        }
+
         // Configurações padrão definidas no plugin (padrão oficial: google_lead_form)
         $cfg_source   = !empty($settings['webhook_inbound_utm_source']) && $settings['webhook_inbound_utm_source'] !== 'google_ads' 
             ? trim($settings['webhook_inbound_utm_source']) 
@@ -460,29 +537,70 @@ class InboundRelay {
             : ($raw_extracted_medium ?: $cfg_medium);
 
         // Se for lead nativo de formulário do Google Ads e vier com utm_source genérica 'google_ads' ou vazia, padroniza como 'google_lead_form'
-        $is_google_form_payload = (!empty($payload['user_column_data']) || !empty($payload['google_key']) || $utm_medium === 'lead_form');
+        $is_google_form_payload = (!empty($payload['user_column_data']) || !empty($payload['google_key']) || $utm_medium === 'lead_form' || !empty($raw_form_id));
         if ($is_google_form_payload && (empty($utm_source) || $utm_source === 'google_ads' || $utm_source === 'google')) {
             $utm_source = 'google_lead_form';
         }
 
-        // Se no payload vier campaign_id numérico (ex: 21849182), substitui pelo nome legível amigável "formulario google"
+        // Determinação da Campanha (Query String > Mapeamento De-Para > Nome no Payload > ID legível > Config Padrão)
         $payload_campaign = $find(['utm_campaign', 'campaign', 'campanha', 'campaign_name']);
         if (!empty($query_params['utm_campaign'])) {
             $utm_campaign = $query_params['utm_campaign'];
+        } elseif (!empty($mapped_campaign_name)) {
+            $utm_campaign = $mapped_campaign_name;
         } elseif (!empty($payload_campaign) && !is_numeric($payload_campaign) && strpos($payload_campaign, 'camp_') !== 0) {
             $utm_campaign = $payload_campaign;
+        } elseif (!empty($raw_campaign_id)) {
+            $utm_campaign = 'Campanha #' . $raw_campaign_id;
         } else {
             $utm_campaign = $cfg_campaign;
         }
+        $campaign_name = !empty($mapped_campaign_name) ? $mapped_campaign_name : (!empty($payload_campaign) && !is_numeric($payload_campaign) ? $payload_campaign : $utm_campaign);
 
-        $form_nome = !empty($query_params['formulario_nome']) 
-            ? $query_params['formulario_nome'] 
-            : ($find(['formulario_nome', 'form_name', 'origem_nome', 'titulo']) ?: $cfg_form_nm);
+        // Determinação do Nome do Formulário e ID
+        if (!empty($query_params['formulario_nome'])) {
+            $form_nome = $query_params['formulario_nome'];
+        } elseif (!empty($mapped_form_name)) {
+            $form_nome = $mapped_form_name;
+        } else {
+            $extracted_form = $find(['formulario_nome', 'form_name', 'origem_nome', 'titulo']);
+            if (!empty($extracted_form)) {
+                $form_nome = $extracted_form;
+            } elseif (!empty($raw_form_id)) {
+                $form_nome = 'Formulário Google (#' . $raw_form_id . ')';
+            } else {
+                $form_nome = $cfg_form_nm;
+            }
+        }
+        $formulario_id = !empty($raw_form_id) ? $raw_form_id : ($find(['formulario_id', 'form_id']) ?: '');
 
-        $utm_content  = $find(['utm_content', 'content', 'anuncio', 'ad_name']);
-        $utm_term     = $find(['utm_term', 'term', 'palavra_chave', 'keyword']);
+        // Determinação de Instância, Polo e Tipo de Curso
+        $instancia = !empty($query_params['instancia'])
+            ? $query_params['instancia']
+            : (!empty($mapped_instancia)
+                ? $mapped_instancia
+                : (!empty($query_params['polo'])
+                    ? $query_params['polo']
+                    : ($find(['instancia', 'instance']) ?: '')));
 
-        $gclid      = $find(['gclid', 'google_click_id']);
+        if (!empty($query_params['tipo_curso'])) {
+            $tipo_curso = $query_params['tipo_curso'];
+        } elseif (!empty($mapped_curso)) {
+            $tipo_curso = $mapped_curso;
+        }
+
+        if (!empty($query_params['area_interesse'])) {
+            $area_interesse = $query_params['area_interesse'];
+        }
+
+        if (empty($polo) && !empty($instancia)) {
+            $polo = $instancia;
+        }
+
+        $utm_content = !empty($query_params['utm_content']) ? $query_params['utm_content'] : $find(['utm_content', 'content', 'anuncio', 'ad_name']);
+        $utm_term    = !empty($query_params['utm_term']) ? $query_params['utm_term'] : $find(['utm_term', 'term', 'palavra_chave', 'keyword']);
+
+        $gclid      = !empty($raw_gcl_id) ? $raw_gcl_id : $find(['gclid', 'google_click_id']);
         $fbclid     = $find(['fbclid', 'facebook_click_id']);
         $gad_source = $find(['gad_source']);
 
@@ -496,7 +614,14 @@ class InboundRelay {
             'tipo_curso'          => sanitize_text_field($tipo_curso),
             'area_interesse'      => sanitize_text_field($area_interesse),
             'polo'                => sanitize_text_field($polo),
+            'instancia'           => sanitize_text_field($instancia),
+            'formulario_id'       => sanitize_text_field($formulario_id),
             'formulario_nome'     => sanitize_text_field($form_nome),
+            'campaign_id'         => sanitize_text_field($raw_campaign_id),
+            'campaign_name'       => sanitize_text_field($campaign_name),
+            'adset_id'            => sanitize_text_field($raw_adgroup_id),
+            'ad_id'               => sanitize_text_field($raw_creative_id),
+            'leadid'              => sanitize_text_field($raw_lead_id),
             'utm_source'          => sanitize_text_field($utm_source),
             'utm_medium'          => sanitize_text_field($utm_medium),
             'utm_campaign'        => sanitize_text_field($utm_campaign),
