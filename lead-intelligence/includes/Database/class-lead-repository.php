@@ -272,6 +272,17 @@ class LeadRepository {
             $params[] = '%' . $wpdb->esc_like('utm_source=' . $src_val) . '%';
         }
 
+        if (!empty($args['instancia'])) {
+            $inst_val = trim($args['instancia']);
+            if ($inst_val === 'none' || $inst_val === 'sem_instancia') {
+                $where[] = "((instancia IS NULL OR TRIM(instancia) = '') AND (polo IS NULL OR TRIM(polo) = ''))";
+            } else {
+                $where[] = "(instancia = %s OR polo = %s)";
+                $params[] = $inst_val;
+                $params[] = $inst_val;
+            }
+        }
+
         if (!empty($args['status'])) {
             $where[] = "qualificacao_status = %s";
             $params[] = $args['status'];
@@ -353,6 +364,10 @@ class LeadRepository {
 
         if ($chan === 'planilha_google') {
             return "({$planilha_condition} AND (INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR INSTR(LOWER(COALESCE(utm_source, '')), 'google') > 0))";
+        }
+
+        if ($chan === 'planilha_meta') {
+            return "({$planilha_condition} AND (INSTR(LOWER(COALESCE(formulario_nome, '')), 'meta') > 0 OR INSTR(LOWER(COALESCE(formulario_nome, '')), 'facebook') > 0 OR INSTR(LOWER(COALESCE(formulario_nome, '')), 'instagram') > 0 OR INSTR(LOWER(COALESCE(utm_source, '')), 'meta') > 0 OR INSTR(LOWER(COALESCE(utm_source, '')), 'facebook') > 0 OR INSTR(LOWER(COALESCE(utm_source, '')), 'instagram') > 0 OR (fbclid IS NOT NULL AND TRIM(fbclid) != '')))";
         }
 
         // Condição para leads vindos da Extensão Nativa de Formulário do Google Ads ou Campanhas de Formulário Google (Google Lead Form)
@@ -631,11 +646,39 @@ class LeadRepository {
         );
 
         if ($is_planilha && (empty($form_id) || strpos(strtolower($form_id), 'planilha') !== false)) {
-            if (strpos($form, 'meta') !== false || strpos($utm_src, 'meta') !== false || !empty($fbclid) || !empty($ad_id)) {
+            $is_google_sheet = (
+                strpos($form, 'google') !== false ||
+                strpos($utm_src, 'google') !== false ||
+                strpos($origem, 'google') !== false ||
+                !empty($gclid) ||
+                !empty($gad_src)
+            );
+
+            $is_meta_sheet = (
+                strpos($form, 'meta') !== false ||
+                strpos($form, 'facebook') !== false ||
+                strpos($form, 'instagram') !== false ||
+                strpos($utm_src, 'meta') !== false ||
+                strpos($utm_src, 'facebook') !== false ||
+                strpos($utm_src, 'instagram') !== false ||
+                strpos($origem, 'meta') !== false ||
+                strpos($origem, 'facebook') !== false ||
+                strpos($origem, 'instagram') !== false ||
+                !empty($fbclid) ||
+                (!empty($fbc) && strpos($fbc, 'fb.') !== false)
+            );
+
+            if ($is_google_sheet && !$is_meta_sheet) {
+                return 'planilha_google';
+            }
+            if ($is_meta_sheet && !$is_google_sheet) {
                 return 'planilha_meta';
             }
-            if (strpos($form, 'google') !== false || strpos($utm_src, 'google') !== false || !empty($gclid) || !empty($gad_src)) {
+            if ($is_google_sheet) {
                 return 'planilha_google';
+            }
+            if ($is_meta_sheet || !empty($ad_id)) {
+                return 'planilha_meta';
             }
             return 'planilha';
         }
@@ -800,9 +843,9 @@ class LeadRepository {
     }
 
     /**
-     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal, período de data e utm_source)
+     * Retorna contadores agregados para dashboard e badges (com filtro opcional por canal, período de data, utm_source e instância)
      */
-    public static function get_status_counts($channel = '', $date_start = '', $date_end = '', $utm_source = '') {
+    public static function get_status_counts($channel = '', $date_start = '', $date_end = '', $utm_source = '', $instancia = '') {
         global $wpdb;
         $table = DbSchema::get_leads_table();
         $where = ['1=1'];
@@ -823,6 +866,17 @@ class LeadRepository {
             $params[] = $src_val;
             $params[] = $src_like;
             $params[] = '%' . $wpdb->esc_like('utm_source=' . $src_val) . '%';
+        }
+
+        if (!empty($instancia)) {
+            $inst_val = trim($instancia);
+            if ($inst_val === 'none' || $inst_val === 'sem_instancia') {
+                $where[] = "((instancia IS NULL OR TRIM(instancia) = '') AND (polo IS NULL OR TRIM(polo) = ''))";
+            } else {
+                $where[] = "(instancia = %s OR polo = %s)";
+                $params[] = $inst_val;
+                $params[] = $inst_val;
+            }
         }
 
         if (!empty($date_start)) {
@@ -898,6 +952,35 @@ class LeadRepository {
         $clean = array_unique(array_filter(array_map('trim', $results)));
         sort($clean);
         return array_values($clean);
+    }
+
+    /**
+     * Retorna todas as instâncias / polos distintos cadastrados no banco de leads
+     *
+     * @return array
+     */
+    public static function get_distinct_instances() {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+
+        $instances = $wpdb->get_col("
+            SELECT DISTINCT instancia 
+            FROM {$table} 
+            WHERE instancia IS NOT NULL AND TRIM(instancia) != '' 
+            ORDER BY instancia ASC
+        ");
+
+        $polos = $wpdb->get_col("
+            SELECT DISTINCT polo 
+            FROM {$table} 
+            WHERE polo IS NOT NULL AND TRIM(polo) != '' 
+            ORDER BY polo ASC
+        ");
+
+        $merged = array_unique(array_filter(array_merge((array) $instances, (array) $polos)));
+        sort($merged, SORT_NATURAL | SORT_FLAG_CASE);
+
+        return array_values($merged);
     }
 
     /**
@@ -1042,6 +1125,27 @@ class LeadRepository {
         if (!empty($args['status'])) {
             $where[] = "qualificacao_status = %s";
             $params[] = $args['status'];
+        }
+
+        if (!empty($args['instancia'])) {
+            $inst_val = trim($args['instancia']);
+            if ($inst_val === 'none' || $inst_val === 'sem_instancia') {
+                $where[] = "((instancia IS NULL OR TRIM(instancia) = '') AND (polo IS NULL OR TRIM(polo) = ''))";
+            } else {
+                $where[] = "(instancia = %s OR polo = %s)";
+                $params[] = $inst_val;
+                $params[] = $inst_val;
+            }
+        }
+
+        if (!empty($args['utm_source'])) {
+            $src_val = trim($args['utm_source']);
+            $src_like = '%' . $wpdb->esc_like($src_val) . '%';
+            $where[] = "(utm_source = %s OR utm_source_first = %s OR utm_source LIKE %s OR pagina_origem LIKE %s)";
+            $params[] = $src_val;
+            $params[] = $src_val;
+            $params[] = $src_like;
+            $params[] = '%' . $wpdb->esc_like('utm_source=' . $src_val) . '%';
         }
 
         if (!empty($args['campaign'])) {

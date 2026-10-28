@@ -28,7 +28,9 @@ class AdminMenu {
         add_action('wp_ajax_li_meta_ads_update_lead', [MetaAdsController::class, 'ajax_update_lead_status']);
 
         // Inicializa listeners de formulários do controller de importação
-        ImportController::init();
+        if (class_exists(ImportController::class)) {
+            ImportController::init();
+        }
     }
 
     public static function register_menus() {

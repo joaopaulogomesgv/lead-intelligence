@@ -29,12 +29,55 @@ class LogsController {
         $logs_table = DbSchema::get_logs_table();
         $categoria  = isset($_GET['cat']) ? sanitize_text_field(wp_unslash($_GET['cat'])) : '';
         $nivel      = isset($_GET['lvl']) ? sanitize_text_field(wp_unslash($_GET['lvl'])) : '';
+        $search     = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $lead_id    = isset($_GET['lead_id']) ? max(0, (int) $_GET['lead_id']) : 0;
         $page       = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
         $per_page   = 50;
         $offset     = ($page - 1) * $per_page;
 
         $where = ['1=1'];
         $params = [];
+
+        if (!empty($lead_id)) {
+            $lid = (int) $lead_id;
+            $where[] = "(
+                mensagem LIKE %s OR 
+                mensagem LIKE %s OR 
+                contexto LIKE %s OR 
+                contexto LIKE %s OR
+                id = %d
+            )";
+            $params[] = '%#' . $lid . '%';
+            $params[] = '%Lead ' . $lid . '%';
+            $params[] = '%"lead_id":' . $lid . '%';
+            $params[] = '%"lead_id":"' . $lid . '"%';
+            $params[] = $lid;
+        } elseif (!empty($search)) {
+            $clean_s = trim($search);
+            $numeric_id = preg_replace('/\D/', '', $clean_s);
+            if (!empty($numeric_id) && strlen($numeric_id) >= 2 && (is_numeric($clean_s) || strpos($clean_s, '#') === 0)) {
+                $lid = (int) $numeric_id;
+                $where[] = "(
+                    mensagem LIKE %s OR 
+                    mensagem LIKE %s OR 
+                    contexto LIKE %s OR 
+                    contexto LIKE %s OR 
+                    contexto LIKE %s OR
+                    id = %d
+                )";
+                $params[] = '%#' . $lid . '%';
+                $params[] = '%' . $lid . '%';
+                $params[] = '%"lead_id":' . $lid . '%';
+                $params[] = '%"lead_id":"' . $lid . '"%';
+                $params[] = '%' . $wpdb->esc_like($clean_s) . '%';
+                $params[] = $lid;
+            } else {
+                $like = '%' . $wpdb->esc_like($clean_s) . '%';
+                $where[] = "(mensagem LIKE %s OR contexto LIKE %s)";
+                $params[] = $like;
+                $params[] = $like;
+            }
+        }
 
         if (!empty($categoria)) {
             $where[] = "categoria = %s";
@@ -79,15 +122,20 @@ class LogsController {
             <div class="li-card li-filter-bar">
                 <form method="get" action="">
                     <input type="hidden" name="page" value="lead-intelligence-logs">
-                    <div class="li-filter-row">
-                        <select name="cat">
+                    <div class="li-filter-row" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <div style="position: relative; flex: 1; min-width: 240px; max-width: 380px;">
+                            <span class="dashicons dashicons-search" style="position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-size: 16px;"></span>
+                            <input type="text" name="s" value="<?php echo esc_attr($search ?: ($lead_id ? '#' . $lead_id : '')); ?>" placeholder="Buscar por Lead ID (#22733), telefone, texto..." style="width: 100%; padding-left: 30px; height: 32px; font-size: 13px;">
+                        </div>
+
+                        <select name="cat" style="height: 32px;">
                             <option value="">Todas as Categorias</option>
                             <?php foreach ($categories as $cat): ?>
                                 <option value="<?php echo esc_attr($cat); ?>" <?php selected($categoria, $cat); ?>><?php echo esc_html($cat); ?></option>
                             <?php endforeach; ?>
                         </select>
 
-                        <select name="lvl">
+                        <select name="lvl" style="height: 32px;">
                             <option value="">Todos os Níveis</option>
                             <option value="info" <?php selected($nivel, 'info'); ?>>Info</option>
                             <option value="warning" <?php selected($nivel, 'warning'); ?>>Aviso (Warning)</option>
@@ -95,11 +143,21 @@ class LogsController {
                             <option value="debug" <?php selected($nivel, 'debug'); ?>>Debug</option>
                         </select>
 
-                        <button type="submit" class="button button-primary">Filtrar Logs</button>
-                        <?php if (!empty($categoria) || !empty($nivel)): ?>
-                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-logs')); ?>" class="button">Limpar</a>
+                        <button type="submit" class="button button-primary" style="height: 32px; display: inline-flex; align-items: center; gap: 4px;">
+                            <span class="dashicons dashicons-filter" style="font-size: 15px; width: 15px; height: 15px;"></span> Filtrar Logs
+                        </button>
+                        <?php if (!empty($categoria) || !empty($nivel) || !empty($search) || !empty($lead_id)): ?>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-logs')); ?>" class="button" style="height: 32px; line-height: 30px;">Limpar</a>
                         <?php endif; ?>
                     </div>
+                    <?php if (!empty($lead_id)): ?>
+                        <div style="margin-top: 8px; font-size: 12px; color: #1d4ed8; display: flex; align-items: center; gap: 6px;">
+                            <span class="dashicons dashicons-info" style="font-size: 16px; width: 16px; height: 16px;"></span>
+                            <span>Exibindo histórico de eventos do <strong>Lead #<?php echo esc_html($lead_id); ?></strong>.</span>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-leads&s=' . $lead_id)); ?>" target="_blank" class="button button-small" style="font-size: 11px; padding: 0 6px; height: 22px; line-height: 20px;">Ver Lead no Painel &rarr;</a>
+                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-logs')); ?>" style="color: #dc2626; text-decoration: none; margin-left: 6px;">&times; Remover filtro</a>
+                        </div>
+                    <?php endif; ?>
                 </form>
             </div>
 
@@ -141,7 +199,22 @@ class LogsController {
                                         <span class="li-badge <?php echo esc_attr($badge); ?>"><?php echo esc_html(strtoupper($log->nivel)); ?></span>
                                     </td>
                                     <td><strong><?php echo esc_html($log->categoria); ?></strong></td>
-                                    <td><?php echo esc_html($log->mensagem); ?></td>
+                                    <td>
+                                        <?php
+                                        $msg_raw = $log->mensagem;
+                                        $msg_html = esc_html($msg_raw);
+                                        $msg_html = preg_replace_callback('/#(\d{2,})/', function($m) {
+                                            $lid = $m[1];
+                                            $url = esc_url(admin_url('admin.php?page=lead-intelligence-logs&lead_id=' . $lid));
+                                            $lead_view_url = esc_url(admin_url('admin.php?page=lead-intelligence-leads&s=' . $lid));
+                                            return '<span style="display:inline-flex; align-items:center; gap:3px; background:#eff6ff; border:1px solid #bfdbfe; border-radius:4px; padding:1px 5px; font-weight:700; font-size:11px;" title="Lead #' . $lid . '">'
+                                                 . '<a href="' . $url . '" style="color:#1d4ed8; text-decoration:none;" title="Ver todos os logs do Lead #' . $lid . '">#' . $lid . '</a>'
+                                                 . '<a href="' . $lead_view_url . '" target="_blank" style="color:#94a3b8; text-decoration:none; margin-left:2px; font-size:10px;" title="Abrir Lead #' . $lid . ' na lista de Leads">↗</a>'
+                                                 . '</span>';
+                                        }, $msg_html);
+                                        echo $msg_html;
+                                        ?>
+                                    </td>
                                     <td>
                                         <?php if (!empty($log->contexto)): ?>
                                             <textarea id="li-log-data-<?php echo esc_attr($log->id); ?>" style="display:none;"><?php echo esc_textarea($log->contexto); ?></textarea>
@@ -172,7 +245,12 @@ class LogsController {
                     <span>Página <?php echo $page; ?> de <?php echo $total_pages; ?> (<?php echo $total; ?> registros)</span>
                     <div class="li-pagination-links">
                         <?php for ($i = 1; $i <= $total_pages; $i++): ?>
-                            <a href="<?php echo esc_url(add_query_arg(['paged' => $i, 'cat' => $categoria, 'lvl' => $nivel])); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">
+                            <?php 
+                            $pag_args = ['paged' => $i, 'cat' => $categoria, 'lvl' => $nivel];
+                            if (!empty($search)) $pag_args['s'] = $search;
+                            if (!empty($lead_id)) $pag_args['lead_id'] = $lead_id;
+                            ?>
+                            <a href="<?php echo esc_url(add_query_arg($pag_args)); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">
                                 <?php echo $i; ?>
                             </a>
                         <?php endfor; ?>

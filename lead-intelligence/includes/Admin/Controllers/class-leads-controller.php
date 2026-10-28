@@ -80,15 +80,19 @@ class LeadsController {
             $filter_search    = sanitize_text_field(wp_unslash($_POST['filter_search'] ?? ''));
             $filter_status    = sanitize_text_field(wp_unslash($_POST['filter_status'] ?? ''));
             $filter_channel   = sanitize_key(wp_unslash($_POST['filter_channel'] ?? ''));
+            $filter_utm_source = sanitize_text_field(wp_unslash($_POST['filter_utm_source'] ?? ''));
+            $filter_instancia = sanitize_text_field(wp_unslash($_POST['filter_instancia'] ?? ''));
             $filter_date_from = sanitize_text_field(wp_unslash($_POST['filter_date_from'] ?? ''));
             $filter_date_to   = sanitize_text_field(wp_unslash($_POST['filter_date_to'] ?? ''));
 
             $deleted_count = LeadRepository::delete_all_by_filters([
-                'search'    => $filter_search,
-                'status'    => $filter_status,
-                'channel'   => $filter_channel,
-                'date_from' => $filter_date_from,
-                'date_to'   => $filter_date_to,
+                'search'     => $filter_search,
+                'status'     => $filter_status,
+                'channel'    => $filter_channel,
+                'utm_source' => $filter_utm_source,
+                'instancia'  => $filter_instancia,
+                'date_from'  => $filter_date_from,
+                'date_to'    => $filter_date_to,
             ]);
             $action_message = "{$deleted_count} lead(s) do filtro e período selecionados foram excluídos com sucesso.";
             $action_type = 'success';
@@ -243,17 +247,20 @@ class LeadsController {
         $status     = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
         $channel    = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
         $utm_source = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
+        $instancia  = isset($_GET['instancia']) ? sanitize_text_field(wp_unslash($_GET['instancia'])) : '';
         $page       = isset($_GET['paged']) ? max(1, (int) $_GET['paged']) : 1;
         $per_page   = 20;
 
         $available_utm_sources = LeadRepository::get_distinct_utm_sources();
-        $counts = LeadRepository::get_status_counts($channel, $date_start, $date_end, $utm_source);
+        $available_instances   = LeadRepository::get_distinct_instances();
+        $counts = LeadRepository::get_status_counts($channel, $date_start, $date_end, $utm_source, $instancia);
 
         $leads_data = LeadRepository::get_leads([
             'search'     => $search,
             'status'     => $status,
             'channel'    => $channel,
             'utm_source' => $utm_source,
+            'instancia'  => $instancia,
             'date_from'  => !empty($date_start) ? substr($date_start, 0, 10) : '',
             'date_to'    => !empty($date_end) ? substr($date_end, 0, 10) : '',
             'page'       => $page,
@@ -382,7 +389,7 @@ class LeadsController {
                                 'custom'    => 'Personalizado'
                             ];
                             foreach ($periods as $k => $label): ?>
-                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'canal' => $channel, 'status' => $status, 's' => $search, 'li_explicit_period' => 1], remove_query_arg(['from', 'to']))); ?>" 
+                                <a href="<?php echo esc_url(add_query_arg(['periodo' => $k, 'canal' => $channel, 'status' => $status, 's' => $search, 'utm_source' => $utm_source, 'instancia' => $instancia, 'li_explicit_period' => 1], remove_query_arg(['from', 'to']))); ?>" 
                                    class="button-link" 
                                    style="padding: 4px 10px; font-size: 12px; font-weight: 600; text-decoration: none; border-radius: 4px; <?php echo $periodo === $k ? 'background: #0073aa; color: #fff;' : 'color: #334155;'; ?>">
                                     <?php echo esc_html($label); ?>
@@ -420,6 +427,18 @@ class LeadsController {
                                 <option value="<?php echo esc_attr($src_opt); ?>"></option>
                             <?php endforeach; ?>
                         </datalist>
+                    </div>
+
+                    <!-- Filtro Específico por Instância / Polo -->
+                    <div style="min-width: 150px;">
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">🏛️ Instância</label>
+                        <select name="instancia" style="width: 100%; height: 32px; font-size: 13px;">
+                            <option value="">Todas as Instâncias</option>
+                            <option value="sem_instancia" <?php selected($instancia, 'sem_instancia'); ?>>⚪ Sem Instância (Não listados)</option>
+                            <?php foreach ($available_instances as $inst_opt): ?>
+                                <option value="<?php echo esc_attr($inst_opt); ?>" <?php selected($instancia, $inst_opt); ?>><?php echo esc_html(ucwords($inst_opt)); ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
 
                     <!-- Select de Canal -->
@@ -680,7 +699,12 @@ class LeadsController {
                                     <td style="text-align: center; vertical-align: middle;">
                                         <input type="checkbox" name="selected_leads[]" value="<?php echo esc_attr($lead->id); ?>" class="li-lead-check" style="margin: 0;">
                                     </td>
-                                    <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
+                                    <td>
+                                        <strong>#<?php echo esc_html($lead->id); ?></strong>
+                                        <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-logs&lead_id=' . $lead->id)); ?>" target="_blank" title="Ver logs e eventos do Lead #<?php echo esc_attr($lead->id); ?>" style="text-decoration: none; font-size: 11px; margin-left: 3px; display: inline-block; vertical-align: middle; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity='1';" onmouseout="this.style.opacity='0.7';">
+                                            📋
+                                        </a>
+                                    </td>
                                     <td>
                                         <?php if (!empty($lead->leadid)): ?>
                                             <code style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;" title="Lead ID da Planilha: <?php echo esc_attr($lead->leadid); ?>">
@@ -720,11 +744,15 @@ class LeadsController {
                                         $inst_val = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
                                         ?>
                                         <?php if (!empty($inst_val)): ?>
-                                            <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
-                                                <span>🏛️</span> <?php echo esc_html($inst_val); ?>
-                                            </span>
+                                            <a href="<?php echo esc_url(add_query_arg(['instancia' => $inst_val, 'periodo' => $periodo], $current_url)); ?>" style="text-decoration: none;" title="Clique para filtrar apenas leads da instância '<?php echo esc_attr($inst_val); ?>'">
+                                                <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#dcfce7';" onmouseout="this.style.background='#f0fdf4';">
+                                                    <span>🏛️</span> <?php echo esc_html($inst_val); ?>
+                                                </span>
+                                            </a>
                                         <?php else: ?>
-                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                            <a href="<?php echo esc_url(add_query_arg(['instancia' => 'sem_instancia', 'periodo' => $periodo], $current_url)); ?>" style="color: #94a3b8; font-size: 12px; text-decoration: none;" title="Clique para filtrar contatos sem instância">
+                                                <span style="border-bottom: 1px dotted #cbd5e1; cursor: pointer;">—</span>
+                                            </a>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -814,6 +842,7 @@ class LeadsController {
                                 'status'     => $status,
                                 'canal'      => $channel,
                                 'utm_source' => $utm_source,
+                                'instancia'  => $instancia,
                             ], $current_url);
                             ?>
                             <a href="<?php echo esc_url($link); ?>" class="button <?php echo ($i === $page) ? 'button-primary' : ''; ?>">
@@ -839,6 +868,8 @@ class LeadsController {
                         <input type="hidden" name="filter_search" value="<?php echo esc_attr($search); ?>">
                         <input type="hidden" name="filter_status" value="<?php echo esc_attr($status); ?>">
                         <input type="hidden" name="filter_channel" value="<?php echo esc_attr($channel); ?>">
+                        <input type="hidden" name="filter_utm_source" value="<?php echo esc_attr($utm_source); ?>">
+                        <input type="hidden" name="filter_instancia" value="<?php echo esc_attr($instancia); ?>">
                         <input type="hidden" name="filter_date_from" value="<?php echo esc_attr(!empty($date_start) ? substr($date_start, 0, 10) : ''); ?>">
                         <input type="hidden" name="filter_date_to" value="<?php echo esc_attr(!empty($date_end) ? substr($date_end, 0, 10) : ''); ?>">
 
@@ -912,6 +943,10 @@ class LeadsController {
                             <a id="liModalWhatsAppBtn" href="#" target="_blank" class="li-btn-wa-header" style="display:none;" title="Conversar no WhatsApp">
                                 <span class="dashicons dashicons-whatsapp"></span>
                                 <span>WhatsApp</span>
+                            </a>
+                            <a id="liModalLogsBtn" href="#" target="_blank" class="button button-secondary" style="display:none; align-items:center; gap:4px; font-size:12px; height:28px; line-height:26px;" title="Ver todos os logs e eventos deste lead">
+                                <span class="dashicons dashicons-list-view" style="font-size:15px; width:15px; height:15px; line-height:15px;"></span>
+                                <span>Ver Logs</span>
                             </a>
                             <button type="button" class="li-modal-close" onclick="closeLiModal()" title="Fechar (Esc)">&times;</button>
                         </div>
@@ -1159,6 +1194,13 @@ class LeadsController {
                         } else {
                             waBtn.style.display = 'none';
                         }
+                    }
+
+                    // Botão de acesso direto aos logs do lead
+                    var logsBtn = document.getElementById('liModalLogsBtn');
+                    if (logsBtn && lead.id) {
+                        logsBtn.href = 'admin.php?page=lead-intelligence-logs&lead_id=' + encodeURIComponent(lead.id);
+                        logsBtn.style.display = 'inline-flex';
                     }
 
                     var html = '';
