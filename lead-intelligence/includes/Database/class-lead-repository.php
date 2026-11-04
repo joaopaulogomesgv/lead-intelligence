@@ -427,11 +427,20 @@ class LeadRepository {
             return $google_lead_form_condition;
         }
 
+        $whatsapp_condition = "(
+            (formulario_nome IS NOT NULL AND INSTR(LOWER(formulario_nome), 'whatsapp') > 0) OR
+            (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
+            (conversation_id IS NOT NULL AND TRIM(conversation_id) != '') OR
+            (pagina_origem IS NOT NULL AND INSTR(LOWER(pagina_origem), 'whatsapp') > 0) OR
+            (qualificacao_origem IS NOT NULL AND INSTR(LOWER(qualificacao_origem), 'whatsapp') > 0)
+        )";
+
         $google_raw = "(
             (gclid IS NOT NULL AND TRIM(gclid) != '') OR
             (gad_source IS NOT NULL AND TRIM(gad_source) != '') OR
             (gbraid IS NOT NULL AND TRIM(gbraid) != '') OR
             (wbraid IS NOT NULL AND TRIM(wbraid) != '') OR
+            (utm_source IS NOT NULL AND TRIM(utm_source) != '' AND LOWER(utm_source) NOT IN ('organico', 'direto', 'site', 'direct', 'referral', 'none')) OR
             LOWER(COALESCE(utm_source, '')) IN ('google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads', 'google_cpc', 'google_search') OR
             INSTR(LOWER(COALESCE(utm_source, '')), 'google') > 0 OR
             INSTR(LOWER(COALESCE(utm_source, '')), 'gads') > 0 OR
@@ -441,7 +450,7 @@ class LeadRepository {
             INSTR(LOWER(COALESCE(utm_source, '')), 'pesquisa') > 0 OR
             INSTR(LOWER(COALESCE(utm_source, '')), 'pmax') > 0 OR
             INSTR(LOWER(COALESCE(utm_medium, '')), 'google') > 0 OR
-            (LOWER(COALESCE(utm_medium, '')) IN ('cpc', 'ppc', 'search', 'pmax', 'display') AND INSTR(LOWER(COALESCE(utm_source, '')), 'meta') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'face') = 0 AND INSTR(LOWER(COALESCE(utm_source, '')), 'insta') = 0) OR
+            LOWER(COALESCE(utm_medium, '')) IN ('cpc', 'ppc', 'search', 'pmax', 'display') OR
             INSTR(LOWER(COALESCE(utm_campaign, '')), 'google') > 0 OR
             INSTR(LOWER(COALESCE(utm_campaign, '')), 'gads') > 0 OR
             INSTR(LOWER(COALESCE(formulario_nome, '')), 'google') > 0 OR
@@ -455,7 +464,7 @@ class LeadRepository {
             INSTR(LOWER(COALESCE(referrer, '')), 'google.') > 0
         )";
 
-        $google_condition = "({$google_raw} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
+        $google_condition = "({$google_raw} AND NOT {$whatsapp_condition} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
 
         if ($chan === 'google_ads') {
             return $google_condition;
@@ -463,35 +472,18 @@ class LeadRepository {
 
         if ($chan === 'meta_ads') {
             $meta_raw = "(
+                (ad_id IS NOT NULL AND TRIM(ad_id) != '' AND (leadid IS NULL OR leadid = '' OR ad_id != leadid) AND LENGTH(TRIM(ad_id)) >= 7) OR
                 (fbclid IS NOT NULL AND TRIM(fbclid) != '') OR
-                LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels') OR
+                LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels') OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'facebook') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'instagram') > 0 OR
                 INSTR(LOWER(COALESCE(utm_campaign, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_campaign, '')), 'facebook') > 0 OR
-                INSTR(LOWER(COALESCE(utm_campaign, '')), 'instagram') > 0 OR
-                INSTR(LOWER(COALESCE(formulario_nome, '')), 'meta') > 0 OR
-                INSTR(LOWER(COALESCE(formulario_nome, '')), 'facebook') > 0 OR
-                INSTR(LOWER(COALESCE(formulario_nome, '')), 'instagram') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'fbclid=') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=meta') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=facebook') > 0 OR
-                INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=instagram') > 0 OR
-                INSTR(LOWER(COALESCE(referrer, '')), 'facebook.com') > 0 OR
-                INSTR(LOWER(COALESCE(referrer, '')), 'instagram.com') > 0 OR
-                (
-                    (ad_id IS NOT NULL AND TRIM(ad_id) != '' AND (leadid IS NULL OR leadid = '' OR ad_id != leadid)) AND
-                    (
-                        INSTR(LOWER(COALESCE(formulario_nome, '')), 'whatsapp') > 0 OR
-                        (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
-                        (conversation_id IS NOT NULL AND TRIM(conversation_id) != '')
-                    )
-                ) OR
-                (utm_source IS NOT NULL AND TRIM(utm_source) != '' AND LOWER(utm_source) NOT IN ('organico', 'direto', 'site', 'direct', 'referral', 'none'))
+                INSTR(LOWER(COALESCE(utm_campaign, '')), 'instagram') > 0
             )";
-            // Exclusão mútua rigorosa: leads de Google Ads, Lead Form ou Planilha nunca caem em Meta Ads web
-            return "({$meta_raw} AND NOT {$google_condition} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
+            // No modelo da empresa, Meta Ads é exclusivamente WhatsApp (Click-to-WhatsApp)
+            return "({$whatsapp_condition} AND {$meta_raw} AND NOT {$planilha_condition})";
         }
 
         if ($chan === 'chatgpt' || $chan === 'chatgpt_ads') {
@@ -514,11 +506,7 @@ class LeadRepository {
         }
 
         if ($chan === 'whatsapp') {
-            return "(
-                INSTR(LOWER(COALESCE(formulario_nome, '')), 'whatsapp') > 0 OR
-                (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
-                (conversation_id IS NOT NULL AND TRIM(conversation_id) != '')
-            )";
+            return "({$whatsapp_condition} AND NOT {$planilha_condition})";
         }
 
         if ($chan === 'organico') {
@@ -789,12 +777,40 @@ class LeadRepository {
             return 'planilha';
         }
 
-        // 4. Google Ads (Site / Landing Page): Tem gclid, gad_source, gbraid, wbraid, utm_source google/clique/aba/search ou indicativos de mídia de busca/pmax
+        // 4. WhatsApp & Meta Ads: No modelo de negócios, leads da Meta Ads chegam EXCLUSIVAMENTE via WhatsApp (Click-to-WhatsApp)
+        $is_whatsapp_lead = (
+            strpos($form, 'whatsapp') !== false ||
+            !empty($wa_stat) ||
+            !empty($conv_id) ||
+            (!empty($origem) && strpos($origem, 'whatsapp') !== false) ||
+            (!empty($lead->qualificacao_origem) && strpos(strtolower($lead->qualificacao_origem), 'whatsapp') !== false)
+        );
+
+        if ($is_whatsapp_lead) {
+            $leadid_clean = trim((string) ($lead->leadid ?? ''));
+            $ad_id_valid  = !empty($ad_id) && $ad_id !== $leadid_clean && strlen($ad_id) >= 7;
+
+            // Se veio do WhatsApp e possui anúncio associado (referral, ad_id da Meta, fbclid ou UTM Meta)
+            if ($ad_id_valid || !empty($fbclid) || strpos($utm_src, 'meta') !== false || strpos($utm_src, 'face') !== false || strpos($utm_src, 'insta') !== false) {
+                return 'meta_ads';
+            }
+            return 'whatsapp';
+        }
+
+        // 5. Google Ads (Formulários do Site / Landing Pages):
+        // Como o Meta Ads roda exclusivamente para WhatsApp, os formulários do site recebem tráfego do Google Ads
+        // Todo lead de formulário do site que possui gclid OU qualquer UTM de campanha de tráfego pago pertence ao Google Ads
+        $has_campaign_utm = (
+            !empty($utm_src) &&
+            !in_array($utm_src, ['organico', 'direto', 'site', 'none', 'direct', 'referral'])
+        );
+
         if (
             !empty($gclid) ||
             !empty($gad_src) ||
             !empty($gbraid) ||
             !empty($wbraid) ||
+            $has_campaign_utm ||
             in_array($utm_src, ['google', 'google_ads', 'google-ads', 'gads', 'adwords', 'googleads', 'google_cpc', 'google_search']) ||
             strpos($utm_src, 'google') !== false ||
             strpos($utm_src, 'gads') !== false ||
@@ -803,63 +819,13 @@ class LeadRepository {
             strpos($utm_src, 'search') !== false ||
             strpos($utm_src, 'pesquisa') !== false ||
             strpos($utm_src, 'pmax') !== false ||
-            (in_array($utm_med, ['cpc', 'ppc', 'search', 'pmax', 'display']) && strpos($utm_src, 'face') === false && strpos($utm_src, 'meta') === false && strpos($utm_src, 'insta') === false) ||
+            in_array($utm_med, ['cpc', 'ppc', 'search', 'pmax', 'display']) ||
             strpos($utm_camp, 'google') !== false ||
             strpos($utm_camp, 'gads') !== false ||
             strpos($form, 'google') !== false ||
-            strpos($origem, 'gclid=') !== false ||
-            strpos($origem, 'gbraid=') !== false ||
-            strpos($origem, 'wbraid=') !== false ||
-            strpos($origem, 'gad_source=') !== false ||
-            strpos($origem, 'gad_campaignid=') !== false ||
-            strpos($origem, 'utm_source=google') !== false ||
-            strpos($origem, 'utm_source=institucional-clique') !== false ||
-            strpos($referrer, 'google.') !== false
+            strpos($origem, 'gclid=') !== false
         ) {
             return 'google_ads';
-        }
-
-        // 5. Meta Ads: Tem fbclid, indicativos explícitos de Facebook/Instagram ou anúncio Click-to-WhatsApp
-        $leadid_clean = trim((string) ($lead->leadid ?? ''));
-        $ad_id_valid  = !empty($ad_id) && $ad_id !== $leadid_clean;
-
-        $has_meta_utm = (
-            in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels']) ||
-            strpos($utm_src, 'meta') !== false ||
-            strpos($utm_src, 'facebook') !== false ||
-            strpos($utm_src, 'instagram') !== false ||
-            strpos($utm_camp, 'meta') !== false ||
-            strpos($utm_camp, 'facebook') !== false ||
-            strpos($utm_camp, 'instagram') !== false ||
-            strpos($form, 'meta') !== false ||
-            strpos($form, 'facebook') !== false ||
-            strpos($form, 'instagram') !== false ||
-            strpos($origem, 'fbclid=') !== false ||
-            strpos($origem, 'utm_source=meta') !== false ||
-            strpos($origem, 'utm_source=facebook') !== false ||
-            strpos($origem, 'utm_source=instagram') !== false ||
-            strpos($referrer, 'facebook.com') !== false ||
-            strpos($referrer, 'instagram.com') !== false
-        );
-
-        $is_whatsapp_meta_ad = (
-            $ad_id_valid &&
-            (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id))
-        );
-
-        // Qualquer UTM de campanha ativa que não seja Google/ChatGPT/Orgânico pertence ao ecossistema de campanhas (Meta Ads)
-        $has_campaign_utm = (
-            !empty($utm_src) &&
-            !in_array($utm_src, ['organico', 'direto', 'site', 'none', 'direct', 'referral', 'email'])
-        );
-
-        if (!empty($fbclid) || $has_meta_utm || $is_whatsapp_meta_ad || $has_campaign_utm) {
-            return 'meta_ads';
-        }
-
-        // 6. WhatsApp Direto
-        if (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id)) {
-            return 'whatsapp';
         }
 
         return 'organico';
@@ -1320,6 +1286,8 @@ class LeadRepository {
 
         // 1. Remove ad_id quando idêntico ao leadid (resquício de Elementor ID ou importação)
         $wpdb->query("UPDATE {$table} SET ad_id = '' WHERE ad_id IS NOT NULL AND leadid IS NOT NULL AND ad_id != '' AND ad_id = leadid");
+        // Remove ad_id indevido de leads de formulários do site (Elementor)
+        $wpdb->query("UPDATE {$table} SET ad_id = '' WHERE pagina_origem NOT LIKE '%whatsapp%' AND formulario_nome NOT LIKE '%whatsapp%' AND (whatsapp_status IS NULL OR whatsapp_status = '') AND (conversation_id IS NULL OR conversation_id = '') AND (LENGTH(ad_id) < 7 OR ad_id = leadid)");
         $leads = $wpdb->get_results("SELECT id, nome, tipo_curso, area_interesse, polo, instancia, pagina_origem, utm_source, utm_campaign, formulario_nome FROM {$table} WHERE (tipo_curso != '' OR area_interesse != '') LIMIT 2000");
 
         $fixed_count = 0;

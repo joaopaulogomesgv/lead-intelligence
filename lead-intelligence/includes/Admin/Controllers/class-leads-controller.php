@@ -781,7 +781,13 @@ class LeadsController {
                                             <span><?php echo esc_html($chan_info['dot']); ?></span>
                                             <span><?php echo esc_html($chan_info['label']); ?></span>
                                         </span>
-                                        <?php if ($lead_channel === 'google_lead_form'): 
+                                        <?php if ($lead_channel === 'google_ads' && !empty($source_display) && !in_array($source_display, ['google', 'google_ads', 'gads'])): ?>
+                                            <div style="margin-top: 3px;" title="Campanha Google Ads: <?php echo esc_attr($source_display); ?>">
+                                                <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                    📢 <?php echo esc_html($source_display); ?>
+                                                </code>
+                                            </div>
+                                        <?php elseif ($lead_channel === 'google_lead_form'): 
                                             $form_lead_display = !empty($lead->formulario_nome) ? $lead->formulario_nome : (!empty($lead->origem) ? $lead->origem : 'Formulário Google');
                                             $camp_lead_display = !empty($lead->campaign_name) ? $lead->campaign_name : (!empty($lead->utm_campaign) && strcasecmp(trim($lead->utm_campaign), 'formulario google') !== 0 ? $lead->utm_campaign : (!empty($lead->campaign_id) ? 'Campanha #' . $lead->campaign_id : ''));
                                         ?>
@@ -1279,7 +1285,18 @@ class LeadsController {
                                 (lead.instancia ? ' | Instância: <code class="li-chip-blue" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
                                 '</div>' +
                                 '</div>';
-                    } else if (lead.ad_name || (lead.ad_id && String(lead.ad_id).trim() !== String(lead.leadid || '').trim() && String(lead.ad_id).trim().length >= 7) || lead.fbclid || (chanBadge && chanBadge.indexOf('Meta Ads') !== -1) || src.indexOf('meta') !== -1 || src.indexOf('facebook') !== -1 || src.indexOf('instagram') !== -1 || (src && ['organico','direto','site','direct','none'].indexOf(src) === -1)) {
+                    } else if (chanBadge && chanBadge.indexOf('Google Ads') !== -1) {
+                        var campStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : (lead.utm_source ? lead.utm_source : ''));
+                        html += '<div class="li-modal-alert" style="background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid #10b981; padding:12px 16px; border-radius:6px; margin-bottom:18px; display:flex; align-items:center; gap:12px;">' +
+                                '<div class="li-alert-icon" style="color:#059669; font-size:22px;"><span class="dashicons dashicons-google"></span></div>' +
+                                '<div class="li-alert-body" style="font-size:13px; color:#065f46; line-height:1.5;">' +
+                                '<strong>Lead de Campanha Google Ads (Site):</strong> ' +
+                                (campStr ? 'Campanha: <code style="background:#ffffff; color:#166534; border:1px solid #bbf7d0; padding:2px 6px; border-radius:4px; font-weight:700;">📢 ' + escH(campStr) + '</code>' : '') +
+                                (lead.gclid ? ' | GCLID: <code style="background:#ffffff; color:#0369a1; border:1px solid #bae6fd; padding:2px 6px; border-radius:4px;">' + escH(lead.gclid.substring(0, 16)) + '...</code>' : '') +
+                                (lead.instancia ? ' | Instância: <code style="background:#ffffff; color:#0f766e; border:1px solid #99f6e4; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
+                                '</div>' +
+                                '</div>';
+                    } else if (chanBadge && chanBadge.indexOf('Meta Ads') !== -1) {
                         var isRealAd = lead.ad_id && String(lead.ad_id).trim() !== String(lead.leadid || '').trim() && String(lead.ad_id).trim().length >= 7;
                         var adStr = lead.ad_name || (isRealAd ? 'Ad #' + lead.ad_id : '');
                         var campStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : (lead.utm_source && ['meta','facebook','instagram','google'].indexOf(lead.utm_source.toLowerCase()) === -1 ? lead.utm_source : ''));

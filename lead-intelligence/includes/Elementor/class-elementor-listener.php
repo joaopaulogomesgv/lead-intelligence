@@ -147,7 +147,7 @@ class ElementorListener {
 
         $campaign_id    = !empty($form_tracking['campaign_id']) ? $form_tracking['campaign_id'] : (!empty($form_tracking['gad_campaignid']) ? $form_tracking['gad_campaignid'] : (!empty($url_params['gad_campaignid']) ? sanitize_text_field($url_params['gad_campaignid']) : (!empty($url_params['campaign_id']) ? sanitize_text_field($url_params['campaign_id']) : (!empty($tracking['campaign_id']) ? $tracking['campaign_id'] : ''))));
         $adset_id       = !empty($form_tracking['adset_id']) ? $form_tracking['adset_id'] : (!empty($url_params['adset_id']) ? sanitize_text_field($url_params['adset_id']) : (!empty($url_params['adset']) ? sanitize_text_field($url_params['adset']) : (!empty($tracking['adset_id']) ? $tracking['adset_id'] : '')));
-        $ad_id          = !empty($form_tracking['ad_id']) ? $form_tracking['ad_id'] : (!empty($url_params['ad_id']) ? sanitize_text_field($url_params['ad_id']) : (!empty($url_params['ad']) ? sanitize_text_field($url_params['ad']) : (!empty($tracking['ad_id']) ? $tracking['ad_id'] : '')));
+        $ad_id          = ''; // Formulários do Elementor nunca possuem ad_id da Meta
         $leadid         = !empty($form_tracking['leadid']) ? $form_tracking['leadid'] : (!empty($url_params['lead_id']) ? sanitize_text_field($url_params['lead_id']) : (!empty($url_params['leadid']) ? sanitize_text_field($url_params['leadid']) : ''));
 
         // Se ad_id for idêntico ao leadid (ex: campo lead_id no formulário), desconsidera como anúncio
