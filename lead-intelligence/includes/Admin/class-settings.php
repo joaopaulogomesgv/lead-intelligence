@@ -107,6 +107,12 @@ class Settings {
             return;
         }
 
+        // 1.1 Alternar Status do Polo / Número (Toggle Switch Ativo/Inativo)
+        if (isset($_POST['toggle_polo_id'])) {
+            self::process_toggle_polo_status();
+            return;
+        }
+
         // 2. Excluir Polo / Número de WhatsApp
         if (isset($_POST['li_delete_polo'])) {
             self::process_delete_polo();
@@ -217,6 +223,27 @@ class Settings {
 
         Logger::info('Polos', "Número/Polo {$nome} ({$phone_number_id}) salvo com sucesso.");
         wp_safe_redirect(add_query_arg(['page' => 'lead-intelligence-settings', 'tab' => 'whatsapp', 'saved' => 1], admin_url('admin.php')));
+        exit;
+    }
+
+    /**
+     * Alterna rapidamente o status de um polo/número entre ativo e inativo
+     */
+    private static function process_toggle_polo_status() {
+        if (!check_admin_referer('li_polo_toggle_verify', 'li_nonce') || !current_user_can('manage_options')) {
+            wp_die('Permissão insuficiente ou nonce inválido.');
+        }
+
+        $polo_id = sanitize_key(wp_unslash($_POST['toggle_polo_id'] ?? ''));
+        if (!empty($polo_id)) {
+            $new_status = PoloRepository::toggle_status($polo_id);
+            $polo = PoloRepository::get_by_id($polo_id);
+            $polo_name = $polo['nome'] ?? 'Polo';
+            $status_label = ($new_status === 'ativo') ? 'ativado' : 'desativado';
+            Logger::info('Polos', "Número/polo {$polo_name} foi {$status_label} com sucesso.");
+        }
+
+        wp_safe_redirect(add_query_arg(['page' => 'lead-intelligence-settings', 'tab' => 'whatsapp'], admin_url('admin.php')));
         exit;
     }
 
@@ -800,12 +827,20 @@ class Settings {
                                             <span style="color: #94a3b8;">-</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td style="text-align: center;">
-                                        <?php if (($p['status'] ?? 'ativo') === 'ativo'): ?>
-                                            <span class="li-badge" style="background: rgba(16, 185, 129, 0.1); color: #059669;">Ativo</span>
-                                        <?php else: ?>
-                                            <span class="li-badge" style="background: rgba(100, 116, 139, 0.1); color: #64748b;">Inativo</span>
-                                        <?php endif; ?>
+                                    <td style="text-align: center; vertical-align: middle;">
+                                        <div style="display: inline-flex; align-items: center; justify-content: center; gap: 8px;">
+                                            <form method="post" action="" style="display: inline-flex; align-items: center; margin: 0; padding: 0;">
+                                                <?php wp_nonce_field('li_polo_toggle_verify', 'li_nonce'); ?>
+                                                <input type="hidden" name="toggle_polo_id" value="<?php echo esc_attr($p['id']); ?>">
+                                                <label class="li-switch" title="Clique para <?php echo (($p['status'] ?? 'ativo') === 'ativo') ? 'desativar' : 'ativar'; ?> este número">
+                                                    <input type="checkbox" name="li_toggle_polo_status" value="1" <?php checked(($p['status'] ?? 'ativo'), 'ativo'); ?> onchange="this.form.submit();">
+                                                    <span class="li-slider"></span>
+                                                </label>
+                                            </form>
+                                            <span style="font-size: 11px; font-weight: 700; color: <?php echo (($p['status'] ?? 'ativo') === 'ativo') ? '#059669' : '#94a3b8'; ?>;">
+                                                <?php echo (($p['status'] ?? 'ativo') === 'ativo') ? 'Ativo' : 'Inativo'; ?>
+                                            </span>
+                                        </div>
                                     </td>
                                     <td style="text-align: right;">
                                         <div style="display: inline-flex; align-items: center; gap: 6px;">

@@ -227,6 +227,31 @@ class PoloRepository {
     }
 
     /**
+     * Alterna o status de um polo entre 'ativo' e 'inativo'
+     *
+     * @param string $id
+     * @return string Novo status ('ativo' ou 'inativo')
+     */
+    public static function toggle_status($id) {
+        $polos = self::get_all();
+        $new_status = 'ativo';
+
+        foreach ($polos as &$p) {
+            if ($p['id'] === $id) {
+                $p['status'] = (($p['status'] ?? 'ativo') === 'ativo') ? 'inativo' : 'ativo';
+                $p['updated_at'] = current_time('mysql');
+                $new_status = $p['status'];
+                break;
+            }
+        }
+        unset($p);
+
+        update_option(self::OPTION_KEY, $polos);
+        self::sync_to_legacy_settings();
+        return $new_status;
+    }
+
+    /**
      * Retorna o Access Token a ser usado por um polo (específico ou global como fallback)
      *
      * @param array|null $polo
