@@ -487,7 +487,8 @@ class LeadRepository {
                         (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
                         (conversation_id IS NOT NULL AND TRIM(conversation_id) != '')
                     )
-                )
+                ) OR
+                (utm_source IS NOT NULL AND TRIM(utm_source) != '' AND LOWER(utm_source) NOT IN ('organico', 'direto', 'site', 'direct', 'referral', 'none'))
             )";
             // Exclusão mútua rigorosa: leads de Google Ads, Lead Form ou Planilha nunca caem em Meta Ads web
             return "({$meta_raw} AND NOT {$google_condition} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
@@ -846,7 +847,13 @@ class LeadRepository {
             (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id))
         );
 
-        if (!empty($fbclid) || $has_meta_utm || $is_whatsapp_meta_ad) {
+        // Qualquer UTM de campanha ativa que não seja Google/ChatGPT/Orgânico pertence ao ecossistema de campanhas (Meta Ads)
+        $has_campaign_utm = (
+            !empty($utm_src) &&
+            !in_array($utm_src, ['organico', 'direto', 'site', 'none', 'direct', 'referral', 'email'])
+        );
+
+        if (!empty($fbclid) || $has_meta_utm || $is_whatsapp_meta_ad || $has_campaign_utm) {
             return 'meta_ads';
         }
 
@@ -1310,6 +1317,9 @@ class LeadRepository {
     public static function repair_courses_and_instances() {
         global $wpdb;
         $table = DbSchema::get_leads_table();
+
+        // 1. Remove ad_id quando idêntico ao leadid (resquício de Elementor ID ou importação)
+        $wpdb->query("UPDATE {$table} SET ad_id = '' WHERE ad_id IS NOT NULL AND leadid IS NOT NULL AND ad_id != '' AND ad_id = leadid");
         $leads = $wpdb->get_results("SELECT id, nome, tipo_curso, area_interesse, polo, instancia, pagina_origem, utm_source, utm_campaign, formulario_nome FROM {$table} WHERE (tipo_curso != '' OR area_interesse != '') LIMIT 2000");
 
         $fixed_count = 0;

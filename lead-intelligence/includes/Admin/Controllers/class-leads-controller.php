@@ -807,14 +807,19 @@ class LeadsController {
                                                     📁 <?php echo esc_html($plan_origin_raw); ?>
                                                 </code>
                                             </div>
-                                        <?php elseif ($lead_channel === 'meta' || !empty($lead->ad_name) || (!empty($lead->ad_id) && empty($lead->gclid))): ?>
+                                        <?php 
+                                            $ad_id_val  = trim((string) ($lead->ad_id ?? ''));
+                                            $leadid_val = trim((string) ($lead->leadid ?? ''));
+                                            $is_real_ad = (!empty($ad_id_val) && $ad_id_val !== $leadid_val && strlen($ad_id_val) >= 7);
+                                        ?>
+                                        <?php elseif ($lead_channel === 'meta_ads' || !empty($lead->ad_name) || ($is_real_ad && empty($lead->gclid))): ?>
                                             <?php if (!empty($lead->ad_name)): ?>
                                                 <div style="margin-top: 3px;" title="Anúncio Meta: <?php echo esc_attr($lead->ad_name); ?>">
                                                     <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
                                                         📢 <?php echo esc_html($lead->ad_name); ?>
                                                     </code>
                                                 </div>
-                                            <?php elseif (!empty($lead->ad_id)): ?>
+                                            <?php elseif ($is_real_ad): ?>
                                                 <div style="margin-top: 3px;" title="Ad ID: <?php echo esc_attr($lead->ad_id); ?>">
                                                     <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
                                                         📢 Ad #<?php echo esc_html($lead->ad_id); ?>
@@ -1274,9 +1279,10 @@ class LeadsController {
                                 (lead.instancia ? ' | Instância: <code class="li-chip-blue" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
                                 '</div>' +
                                 '</div>';
-                    } else if (lead.ad_name || lead.ad_id || lead.fbclid || (chanBadge && chanBadge.indexOf('Meta Ads') !== -1) || src.indexOf('meta') !== -1 || src.indexOf('facebook') !== -1 || src.indexOf('instagram') !== -1) {
-                        var adStr = lead.ad_name || (lead.ad_id ? 'Ad #' + lead.ad_id : '');
-                        var campStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : '');
+                    } else if (lead.ad_name || (lead.ad_id && String(lead.ad_id).trim() !== String(lead.leadid || '').trim() && String(lead.ad_id).trim().length >= 7) || lead.fbclid || (chanBadge && chanBadge.indexOf('Meta Ads') !== -1) || src.indexOf('meta') !== -1 || src.indexOf('facebook') !== -1 || src.indexOf('instagram') !== -1 || (src && ['organico','direto','site','direct','none'].indexOf(src) === -1)) {
+                        var isRealAd = lead.ad_id && String(lead.ad_id).trim() !== String(lead.leadid || '').trim() && String(lead.ad_id).trim().length >= 7;
+                        var adStr = lead.ad_name || (isRealAd ? 'Ad #' + lead.ad_id : '');
+                        var campStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : (lead.utm_source && ['meta','facebook','instagram','google'].indexOf(lead.utm_source.toLowerCase()) === -1 ? lead.utm_source : ''));
                         var adsetStr = lead.adset_name || lead.utm_content || '';
                         html += '<div class="li-modal-alert li-alert-meta" style="background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #0081fb; padding:12px 16px; border-radius:6px; margin-bottom:18px; display:flex; align-items:center; gap:12px;">' +
                                 '<div class="li-alert-icon" style="color:#0081fb; font-size:22px;"><span class="dashicons dashicons-facebook"></span></div>' +
@@ -1342,6 +1348,9 @@ class LeadsController {
 
                     // Nomes das Campanhas com alto contraste (branco/legível)
                     var campDisplay = lead.campaign_name || lead.utm_campaign;
+                    if (!campDisplay && lead.utm_source && ['meta','google','facebook','instagram','direct','site','organico'].indexOf(lead.utm_source.toLowerCase()) === -1) {
+                        campDisplay = lead.utm_source + ' (origem da UTM)';
+                    }
                     html += makeRow('Campanha', '<span id="liModalCampName" class="li-val-bold">' + (campDisplay ? escH(campDisplay) : '<span class="li-val-empty">—</span>') + '</span>', 'dashicons-megaphone');
 
                     var adsetDisplay = lead.adset_name || lead.utm_content;
@@ -1362,9 +1371,10 @@ class LeadsController {
                     html += makeRow('fbclid / CTWA', makeCopyPill(lead.fbclid));
                     html += makeRow('Campaign ID / Gad', '<span id="liModalCampId">' + makeCopyPill(lead.campaign_id) + '</span>');
                     html += makeRow('AdSet ID', '<span id="liModalAdSetId">' + makeCopyPill(lead.adset_id) + '</span>');
-                    html += makeRow('Ad ID', '<span id="liModalAdId">' + makeCopyPill(lead.ad_id) + '</span>');
+                    var isModalRealAd = lead.ad_id && String(lead.ad_id).trim() !== String(lead.leadid || '').trim() && String(lead.ad_id).trim().length >= 7;
+                    html += makeRow('Ad ID', '<span id="liModalAdId">' + (isRealAd ? makeCopyPill(lead.ad_id) : '<span class="li-val-empty">—</span>') + '</span>');
 
-                    if (lead.ad_id) {
+                    if (isModalRealAd) {
                         html += '<div class="li-meta-sync-card">';
                         html += '<div class="li-meta-sync-title"><span class="dashicons dashicons-facebook" style="font-size:14px; width:14px; height:14px; line-height:14px;"></span> Sincronização com Meta Marketing API</div>';
                         html += '<button type="button" class="li-btn-meta-sync" id="liBtnSyncLeadAd" data-lead-id="' + lead.id + '">';
