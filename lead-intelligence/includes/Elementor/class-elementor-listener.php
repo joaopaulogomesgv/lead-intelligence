@@ -80,25 +80,50 @@ class ElementorListener {
         $ip      = self::get_client_ip();
         $ua      = !empty($_SERVER['HTTP_USER_AGENT']) ? sanitize_text_field($_SERVER['HTTP_USER_AGENT']) : '';
 
-        // 1. Extração direta de campos ocultos existentes no formulário (gclid, fbclid, referrer, page_url, etc.)
+        // 1. Extração direta de campos ocultos existentes no formulário com mapeamento estrito por alias
         $form_tracking = [];
+        $known_aliases = [
+            'leadid'         => ['leadid', 'lead_id', 'id_lead', 'lead id', 'idlead', 'id_externo'],
+            'gclid'          => ['gclid', 'google_click_id'],
+            'fbclid'         => ['fbclid', 'meta_click_id', 'fb_click'],
+            'referrer'       => ['referrer', 'http_referer'],
+            'page_url'       => ['page_url', 'pageurl', 'url_origem', 'pagina_origem'],
+            'utm_source'     => ['utm_source', 'source', 'origem_lead'],
+            'utm_medium'     => ['utm_medium', 'medium', 'meio'],
+            'utm_campaign'   => ['utm_campaign', 'campaign', 'campanha'],
+            'utm_content'    => ['utm_content', 'content', 'conteudo'],
+            'utm_term'       => ['utm_term', 'term', 'termo'],
+            'campaign_id'    => ['campaign_id', 'campaignid', 'gad_campaignid', 'id_campanha'],
+            'gad_campaignid' => ['gad_campaignid'],
+            'gad_source'     => ['gad_source'],
+            'oppref'         => ['oppref'],
+            'obref'          => ['obref'],
+            'adset_id'       => ['adset_id', 'adsetid', 'conjunto_id', 'id_conjunto', 'adgroup_id', 'adgroupid'],
+            'ad_id'          => ['ad_id', 'adid', 'creative_id', 'creativeid', 'anuncio_id', 'id_anuncio'],
+            'ad_name'        => ['ad_name', 'adname', 'anuncio_nome', 'nome_anuncio'],
+            'adset_name'     => ['adset_name', 'adsetname', 'conjunto_nome', 'nome_conjunto'],
+            'campaign_name'  => ['campaign_name', 'campaignname', 'campanha_nome', 'nome_campanha'],
+        ];
+
         if (!empty($raw_fields) && is_array($raw_fields)) {
             foreach ($raw_fields as $f_id => $f_info) {
                 $f_key   = strtolower(trim((string) $f_id));
+                $f_key   = preg_replace('/^form_fields\[([^\]]+)\]$/', '$1', $f_key);
                 $f_title = isset($f_info['title']) ? strtolower(trim((string) $f_info['title'])) : '';
+                $f_title = preg_replace('/^form_fields\[([^\]]+)\]$/', '$1', $f_title);
                 $f_val   = isset($f_info['value']) ? trim((string) $f_info['value']) : '';
                 if ($f_val === '') {
                     continue;
                 }
 
-                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source', 'oppref', 'obref', 'ad_id', 'adset_id', 'ad_name', 'adset_name', 'campaign_name'] as $tk) {
-                    if ($f_key === $tk || $f_title === $tk || strpos($f_key, $tk) !== false || strpos($f_title, $tk) !== false) {
-                        $form_tracking[$tk] = sanitize_text_field($f_val);
+                foreach ($known_aliases as $target_key => $aliases) {
+                    if (in_array($f_key, $aliases, true) || in_array($f_title, $aliases, true)) {
+                        $form_tracking[$target_key] = sanitize_text_field($f_val);
+                        break;
                     }
                 }
             }
         }
-
         // 2. Extração via URL da página de submissão (page_url enviado ou HTTP_REFERER)
         $page_url_candidate = !empty($form_tracking['page_url']) ? $form_tracking['page_url'] : $referer;
         $url_params = [];
@@ -123,6 +148,12 @@ class ElementorListener {
         $campaign_id    = !empty($form_tracking['campaign_id']) ? $form_tracking['campaign_id'] : (!empty($form_tracking['gad_campaignid']) ? $form_tracking['gad_campaignid'] : (!empty($url_params['gad_campaignid']) ? sanitize_text_field($url_params['gad_campaignid']) : (!empty($url_params['campaign_id']) ? sanitize_text_field($url_params['campaign_id']) : (!empty($tracking['campaign_id']) ? $tracking['campaign_id'] : ''))));
         $adset_id       = !empty($form_tracking['adset_id']) ? $form_tracking['adset_id'] : (!empty($url_params['adset_id']) ? sanitize_text_field($url_params['adset_id']) : (!empty($url_params['adset']) ? sanitize_text_field($url_params['adset']) : (!empty($tracking['adset_id']) ? $tracking['adset_id'] : '')));
         $ad_id          = !empty($form_tracking['ad_id']) ? $form_tracking['ad_id'] : (!empty($url_params['ad_id']) ? sanitize_text_field($url_params['ad_id']) : (!empty($url_params['ad']) ? sanitize_text_field($url_params['ad']) : (!empty($tracking['ad_id']) ? $tracking['ad_id'] : '')));
+        $leadid         = !empty($form_tracking['leadid']) ? $form_tracking['leadid'] : (!empty($url_params['lead_id']) ? sanitize_text_field($url_params['lead_id']) : (!empty($url_params['leadid']) ? sanitize_text_field($url_params['leadid']) : ''));
+
+        // Se ad_id for idêntico ao leadid (ex: campo lead_id no formulário), desconsidera como anúncio
+        if (!empty($leadid) && $ad_id === $leadid) {
+            $ad_id = '';
+        }
 
         $utm_source     = !empty($form_tracking['utm_source']) ? $form_tracking['utm_source'] : (!empty($url_params['utm_source']) ? sanitize_text_field($url_params['utm_source']) : (!empty($tracking['utm_source']) ? $tracking['utm_source'] : ''));
         $utm_medium     = !empty($form_tracking['utm_medium']) ? $form_tracking['utm_medium'] : (!empty($url_params['utm_medium']) ? sanitize_text_field($url_params['utm_medium']) : (!empty($tracking['utm_medium']) ? $tracking['utm_medium'] : ''));
@@ -149,7 +180,7 @@ class ElementorListener {
         if (empty($utm_source)) {
             if (!empty($gclid)) {
                 $utm_source = 'google_ads';
-            } elseif (!empty($fbclid) || !empty($ad_id)) {
+            } elseif (!empty($fbclid)) {
                 $utm_source = 'meta';
             }
         }
@@ -157,8 +188,9 @@ class ElementorListener {
             $utm_campaign = $campaign_id;
         }
 
-        // Se veio com ad_id mas faltou o ad_name, tenta consulta direta na Meta se as credenciais existirem
-        if (!empty($ad_id) && (empty($ad_name) || empty($campaign_name))) {
+        // Se veio com ad_id em contexto estrito da Meta mas faltou o ad_name, tenta consulta direta se credenciais existirem
+        $is_meta_context = !empty($fbclid) || in_array(strtolower($utm_source), ['meta', 'facebook', 'instagram', 'fb', 'ig']) || strpos(strtolower($utm_source), 'meta') !== false;
+        if (!empty($ad_id) && $is_meta_context && (empty($ad_name) || empty($campaign_name))) {
             $meta_details = \LeadIntelligence\WhatsApp\WabaClient::get_ad_details($ad_id);
             if (!empty($meta_details)) {
                 if (!empty($meta_details['ad_name']) && empty($ad_name)) {
@@ -211,6 +243,7 @@ class ElementorListener {
             'campaign_id'     => $campaign_id,
             'adset_id'        => $adset_id,
             'ad_id'           => $ad_id,
+            'leadid'          => $leadid,
             'campaign_name'   => $campaign_name,
             'adset_name'      => $adset_name,
             'ad_name'         => $ad_name,

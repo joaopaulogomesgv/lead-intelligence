@@ -108,6 +108,11 @@ class LeadRepository {
 
         $current_user_id = get_current_user_id();
 
+        // Proteção contra ad_id preenchido erroneamente com o mesmo valor de leadid
+        if (isset($data['ad_id'], $data['leadid']) && !empty($data['leadid']) && $data['ad_id'] === $data['leadid']) {
+            $data['ad_id'] = '';
+        }
+
         if ($existing) {
             $lead_id = (int) $existing->id;
             $update_fields = [];
@@ -459,9 +464,6 @@ class LeadRepository {
         if ($chan === 'meta_ads') {
             $meta_raw = "(
                 (fbclid IS NOT NULL AND TRIM(fbclid) != '') OR
-                (fbc IS NOT NULL AND TRIM(fbc) != '' AND fbc LIKE 'fb.%') OR
-                (ad_id IS NOT NULL AND TRIM(ad_id) != '') OR
-                (adset_id IS NOT NULL AND TRIM(adset_id) != '') OR
                 LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels') OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'facebook') > 0 OR
@@ -469,7 +471,6 @@ class LeadRepository {
                 INSTR(LOWER(COALESCE(utm_campaign, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_campaign, '')), 'facebook') > 0 OR
                 INSTR(LOWER(COALESCE(utm_campaign, '')), 'instagram') > 0 OR
-                INSTR(LOWER(COALESCE(utm_campaign, '')), 'fb') > 0 OR
                 INSTR(LOWER(COALESCE(formulario_nome, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(formulario_nome, '')), 'facebook') > 0 OR
                 INSTR(LOWER(COALESCE(formulario_nome, '')), 'instagram') > 0 OR
@@ -478,7 +479,15 @@ class LeadRepository {
                 INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=facebook') > 0 OR
                 INSTR(LOWER(COALESCE(pagina_origem, '')), 'utm_source=instagram') > 0 OR
                 INSTR(LOWER(COALESCE(referrer, '')), 'facebook.com') > 0 OR
-                INSTR(LOWER(COALESCE(referrer, '')), 'instagram.com') > 0
+                INSTR(LOWER(COALESCE(referrer, '')), 'instagram.com') > 0 OR
+                (
+                    (ad_id IS NOT NULL AND TRIM(ad_id) != '' AND (leadid IS NULL OR leadid = '' OR ad_id != leadid)) AND
+                    (
+                        INSTR(LOWER(COALESCE(formulario_nome, '')), 'whatsapp') > 0 OR
+                        (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
+                        (conversation_id IS NOT NULL AND TRIM(conversation_id) != '')
+                    )
+                )
             )";
             // Exclusão mútua rigorosa: leads de Google Ads, Lead Form ou Planilha nunca caem em Meta Ads web
             return "({$meta_raw} AND NOT {$google_condition} AND NOT {$planilha_condition} AND NOT {$google_lead_form_condition})";
@@ -677,7 +686,7 @@ class LeadRepository {
             if ($is_google_sheet) {
                 return 'planilha_google';
             }
-            if ($is_meta_sheet || !empty($ad_id)) {
+            if ($is_meta_sheet) {
                 return 'planilha_meta';
             }
             return 'planilha';
@@ -713,12 +722,11 @@ class LeadRepository {
             return 'google_ads';
         }
 
-        // 5. Meta Ads: Tem fbclid, fbc (com 'fb.'), ad_id, adset_id ou indicativos explícitos de Facebook/Instagram
-        if (
-            !empty($fbclid) ||
-            (!empty($fbc) && strpos($fbc, 'fb.') !== false) ||
-            !empty($ad_id) ||
-            !empty($adset_id) ||
+        // 5. Meta Ads: Tem fbclid, indicativos explícitos de Facebook/Instagram ou anúncio Click-to-WhatsApp
+        $leadid_clean = trim((string) ($lead->leadid ?? ''));
+        $ad_id_valid  = !empty($ad_id) && $ad_id !== $leadid_clean;
+
+        $has_meta_utm = (
             in_array($utm_src, ['meta', 'facebook', 'instagram', 'fb', 'ig', 'face', 'insta', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels']) ||
             strpos($utm_src, 'meta') !== false ||
             strpos($utm_src, 'facebook') !== false ||
@@ -726,7 +734,6 @@ class LeadRepository {
             strpos($utm_camp, 'meta') !== false ||
             strpos($utm_camp, 'facebook') !== false ||
             strpos($utm_camp, 'instagram') !== false ||
-            strpos($utm_camp, 'fb') !== false ||
             strpos($form, 'meta') !== false ||
             strpos($form, 'facebook') !== false ||
             strpos($form, 'instagram') !== false ||
@@ -736,7 +743,14 @@ class LeadRepository {
             strpos($origem, 'utm_source=instagram') !== false ||
             strpos($referrer, 'facebook.com') !== false ||
             strpos($referrer, 'instagram.com') !== false
-        ) {
+        );
+
+        $is_whatsapp_meta_ad = (
+            $ad_id_valid &&
+            (strpos($form, 'whatsapp') !== false || !empty($wa_stat) || !empty($conv_id))
+        );
+
+        if (!empty($fbclid) || $has_meta_utm || $is_whatsapp_meta_ad) {
             return 'meta_ads';
         }
 
@@ -1334,6 +1348,9 @@ class LeadRepository {
                 $repaired++;
             }
         }
+
+        // Também corrige resquício de lead_id que foi salvo erroneamente no campo ad_id
+        $wpdb->query("UPDATE {$leads_table} SET ad_id = '' WHERE ad_id != '' AND leadid != '' AND ad_id = leadid");
 
         Logger::info('Leads', "Reparo de nomes concluído: {$repaired} leads atualizados de " . count($missing_leads) . " pendentes.", [
             'files_scanned' => count($files),
