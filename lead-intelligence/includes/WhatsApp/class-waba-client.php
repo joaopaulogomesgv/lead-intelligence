@@ -180,9 +180,14 @@ class WabaClient {
         $settings = Settings::get_settings();
         $version  = !empty($settings['meta_graph_version']) ? $settings['meta_graph_version'] : 'v26.0';
 
-        // Coleta tokens candidatos: 1º meta_access_token (System User), 2º capi_access_token (se diferente)
+        // Coleta tokens candidatos: 1º Tokens dos Polos / Números individuais, 2º meta_access_token, 3º capi_access_token
         $tokens = [];
-        if (!empty($settings['meta_access_token'])) {
+        foreach (PoloRepository::get_all() as $polo) {
+            if (!empty($polo['access_token']) && !in_array(trim($polo['access_token']), $tokens, true)) {
+                $tokens['polo_' . ($polo['id'] ?? 'unknown')] = trim($polo['access_token']);
+            }
+        }
+        if (!empty($settings['meta_access_token']) && !in_array(trim($settings['meta_access_token']), $tokens, true)) {
             $tokens['meta_access_token'] = trim($settings['meta_access_token']);
         }
         if (!empty($settings['capi_access_token']) && !in_array(trim($settings['capi_access_token']), $tokens, true)) {

@@ -616,16 +616,17 @@ class Settings {
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="polo_waba_id">WABA ID do Polo (Opcional)</label></th>
+                            <th scope="row"><label for="polo_waba_id">WABA ID deste Número</label></th>
                             <td>
-                                <input type="text" id="polo_waba_id" name="polo_waba_id" value="<?php echo esc_attr($edit_polo['waba_id'] ?? ''); ?>" class="regular-text" placeholder="Deixe em branco para usar o WABA ID Geral">
+                                <input type="text" id="polo_waba_id" name="polo_waba_id" value="<?php echo esc_attr($edit_polo['waba_id'] ?? ''); ?>" class="regular-text" placeholder="Ex: 1541100330230704">
+                                <p class="description">ID da conta WhatsApp Business (WABA) que abriga este número de telefone na Meta.</p>
                             </td>
                         </tr>
                         <tr>
-                            <th scope="row"><label for="polo_access_token">Access Token Exclusivo (Opcional)</label></th>
+                            <th scope="row"><label for="polo_access_token">Access Token deste Meta App</label></th>
                             <td>
                                 <input type="password" id="polo_access_token" name="polo_access_token" value="<?php echo !empty($edit_polo['access_token']) ? '••••••••••••••••' : ''; ?>" class="large-text">
-                                <p class="description">Se este número pertencer a uma conta comercial ou WABA separada, informe o token individual dele. Se deixar em branco, o plugin usará o <strong>Access Token Geral</strong> configurado na aba Conexão Meta.</p>
+                                <p class="description">Token permanente (System User) gerado no Meta Business Manager com permissões <code>whatsapp_business_messaging</code> e <code>ads_read</code> para este número/polo.</p>
                             </td>
                         </tr>
                         <tr>
@@ -925,61 +926,24 @@ class Settings {
             </div>
         </div>
 
-        <form method="post" action="">
-            <?php wp_nonce_field('li_settings_verify', 'li_nonce'); ?>
-            <input type="hidden" name="current_tab" value="meta">
-
-            <div class="li-card" style="margin-bottom: 20px;">
-                <h3 class="li-card-title">Credenciais Mestras do Meta App (Graph API)</h3>
-                <p class="li-card-desc">Informações cadastradas no portal developers.facebook.com para autenticação e consulta de campanhas.</p>
-
-                <table class="form-table">
-                    <tr>
-                        <th scope="row"><label for="meta_app_id">Meta App ID</label></th>
-                        <td>
-                            <input type="text" id="meta_app_id" name="meta_app_id" value="<?php echo esc_attr($settings['meta_app_id']); ?>" class="regular-text">
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="meta_app_secret">Meta App Secret</label></th>
-                        <td>
-                            <input type="password" id="meta_app_secret" name="meta_app_secret" value="<?php echo !empty($settings['meta_app_secret']) ? '••••••••••••••••' : ''; ?>" class="regular-text">
-                            <p class="description">Utilizado para validação de segurança da assinatura criptográfica <code>X-Hub-Signature-256</code> do webhook.</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="meta_waba_id">WABA ID Geral (WhatsApp Business Account)</label></th>
-                        <td>
-                            <input type="text" id="meta_waba_id" name="meta_waba_id" value="<?php echo esc_attr($settings['meta_waba_id']); ?>" class="regular-text">
-                            <p class="description">ID da conta do WhatsApp Business que abriga os números da instituição.</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="meta_access_token">Access Token do Sistema (System User)</label></th>
-                        <td>
-                            <input type="password" id="meta_access_token" name="meta_access_token" value="<?php echo !empty($settings['meta_access_token']) ? '••••••••••••••••' : ''; ?>" class="large-text">
-                            <p class="description">
-                                Token permanente gerado no Meta Business Manager.<br>
-                                <strong style="color: #0284c7;">📌 Dica para Anúncios:</strong> Para que o plugin puxe automaticamente os nomes de <strong>Campanha, Conjunto e Anúncio</strong> de leads Click-to-WhatsApp, adicione a permissão <code>ads_read</code> ao usuário do sistema.
-                            </p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <th scope="row"><label for="meta_graph_version">Versão da Graph API</label></th>
-                        <td>
-                            <input type="text" id="meta_graph_version" name="meta_graph_version" value="<?php echo esc_attr($settings['meta_graph_version'] ?: 'v26.0'); ?>" class="small-text">
-                            <p class="description">Padrão recomendado: <code>v26.0</code></p>
-                        </td>
-                    </tr>
-                </table>
+        <div class="li-card" style="border-left: 4px solid #6366f1; margin-top: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+                <div>
+                    <h3 class="li-card-title" style="margin: 0 0 6px 0; font-size: 16px; color: #1e1b4b; display: flex; align-items: center; gap: 8px;">
+                        <span>📱</span> Gestão Descentralizada de Credenciais (Multi-App)
+                    </h3>
+                    <p class="li-card-desc" style="margin: 0; font-size: 13px; color: #475569; max-width: 780px; line-height: 1.5;">
+                        Como cada número de WhatsApp da sua instituição possui seu próprio Meta App, o <strong>Phone Number ID</strong>, o <strong>WABA ID</strong> e o <strong>Access Token</strong> devem ser configurados diretamente no cadastro de cada número/polo na aba <strong>Números de WhatsApp (Polos Isolados)</strong>. Cada linha opera de forma 100% isolada e independente.
+                    </p>
+                </div>
+                <div>
+                    <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings&tab=whatsapp')); ?>" class="button button-primary button-large" style="display: inline-flex; align-items: center; gap: 6px;">
+                        <span class="dashicons dashicons-phone" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px;"></span>
+                        Gerenciar Números de WhatsApp
+                    </a>
+                </div>
             </div>
-
-            <p class="submit">
-                <button type="submit" name="li_save_settings" class="button button-primary button-large">
-                    Salvar Credenciais da Meta
-                </button>
-            </p>
-        </form>
+        </div>
         <?php
     }
 
