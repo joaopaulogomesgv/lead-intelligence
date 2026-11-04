@@ -110,10 +110,14 @@ class LogsController {
                     <h2>Lead Intelligence &bull; Logs de Auditoria</h2>
                     <p class="li-subtitle">Registro de eventos do Elementor, sincronizações, webhooks e erros.</p>
                 </div>
-                <div>
-                    <form method="post" action="" onsubmit="return confirm('Deseja realmente limpar todos os logs?');">
+                <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                    <button type="button" class="button button-primary button-large" onclick="liCopyDiagnostic(this)" style="display: inline-flex; align-items: center; gap: 6px; background: #4f46e5; border-color: #4338ca; color: #fff; font-weight: 600; padding: 0 14px; height: 36px; line-height: 34px;">
+                        <span class="dashicons dashicons-clipboard" style="font-size: 17px; width: 17px; height: 17px; line-height: 17px;"></span>
+                        📋 Copiar Diagnóstico Completo (para IA / Chat)
+                    </button>
+                    <form method="post" action="" onsubmit="return confirm('Deseja realmente limpar todos os logs?');" style="margin: 0;">
                         <?php wp_nonce_field('li_clear_logs_verify', 'li_nonce'); ?>
-                        <button type="submit" name="li_clear_logs" class="button button-secondary">Limpar Todos os Logs</button>
+                        <button type="submit" name="li_clear_logs" class="button button-secondary" style="height: 36px; line-height: 34px;">Limpar Todos os Logs</button>
                     </form>
                 </div>
             </div>
@@ -409,5 +413,52 @@ class LogsController {
             </script>
         </div>
         <?php
+    }
+
+        <script>
+        function liCopyDiagnostic(btn) {
+            var oldHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="dashicons dashicons-update" style="animation: rotation 2s infinite linear; font-size:17px; width:17px; height:17px;"></span> Coletando dados da Caixa-Preta...';
+            btn.disabled = true;
+
+            jQuery.post(ajaxurl, {
+                action: 'li_get_diagnostic_report',
+                nonce: '<?php echo wp_create_nonce("li_diagnostic_nonce"); ?>'
+            }, function(res) {
+                btn.disabled = false;
+                if (res && res.success && res.data && res.data.text) {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(res.data.text).then(function() {
+                            btn.innerHTML = '✅ Copiado com Sucesso! Cole no Chat com a IA (Ctrl+V)';
+                            btn.style.background = '#059669';
+                            btn.style.borderColor = '#047857';
+                            setTimeout(function() {
+                                btn.innerHTML = oldHtml;
+                                btn.style.background = '#4f46e5';
+                                btn.style.borderColor = '#4338ca';
+                            }, 4500);
+                        }).catch(function() {
+                            prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
+                            btn.innerHTML = oldHtml;
+                        });
+                    } else {
+                        prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
+                        btn.innerHTML = oldHtml;
+                    }
+                } else {
+                    alert("Erro ao obter diagnóstico: " + ((res && res.data) ? res.data : 'Falha na resposta do servidor'));
+                    btn.innerHTML = oldHtml;
+                }
+            }).fail(function() {
+                btn.disabled = false;
+                alert("Erro na requisição AJAX ao servidor.");
+                btn.innerHTML = oldHtml;
+            });
+        }
+        </script>
+        <style>
+        @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
+        </style>
+        
     }
 }

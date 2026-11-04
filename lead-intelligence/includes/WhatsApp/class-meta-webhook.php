@@ -55,8 +55,20 @@ class MetaWebhook {
             'token_rec' => $verify_token ? substr($verify_token, 0, 4) . '***' : 'vazio',
         ]);
 
-        if ($mode === 'subscribe' && !empty($verify_token) && !empty($expected_token) && hash_equals($expected_token, $verify_token)) {
-            // A Meta exige retorno do challenge em texto puro e código HTTP 200
+        $is_valid = ($mode === 'subscribe' && !empty($verify_token) && !empty($expected_token) && hash_equals($expected_token, $verify_token));
+
+        // Registra na Caixa-Preta do Webhook
+        update_option('lead_intelligence_last_meta_webhook', [
+            'timestamp'     => current_time('mysql'),
+            'method'        => 'GET (Handshake de Verificação da Meta)',
+            'ip'            => sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? 'desconhecido'),
+            'user_agent'    => sanitize_text_field($_SERVER['HTTP_USER_AGENT'] ?? 'desconhecido'),
+            'query_params'  => $params,
+            'result_status' => $is_valid ? '🟢 Verificado com Sucesso (200 OK ecoando challenge)' : '🔴 Falha na Verificação: Token não conferiu (403 Forbidden)',
+            'body_raw'      => 'hub.mode=' . esc_html($mode) . ' | hub.verify_token=' . esc_html($verify_token ? substr($verify_token, 0, 4) . '***' : '(vazio)'),
+        ]);
+
+        if ($is_valid) {
             Logger::info('WhatsApp', 'Webhook verificado com sucesso pela Meta Graph API.');
             header('Content-Type: text/plain');
             echo $challenge;
@@ -77,6 +89,23 @@ class MetaWebhook {
     public static function handle_incoming_events(\WP_REST_Request $request) {
         $raw_body = $request->get_body();
         $headers  = $request->get_headers();
+
+        $client_ip = sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? 'desconhecido');
+        $user_agent = sanitize_text_field($_SERVER['HTTP_USER_AGENT'] ?? 'desconhecido');
+
+        // Caixa-Preta: Registra imediatamente o webhook recebido
+        update_option('lead_intelligence_last_meta_webhook', [
+            'timestamp'     => current_time('mysql'),
+            'method'        => 'POST (Mensagem/Evento Inbound da Meta)',
+            'ip'            => $client_ip,
+            'user_agent'    => $user_agent,
+            'headers'       => [
+                'x-hub-signature-256' => $request->get_header('x-hub-signature-256') ?: $request->get_header('x_hub_signature_256'),
+                'content-type'        => $request->get_header('content-type'),
+            ],
+            'result_status' => 'Recebido pelo endpoint (em processamento)',
+            'body_raw'      => substr($raw_body, 0, 8000),
+        ]);
 
         $settings = Settings::get_settings();
 
