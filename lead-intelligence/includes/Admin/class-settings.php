@@ -847,7 +847,57 @@ class Settings {
      */
     private static function render_tab_meta($settings) {
         $webhook_url = get_rest_url(null, 'lead-intelligence/v1/meta/webhook');
+        $meta_url_params = 'utm_source=meta&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{adset.name}}&utm_term={{ad.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}&campaign_name={{campaign.name}}&adset_name={{adset.name}}&ad_name={{ad.name}}';
         ?>
+        <!-- GUIA DE RASTREAMENTO DE ANÚNCIOS META ADS -->
+        <div class="li-card" style="border-left: 4px solid #0081fb; margin-bottom: 20px; background: #ffffff;">
+            <h3 class="li-card-title" style="margin: 0 0 6px 0; font-size: 16px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                <span>🎯</span> Guia: Como Rastrear Nome de Anúncio e Campanha no Meta Ads (Facebook &amp; Instagram)
+            </h3>
+            <p class="li-card-desc" style="margin: 0 0 14px 0; font-size: 13px; color: #475569;">
+                O Lead Intelligence é 100% preparado para capturar e exibir o <strong>Nome do Anúncio</strong>, <strong>Conjunto</strong> e <strong>Campanha</strong> de cada lead. Veja abaixo como configurar no Gerenciador de Anúncios da Meta para nunca mais esquecer:
+            </p>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px;">
+                <!-- FLUXO 1: ANÚNCIOS PARA O SITE / FORMULÁRIO ELEMENTOR -->
+                <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 16px;">
+                    <div style="font-weight: 700; font-size: 12px; color: #1e3a8a; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <span>🌐</span> 1. Anúncios para o Site (Elementor / Landing Page)
+                    </div>
+                    <p style="margin: 0 0 8px 0; font-size: 12px; color: #475569; line-height: 1.5;">
+                        No <strong>Meta Ads Manager</strong>, edite seu anúncio (nível <strong>Anúncio / Ad</strong>) &gt; role até a seção <strong>Rastreamento</strong> &gt; campo <strong>"Parâmetros de URL"</strong> e cole:
+                    </p>
+                    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                        <code style="font-size: 11px; background: #ffffff; color: #0284c7; padding: 7px 10px; border-radius: 4px; border: 1px solid #cbd5e1; flex: 1; overflow-x: auto; white-space: nowrap; font-family: monospace; font-weight: 600;">
+                            <?php echo esc_html($meta_url_params); ?>
+                        </code>
+                        <button type="button" class="button button-secondary button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($meta_url_params); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);" style="font-weight: 600; white-space: nowrap;">
+                            📋 Copiar Parâmetros
+                        </button>
+                    </div>
+                    <div style="font-size: 11px; color: #64748b; line-height: 1.4;">
+                        ✔ A Meta preenche as variáveis <code>{{ad.name}}</code>, <code>{{campaign.name}}</code> etc. dinamicamente a cada clique.<br>
+                        ✔ O plugin preserva esses dados por 30 dias nos cookies e injeta no formulário do Elementor.
+                    </div>
+                </div>
+
+                <!-- FLUXO 2: ANÚNCIOS CLICK-TO-WHATSAPP (CTWA) -->
+                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px;">
+                    <div style="font-weight: 700; font-size: 12px; color: #166534; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                        <span>💬</span> 2. Anúncios Click-to-WhatsApp (Conversas no WhatsApp)
+                    </div>
+                    <p style="margin: 0 0 8px 0; font-size: 12px; color: #334155; line-height: 1.5;">
+                        Quando o lead inicia a conversa pelo anúncio, a Meta envia o <code>ad_id</code> pelo webhook.
+                    </p>
+                    <div style="font-size: 12px; color: #15803d; line-height: 1.5;">
+                        • Certifique-se de que o <strong>Access Token</strong> configurado abaixo tenha a permissão <code>ads_read</code>.<br>
+                        • O plugin consulta a Meta Marketing API e preenche o <strong>Nome Oficial do Anúncio</strong> e da <strong>Campanha</strong> automaticamente!<br>
+                        • Você também pode clicar no botão de sincronização no menu <strong>Meta Ads</strong> a qualquer momento.
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="li-card" style="border-left: 4px solid #10b981; margin-bottom: 20px;">
             <h3 class="li-card-title">🔗 Webhook Próprio do Plugin (Meta Cloud API)</h3>
             <p class="li-card-desc">
@@ -968,7 +1018,10 @@ class Settings {
                                 <input type="checkbox" name="utm_preservation" value="1" <?php checked($settings['utm_preservation'], 1); ?>>
                                 <span class="li-slider"></span>
                             </label>
-                            <p class="description">Guarda <code>utm_source</code>, <code>utm_campaign</code>, <code>fbclid</code>, <code>gclid</code> e parâmetros do Google nos cookies e formulários.</p>
+                            <p class="description">Guarda <code>utm_source</code>, <code>utm_campaign</code>, <code>ad_name</code>, <code>fbclid</code>, <code>gclid</code> e parâmetros do Google e Meta nos cookies e formulários.</p>
+                            <p class="description" style="margin-top: 6px; background: #eff6ff; padding: 8px 12px; border-radius: 6px; border: 1px solid #bfdbfe; color: #1e3a8a;">
+                                💡 <strong>Dica Meta Ads:</strong> Para que o nome do anúncio e da campanha venham preenchidos automaticamente do Facebook e Instagram, use o nosso modelo de parâmetros de URL: <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-settings&tab=meta')); ?>" style="font-weight: 700; color: #0284c7;">Ver modelo de URL na aba Conexão Meta &rarr;</a>
+                            </p>
                         </td>
                     </tr>
                     <tr>

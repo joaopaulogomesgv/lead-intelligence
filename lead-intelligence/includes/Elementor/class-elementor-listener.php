@@ -91,7 +91,7 @@ class ElementorListener {
                     continue;
                 }
 
-                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source', 'oppref', 'obref'] as $tk) {
+                foreach (['gclid', 'fbclid', 'referrer', 'page_url', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'campaign_id', 'gad_campaignid', 'gad_source', 'oppref', 'obref', 'ad_id', 'adset_id', 'ad_name', 'adset_name', 'campaign_name'] as $tk) {
                     if ($f_key === $tk || $f_title === $tk || strpos($f_key, $tk) !== false || strpos($f_title, $tk) !== false) {
                         $form_tracking[$tk] = sanitize_text_field($f_val);
                     }
@@ -121,16 +121,65 @@ class ElementorListener {
         $gad_source     = !empty($form_tracking['gad_source']) ? $form_tracking['gad_source'] : (!empty($url_params['gad_source']) ? sanitize_text_field($url_params['gad_source']) : (!empty($tracking['gad_source']) ? $tracking['gad_source'] : ''));
 
         $campaign_id    = !empty($form_tracking['campaign_id']) ? $form_tracking['campaign_id'] : (!empty($form_tracking['gad_campaignid']) ? $form_tracking['gad_campaignid'] : (!empty($url_params['gad_campaignid']) ? sanitize_text_field($url_params['gad_campaignid']) : (!empty($url_params['campaign_id']) ? sanitize_text_field($url_params['campaign_id']) : (!empty($tracking['campaign_id']) ? $tracking['campaign_id'] : ''))));
+        $adset_id       = !empty($form_tracking['adset_id']) ? $form_tracking['adset_id'] : (!empty($url_params['adset_id']) ? sanitize_text_field($url_params['adset_id']) : (!empty($url_params['adset']) ? sanitize_text_field($url_params['adset']) : (!empty($tracking['adset_id']) ? $tracking['adset_id'] : '')));
+        $ad_id          = !empty($form_tracking['ad_id']) ? $form_tracking['ad_id'] : (!empty($url_params['ad_id']) ? sanitize_text_field($url_params['ad_id']) : (!empty($url_params['ad']) ? sanitize_text_field($url_params['ad']) : (!empty($tracking['ad_id']) ? $tracking['ad_id'] : '')));
 
         $utm_source     = !empty($form_tracking['utm_source']) ? $form_tracking['utm_source'] : (!empty($url_params['utm_source']) ? sanitize_text_field($url_params['utm_source']) : (!empty($tracking['utm_source']) ? $tracking['utm_source'] : ''));
         $utm_medium     = !empty($form_tracking['utm_medium']) ? $form_tracking['utm_medium'] : (!empty($url_params['utm_medium']) ? sanitize_text_field($url_params['utm_medium']) : (!empty($tracking['utm_medium']) ? $tracking['utm_medium'] : ''));
         $utm_campaign   = !empty($form_tracking['utm_campaign']) ? $form_tracking['utm_campaign'] : (!empty($url_params['utm_campaign']) ? sanitize_text_field($url_params['utm_campaign']) : (!empty($tracking['utm_campaign']) ? $tracking['utm_campaign'] : ''));
+        $utm_content    = !empty($form_tracking['utm_content']) ? $form_tracking['utm_content'] : (!empty($url_params['utm_content']) ? sanitize_text_field($url_params['utm_content']) : (!empty($tracking['utm_content']) ? $tracking['utm_content'] : ''));
+        $utm_term       = !empty($form_tracking['utm_term']) ? $form_tracking['utm_term'] : (!empty($url_params['utm_term']) ? sanitize_text_field($url_params['utm_term']) : (!empty($tracking['utm_term']) ? $tracking['utm_term'] : ''));
 
-        if (empty($utm_source) && !empty($gclid)) {
-            $utm_source = 'google_ads';
+        // Extração com máxima inteligência para Anúncios Meta Ads
+        $ad_name        = !empty($form_tracking['ad_name']) ? $form_tracking['ad_name'] : (!empty($url_params['ad_name']) ? sanitize_text_field($url_params['ad_name']) : (!empty($tracking['ad_name']) ? $tracking['ad_name'] : (!empty($utm_term) ? $utm_term : '')));
+        $adset_name     = !empty($form_tracking['adset_name']) ? $form_tracking['adset_name'] : (!empty($url_params['adset_name']) ? sanitize_text_field($url_params['adset_name']) : (!empty($tracking['adset_name']) ? $tracking['adset_name'] : (!empty($utm_content) ? $utm_content : '')));
+        $campaign_name  = !empty($form_tracking['campaign_name']) ? $form_tracking['campaign_name'] : (!empty($url_params['campaign_name']) ? sanitize_text_field($url_params['campaign_name']) : (!empty($tracking['campaign_name']) ? $tracking['campaign_name'] : (!empty($utm_campaign) ? $utm_campaign : '')));
+
+        // Se ad_name estiver preenchido e utm_term vazio, sincroniza
+        if (empty($utm_term) && !empty($ad_name)) {
+            $utm_term = $ad_name;
+        }
+        if (empty($utm_content) && !empty($adset_name)) {
+            $utm_content = $adset_name;
+        }
+        if (empty($utm_campaign) && !empty($campaign_name)) {
+            $utm_campaign = $campaign_name;
+        }
+
+        if (empty($utm_source)) {
+            if (!empty($gclid)) {
+                $utm_source = 'google_ads';
+            } elseif (!empty($fbclid) || !empty($ad_id)) {
+                $utm_source = 'meta';
+            }
         }
         if (empty($utm_campaign) && !empty($campaign_id)) {
             $utm_campaign = $campaign_id;
+        }
+
+        // Se veio com ad_id mas faltou o ad_name, tenta consulta direta na Meta se as credenciais existirem
+        if (!empty($ad_id) && (empty($ad_name) || empty($campaign_name))) {
+            $meta_details = \LeadIntelligence\WhatsApp\WabaClient::get_ad_details($ad_id);
+            if (!empty($meta_details)) {
+                if (!empty($meta_details['ad_name']) && empty($ad_name)) {
+                    $ad_name = $meta_details['ad_name'];
+                    if (empty($utm_term)) $utm_term = $ad_name;
+                }
+                if (!empty($meta_details['adset_name']) && empty($adset_name)) {
+                    $adset_name = $meta_details['adset_name'];
+                    if (empty($utm_content)) $utm_content = $adset_name;
+                }
+                if (!empty($meta_details['campaign_name']) && empty($campaign_name)) {
+                    $campaign_name = $meta_details['campaign_name'];
+                    if (empty($utm_campaign)) $utm_campaign = $campaign_name;
+                }
+                if (!empty($meta_details['campaign_id']) && empty($campaign_id)) {
+                    $campaign_id = $meta_details['campaign_id'];
+                }
+                if (!empty($meta_details['adset_id']) && empty($adset_id)) {
+                    $adset_id = $meta_details['adset_id'];
+                }
+            }
         }
 
         // Monta os dados para persistência
@@ -152,19 +201,19 @@ class ElementorListener {
             'utm_source'      => $utm_source,
             'utm_medium'      => $utm_medium,
             'utm_campaign'    => $utm_campaign,
-            'utm_content'     => !empty($form_tracking['utm_content']) ? $form_tracking['utm_content'] : (!empty($url_params['utm_content']) ? sanitize_text_field($url_params['utm_content']) : $tracking['utm_content']),
-            'utm_term'        => !empty($form_tracking['utm_term']) ? $form_tracking['utm_term'] : (!empty($url_params['utm_term']) ? sanitize_text_field($url_params['utm_term']) : $tracking['utm_term']),
+            'utm_content'     => $utm_content,
+            'utm_term'        => $utm_term,
             'fbclid'          => $fbclid,
             'fbc'             => $tracking['fbc'],
             'fbp'             => $tracking['fbp'],
             'oppref'          => $oppref,
             'obref'           => $obref,
             'campaign_id'     => $campaign_id,
-            'adset_id'        => $tracking['adset_id'],
-            'ad_id'           => $tracking['ad_id'],
-            'campaign_name'   => !empty($tracking['campaign_name']) ? $tracking['campaign_name'] : $utm_campaign,
-            'adset_name'      => $tracking['adset_name'],
-            'ad_name'         => $tracking['ad_name'],
+            'adset_id'        => $adset_id,
+            'ad_id'           => $ad_id,
+            'campaign_name'   => $campaign_name,
+            'adset_name'      => $adset_name,
+            'ad_name'         => $ad_name,
         ];
 
         // Salva ou atualiza no banco próprio

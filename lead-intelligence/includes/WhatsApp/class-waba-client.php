@@ -476,11 +476,11 @@ class WabaClient {
         global $wpdb;
         $leads_table = DbSchema::get_leads_table();
 
-        // Busca leads que têm ad_id mas faltam dados de campanha ou estão com 'Converse Conosco'
+        // Busca leads que têm ad_id mas faltam dados de campanha, conjunto ou anúncio (ou estão com 'Converse Conosco')
         $leads = $wpdb->get_results(
-            "SELECT id, ad_id, campaign_name, adset_name FROM {$leads_table} 
+            "SELECT id, ad_id, campaign_name, adset_name, ad_name FROM {$leads_table} 
              WHERE ad_id IS NOT NULL AND ad_id != '' 
-             AND (campaign_name IS NULL OR campaign_name = '' OR campaign_name = 'Converse Conosco' OR adset_name IS NULL OR adset_name = '') 
+             AND (campaign_name IS NULL OR campaign_name = '' OR campaign_name = 'Converse Conosco' OR adset_name IS NULL OR adset_name = '' OR ad_name IS NULL OR ad_name = '') 
              ORDER BY id DESC LIMIT 50"
         );
 

@@ -200,7 +200,9 @@ class InboundRelay {
             'campaign_id'         => $extracted['campaign_id'] ?? '',
             'campaign_name'       => $extracted['campaign_name'] ?? '',
             'adset_id'            => $extracted['adset_id'] ?? '',
+            'adset_name'          => $extracted['adset_name'] ?? '',
             'ad_id'               => $extracted['ad_id'] ?? '',
+            'ad_name'             => $extracted['ad_name'] ?? '',
             'leadid'              => $extracted['leadid'] ?? '',
             'gclid'               => $extracted['gclid'] ?? '',
             'fbclid'              => $extracted['fbclid'] ?? '',
@@ -600,6 +602,9 @@ class InboundRelay {
         $utm_content = !empty($query_params['utm_content']) ? $query_params['utm_content'] : $find(['utm_content', 'content', 'anuncio', 'ad_name']);
         $utm_term    = !empty($query_params['utm_term']) ? $query_params['utm_term'] : $find(['utm_term', 'term', 'palavra_chave', 'keyword']);
 
+        $ad_name    = $find(['ad_name', 'anuncio_nome', 'nome_anuncio']) ?: (!empty($utm_term) ? $utm_term : '');
+        $adset_name = $find(['adset_name', 'conjunto_nome', 'nome_conjunto']) ?: (!empty($utm_content) ? $utm_content : '');
+
         $gclid      = !empty($raw_gcl_id) ? $raw_gcl_id : $find(['gclid', 'google_click_id']);
         $fbclid     = $find(['fbclid', 'facebook_click_id']);
         $gad_source = $find(['gad_source']);
@@ -620,7 +625,9 @@ class InboundRelay {
             'campaign_id'         => sanitize_text_field($raw_campaign_id),
             'campaign_name'       => sanitize_text_field($campaign_name),
             'adset_id'            => sanitize_text_field($raw_adgroup_id),
+            'adset_name'          => sanitize_text_field($adset_name),
             'ad_id'               => sanitize_text_field($raw_creative_id),
+            'ad_name'             => sanitize_text_field($ad_name),
             'leadid'              => sanitize_text_field($raw_lead_id),
             'utm_source'          => sanitize_text_field($utm_source),
             'utm_medium'          => sanitize_text_field($utm_medium),

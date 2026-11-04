@@ -789,6 +789,27 @@ class LeadsController {
                                                     📁 <?php echo esc_html($plan_origin_raw); ?>
                                                 </code>
                                             </div>
+                                        <?php elseif ($lead_channel === 'meta' || !empty($lead->ad_name) || (!empty($lead->ad_id) && empty($lead->gclid))): ?>
+                                            <?php if (!empty($lead->ad_name)): ?>
+                                                <div style="margin-top: 3px;" title="Anúncio Meta: <?php echo esc_attr($lead->ad_name); ?>">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                        📢 <?php echo esc_html($lead->ad_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php elseif (!empty($lead->ad_id)): ?>
+                                                <div style="margin-top: 3px;" title="Ad ID: <?php echo esc_attr($lead->ad_id); ?>">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                        📢 Ad #<?php echo esc_html($lead->ad_id); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if (!empty($lead->campaign_name) && strcasecmp(trim($lead->campaign_name), trim($lead->ad_name ?? '')) !== 0): ?>
+                                                <div style="margin-top: 2px;" title="Campanha Meta: <?php echo esc_attr($lead->campaign_name); ?>">
+                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                        📂 <?php echo esc_html($lead->campaign_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
                                         <?php endif; ?>
                                     </td>
                                     <td>
@@ -1233,6 +1254,20 @@ class LeadsController {
                                 'Formulário: <code class="li-chip-amber">' + escH(formSourceStr) + '</code>' +
                                 (campExtraStr ? ' | Campanha: <code class="li-chip-green" style="background:#dcfce7; color:#166534; border:1px solid #bbf7d0; padding:2px 6px; border-radius:4px; font-weight:700;">' + escH(campExtraStr) + '</code>' : '') +
                                 (lead.instancia ? ' | Instância: <code class="li-chip-blue" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
+                                '</div>' +
+                                '</div>';
+                    } else if (lead.ad_name || lead.ad_id || lead.fbclid || (chanBadge && chanBadge.indexOf('Meta Ads') !== -1) || src.indexOf('meta') !== -1 || src.indexOf('facebook') !== -1 || src.indexOf('instagram') !== -1) {
+                        var adStr = lead.ad_name || (lead.ad_id ? 'Ad #' + lead.ad_id : '');
+                        var campStr = lead.campaign_name || (lead.utm_campaign && lead.utm_campaign.toLowerCase() !== 'formulario google' ? lead.utm_campaign : '');
+                        var adsetStr = lead.adset_name || lead.utm_content || '';
+                        html += '<div class="li-modal-alert li-alert-meta" style="background:#eff6ff; border:1px solid #bfdbfe; border-left:4px solid #0081fb; padding:12px 16px; border-radius:6px; margin-bottom:18px; display:flex; align-items:center; gap:12px;">' +
+                                '<div class="li-alert-icon" style="color:#0081fb; font-size:22px;"><span class="dashicons dashicons-facebook"></span></div>' +
+                                '<div class="li-alert-body" style="font-size:13px; color:#1e3a8a; line-height:1.5;">' +
+                                '<strong>Lead do Ecossistema Meta Ads:</strong> ' +
+                                (adStr ? 'Anúncio: <code style="background:#ffffff; color:#1d4ed8; border:1px solid #bfdbfe; padding:2px 6px; border-radius:4px; font-weight:700;">📢 ' + escH(adStr) + '</code>' : '<span style="color:#64748b;">(Sem nome de anúncio na URL)</span>') +
+                                (adsetStr ? ' | Conjunto: <code style="background:#ffffff; color:#4338ca; border:1px solid #c7d2fe; padding:2px 6px; border-radius:4px; font-weight:700;">🎯 ' + escH(adsetStr) + '</code>' : '') +
+                                (campStr ? ' | Campanha: <code style="background:#ffffff; color:#166534; border:1px solid #bbf7d0; padding:2px 6px; border-radius:4px; font-weight:700;">📂 ' + escH(campStr) + '</code>' : '') +
+                                (lead.instancia ? ' | Instância: <code style="background:#ffffff; color:#0f766e; border:1px solid #99f6e4; padding:2px 6px; border-radius:4px; font-weight:700;">🏛️ ' + escH(lead.instancia) + '</code>' : '') +
                                 '</div>' +
                                 '</div>';
                     }

@@ -182,6 +182,18 @@ class MetaAdsController {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
+        // Sincronização manual em lote com a Meta Marketing API
+        $sync_message = null;
+        $sync_success = false;
+        if (isset($_POST['li_sync_all_ads'])) {
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_all_ads_verify');
+            if ($nonce_valid || current_user_can('manage_options')) {
+                $sync_res = \LeadIntelligence\WhatsApp\WabaClient::sync_all_pending_leads();
+                $sync_message = $sync_res['message'];
+                $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
+            }
+        }
+
         // 1. Tratamento de Período (Padrão: Hoje, ou Todo se houver pesquisa ativa)
         $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
         $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
@@ -333,17 +345,89 @@ class MetaAdsController {
 
         $input_from = !empty($custom_from) ? $custom_from : (!empty($date_start) ? substr($date_start, 0, 10) : '');
         $input_to   = !empty($custom_to) ? $custom_to : (!empty($date_end) ? substr($date_end, 0, 10) : '');
+
+        $meta_url_params = 'utm_source=meta&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{adset.name}}&utm_term={{ad.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}&campaign_name={{campaign.name}}&adset_name={{adset.name}}&ad_name={{ad.name}}';
         ?>
         <div class="wrap li-wrap">
+            <!-- NOTIFICAÇÃO DE SINCRONIZAÇÃO EM MASSA -->
+            <?php if (!empty($sync_message)): ?>
+                <div class="notice <?php echo $sync_success ? 'notice-success' : 'notice-warning'; ?> is-dismissible" style="margin-bottom: 20px; padding: 12px 16px;">
+                    <strong><?php echo $sync_success ? '✔ Sucesso:' : 'ℹ️ Informação:'; ?></strong> <?php echo esc_html($sync_message); ?>
+                </div>
+            <?php endif; ?>
+
             <!-- CABEÇALHO PADRÃO WORDPRESS -->
-            <div class="li-header" style="margin-bottom: 20px;">
-                <h2 style="display: flex; align-items: center; gap: 10px;">
-                    <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
-                        <path fill="#0081FB" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z"/>
-                    </svg>
-                    Lead Intelligence &bull; Meta Ads &amp; WhatsApp
-                </h2>
-                <p class="li-subtitle">Performance integrada de campanhas, formulários e contatos do ecossistema Meta (Facebook, Instagram e WhatsApp).</p>
+            <div class="li-header" style="margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+                <div>
+                    <h2 style="display: flex; align-items: center; gap: 10px; margin: 0;">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+                            <path fill="#0081FB" d="M6.915 4.03c-1.968 0-3.683 1.28-4.871 3.113C.704 9.208 0 11.883 0 14.449c0 .706.07 1.369.21 1.973a6.624 6.624 0 0 0 .265.86 5.297 5.297 0 0 0 .371.761c.696 1.159 1.818 1.927 3.593 1.927 1.497 0 2.633-.671 3.965-2.444.76-1.012 1.144-1.626 2.663-4.32l.756-1.339.186-.325c.061.1.121.196.183.3l2.152 3.595c.724 1.21 1.665 2.556 2.47 3.314 1.046.987 1.992 1.22 3.06 1.22 1.075 0 1.876-.355 2.455-.843a3.743 3.743 0 0 0 .81-.973c.542-.939.861-2.127.861-3.745 0-2.72-.681-5.357-2.084-7.45-1.282-1.912-2.957-2.93-4.716-2.93-1.047 0-2.088.467-3.053 1.308-.652.57-1.257 1.29-1.82 2.05-.69-.875-1.335-1.547-1.958-2.056-1.182-.966-2.315-1.303-3.454-1.303zm10.16 2.053c1.147 0 2.188.758 2.992 1.999 1.132 1.748 1.647 4.195 1.647 6.4 0 1.548-.368 2.9-1.839 2.9-.58 0-1.027-.23-1.664-1.004-.496-.601-1.343-1.878-2.832-4.358l-.617-1.028a44.908 44.908 0 0 0-1.255-1.98c.07-.109.141-.224.211-.327 1.12-1.667 2.118-2.602 3.358-2.602zm-10.201.553c1.265 0 2.058.791 2.675 1.446.307.327.737.871 1.234 1.579l-1.02 1.566c-.757 1.163-1.882 3.017-2.837 4.338-1.191 1.649-1.81 1.817-2.486 1.817-.524 0-1.038-.237-1.383-.794-.263-.426-.464-1.13-.464-2.046 0-2.221.63-4.535 1.66-6.088.454-.687.964-1.226 1.533-1.533a2.264 2.264 0 0 1 1.088-.285z"/>
+                        </svg>
+                        Lead Intelligence &bull; Meta Ads &amp; WhatsApp
+                    </h2>
+                    <p class="li-subtitle" style="margin: 4px 0 0;">Performance integrada de campanhas, formulários e contatos do ecossistema Meta (Facebook, Instagram e WhatsApp).</p>
+                </div>
+                <div>
+                    <form method="post" action="" style="display: inline;">
+                        <?php wp_nonce_field('li_sync_all_ads_verify', 'li_nonce'); ?>
+                        <button type="submit" name="li_sync_all_ads" value="1" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #0284c7; border-color: #7dd3fc; background: #f0f9ff;" title="Consulta a Meta Marketing API e preenche os nomes de anúncios e campanhas faltantes dos leads que possuem Ad ID">
+                            <span class="dashicons dashicons-update" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px;"></span>
+                            Sincronizar Nomes de Anúncios Meta
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- GUIA VISUAL: COMO MARCAR E RASTREAR NOME DE ANÚNCIO E CAMPANHA NO META ADS -->
+            <div class="li-card" style="margin-bottom: 20px; border-left: 4px solid #0081fb; background: #ffffff;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 300px;">
+                        <h3 class="li-card-title" style="margin: 0 0 6px 0; font-size: 15px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                            <span>🎯</span> Como Rastrear Nome de Anúncio e Campanha no Meta Ads (Facebook &amp; Instagram)
+                        </h3>
+                        <p class="li-card-desc" style="margin: 0 0 12px 0; font-size: 13px; color: #475569;">
+                            Para que os leads cheguem com o <strong>Nome do Anúncio</strong>, <strong>Conjunto</strong> e <strong>Campanha</strong> identificados perfeitamente, você só precisa colar os parâmetros dinâmicos abaixo no seu anúncio:
+                        </p>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 6px;">
+                    <!-- FLUXO 1: FORMULÁRIOS DO SITE / ELEMENTOR -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
+                        <div style="font-weight: 700; font-size: 12px; color: #1e3a8a; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                            <span>🌐</span> 1. Anúncios para o Site (Elementor / Landing Page)
+                        </div>
+                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #475569; line-height: 1.5;">
+                            No <strong>Gerenciador de Anúncios da Meta</strong>, vá no nível do <strong>Anúncio (Ad)</strong> &gt; Seção <strong>Rastreamento</strong> &gt; Campo <strong>"Parâmetros de URL"</strong> e cole:
+                        </p>
+                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+                            <code id="li_meta_params_code" style="font-size: 11px; background: #ffffff; color: #0369a1; padding: 7px 10px; border-radius: 4px; border: 1px solid #cbd5e1; flex: 1; overflow-x: auto; white-space: nowrap; font-family: monospace; font-weight: 600;">
+                                <?php echo esc_html($meta_url_params); ?>
+                            </code>
+                            <button type="button" class="button button-secondary button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($meta_url_params); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);" style="font-weight: 600; white-space: nowrap;">
+                                📋 Copiar Parâmetros
+                            </button>
+                        </div>
+                        <div style="font-size: 11px; color: #64748b; line-height: 1.4;">
+                            ✔ A Meta substitui automaticamente <code>{{ad.name}}</code> e <code>{{campaign.name}}</code> pelos nomes reais.<br>
+                            ✔ O plugin preserva as UTMs mesmo se o lead navegar por várias páginas antes de preencher o formulário.
+                        </div>
+                    </div>
+
+                    <!-- FLUXO 2: ANÚNCIOS CLICK-TO-WHATSAPP (CTWA) -->
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px;">
+                        <div style="font-weight: 700; font-size: 12px; color: #166534; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                            <span>💬</span> 2. Anúncios Click-to-WhatsApp (Conversas Diretas)
+                        </div>
+                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #334155; line-height: 1.5;">
+                            Quando o cliente clica no anúncio e abre o WhatsApp, a Meta envia o identificador <code>ad_id</code> nativamente pelo webhook.
+                        </p>
+                        <div style="font-size: 12px; color: #15803d; line-height: 1.5; margin-bottom: 8px;">
+                            • Com a permissão <code>ads_read</code> no token em <strong>Configurações &gt; Conexão Meta</strong>, o plugin consulta a Graph API da Meta e preenche automaticamente o <strong>Nome do Anúncio</strong>, <strong>Conjunto</strong> e <strong>Campanha</strong>!<br>
+                            • Se algum lead antigo estiver sem nome, use o botão <strong>"Sincronizar Nomes de Anúncios Meta"</strong> no topo para puxar os dados oficiais.
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- CARDS DE MÉTRICAS (GRID PADRÃO DO PLUGIN / MODELO WHATSAPP) -->
@@ -504,7 +588,7 @@ class MetaAdsController {
                             <th>Nome / Lead</th>
                             <th style="width: 140px;">Telefone / WhatsApp</th>
                             <th style="width: 130px;">Instância</th>
-                            <th style="width: 120px; text-align: center;">Origem Meta</th>
+                            <th style="width: 175px;">Origem &amp; Anúncio Meta</th>
                             <th>Curso / Interesse</th>
                             <th style="width: 110px;">UTM</th>
                             <th style="width: 120px; text-align: center;">Etapa do Funil</th>
@@ -580,16 +664,40 @@ class MetaAdsController {
                                             <span style="color: #cbd5e1; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td style="text-align: center;">
-                                        <?php if ($is_wa): ?>
-                                            <span class="li-badge" style="background: rgba(21, 128, 61, 0.12); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25);" title="Contato recebido via WhatsApp Cloud API / Click-to-WhatsApp">
-                                                💬 WhatsApp
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="li-badge" style="background: rgba(8, 102, 255, 0.12); color: #0866ff; font-weight: 700; border: 1px solid rgba(8, 102, 255, 0.25);" title="Lead gerado via Anúncio / Formulário Meta">
-                                                🔵 Anúncio / Form
-                                            </span>
-                                        <?php endif; ?>
+                                    <td>
+                                        <div style="display: flex; flex-direction: column; gap: 3px;">
+                                            <div>
+                                                <?php if ($is_wa): ?>
+                                                    <span class="li-badge" style="background: rgba(21, 128, 61, 0.12); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25);" title="Contato recebido via WhatsApp Cloud API / Click-to-WhatsApp">
+                                                        💬 WhatsApp
+                                                    </span>
+                                                <?php else: ?>
+                                                    <span class="li-badge" style="background: rgba(8, 102, 255, 0.12); color: #0866ff; font-weight: 700; border: 1px solid rgba(8, 102, 255, 0.25);" title="Lead gerado via Anúncio / Formulário Meta">
+                                                        🔵 Anúncio / Form
+                                                    </span>
+                                                <?php endif; ?>
+                                            </div>
+                                            <?php if (!empty($lead->ad_name)): ?>
+                                                <div title="Nome do Anúncio Meta: <?php echo esc_attr($lead->ad_name); ?>">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                        📢 <?php echo esc_html($lead->ad_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php elseif (!empty($lead->ad_id)): ?>
+                                                <div title="Ad ID do Anúncio: <?php echo esc_attr($lead->ad_id); ?>">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                        📢 Ad #<?php echo esc_html($lead->ad_id); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
+                                            <?php if (!empty($lead->campaign_name) && strcasecmp(trim($lead->campaign_name), trim($lead->ad_name ?? '')) !== 0): ?>
+                                                <div title="Campanha Meta: <?php echo esc_attr($lead->campaign_name); ?>">
+                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                        📂 <?php echo esc_html($lead->campaign_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
+                                        </div>
                                     </td>
                                     <td>
                                         <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead->tipo_curso ?: ($lead->area_interesse ?: '-')); ?></span>
