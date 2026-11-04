@@ -20,6 +20,72 @@ class WabaClient {
      *
      * @return array ['success' => bool, 'message' => string, 'data' => array]
      */
+        /**
+     * Subscreve este Meta App à WABA para recebimento simultâneo de webhooks sem interferir no outro app
+     * A Meta permite múltiplos Meta Apps inscritos na mesma WABA recebendo eventos em paralelo.
+     *
+     * @param string|null $waba_id
+     * @param string|null $phone_number_id
+     * @return array ['success' => bool, 'message' => string]
+     */
+    public static function subscribe_waba_to_app($waba_id = null, $phone_number_id = null) {
+        $settings = Settings::get_settings();
+
+        $polo = !empty($phone_number_id) ? PoloRepository::find_by_phone_number_id($phone_number_id) : PoloRepository::get_default();
+
+        if ($polo) {
+            $waba_id = !empty($waba_id) ? $waba_id : ($polo['waba_id'] ?? '');
+            $token   = PoloRepository::get_access_token_for_polo($polo);
+        } else {
+            $token   = $settings['meta_access_token'];
+            $waba_id = !empty($waba_id) ? $waba_id : ($settings['meta_waba_id'] ?? '');
+        }
+
+        $version = $settings['meta_graph_version'] ?: 'v26.0';
+
+        if (empty($token) || empty($waba_id)) {
+            return [
+                'success' => false,
+                'message' => 'Token ou WABA ID não configurados para subscrição.',
+            ];
+        }
+
+        $url = "https://graph.facebook.com/{$version}/{$waba_id}/subscribed_apps";
+
+        $response = wp_remote_post($url, [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type'  => 'application/json',
+            ],
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                'message' => 'Erro ao subscrever App à WABA: ' . $response->get_error_message(),
+            ];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $body = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code === 200 && !empty($body['success'])) {
+            Logger::info('WhatsApp', "Meta App subscrito com sucesso à WABA {$waba_id} para recebimento simultâneo.");
+            return [
+                'success' => true,
+                'message' => "App subscrito à WABA {$waba_id}! Eventos agora são entregues simultaneamente a ambos os apps.",
+            ];
+        }
+
+        $error_msg = $body['error']['message'] ?? 'Erro desconhecido na subscrição à WABA.';
+        Logger::warning('WhatsApp', "Tentativa de subscrição à WABA {$waba_id}: {$error_msg} (HTTP {$code})");
+        return [
+            'success' => false,
+            'message' => "Subscrição WABA: {$error_msg}",
+        ];
+    }
+
     public static function test_connection($phone_number_id = null) {
         $settings = Settings::get_settings();
 
@@ -75,9 +141,22 @@ class WabaClient {
         if ($code === 200 && !empty($body['id'])) {
             $polo_info = PoloRepository::find_by_phone_number_id($phone_number_id);
             $polo_label = $polo_info && !empty($polo_info['nome']) ? " [{$polo_info['nome']}]" : "";
+            $target_waba = $polo_info['waba_id'] ?? ($settings['meta_waba_id'] ?? '');
+
+            // Ativa automaticamente a subscrição simultânea da WABA ao App
+            $sub_msg = "";
+            if (!empty($target_waba)) {
+                $sub_res = self::subscribe_waba_to_app($target_waba, $phone_number_id);
+                if (!empty($sub_res['success'])) {
+                    $sub_msg = " | 🔗 Subscrição Simultânea da WABA Ativada com Sucesso!";
+                } else {
+                    $sub_msg = " | ⚠️ Atenção Subscrição WABA: " . ($sub_res['message'] ?? '');
+                }
+            }
+
             return [
                 'success'        => true,
-                'message'        => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id),
+                'message'        => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id) . $sub_msg,
                 'verified_name'  => $body['verified_name'] ?? ($polo_info['nome'] ?? ''),
                 'display_phone'  => $body['display_phone_number'] ?? ($polo_info['display_phone'] ?? ''),
                 'quality_rating' => $body['quality_rating'] ?? 'GREEN',

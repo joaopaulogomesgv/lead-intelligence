@@ -193,6 +193,11 @@ class PoloRepository {
         // Sincroniza com as configurações gerais legadas para compatibilidade
         self::sync_to_legacy_settings();
 
+        // Tenta subscrever a WABA ao App para recebimento simultâneo sem afetar outros apps
+        if (!empty($waba_id) && !empty($access_token)) {
+            WabaClient::subscribe_waba_to_app($waba_id, $phone_number_id);
+        }
+
         return $id;
     }
 
@@ -224,6 +229,11 @@ class PoloRepository {
 
         update_option(self::OPTION_KEY, $filtered);
         self::sync_to_legacy_settings();
+
+        // Tenta subscrever a WABA ao App para recebimento simultâneo sem afetar outros apps
+        if (!empty($waba_id) && !empty($access_token)) {
+            WabaClient::subscribe_waba_to_app($waba_id, $phone_number_id);
+        }
         return true;
     }
 
@@ -249,6 +259,11 @@ class PoloRepository {
 
         update_option(self::OPTION_KEY, $polos);
         self::sync_to_legacy_settings();
+
+        // Tenta subscrever a WABA ao App para recebimento simultâneo sem afetar outros apps
+        if (!empty($waba_id) && !empty($access_token)) {
+            WabaClient::subscribe_waba_to_app($waba_id, $phone_number_id);
+        }
         return $new_status;
     }
 
