@@ -1284,6 +1284,12 @@ class LeadRepository {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
+        // 0. Auto-cura: Corrige datas de cadastro corrompidas por testes antigos da Meta (ex: mock de 2017)
+        $wpdb->query("UPDATE {$table} SET data_cadastro = created_at WHERE data_cadastro < '2020-01-01' AND created_at >= '2024-01-01'");
+
+        // 0. Auto-cura: Corrige datas de cadastro corrompidas por testes antigos da Meta (ex: mock de 2017)
+        $wpdb->query("UPDATE {$table} SET data_cadastro = created_at WHERE data_cadastro < '2020-01-01' AND created_at >= '2024-01-01'");
+
         // 1. Remove ad_id quando idêntico ao leadid (resquício de Elementor ID ou importação)
         $wpdb->query("UPDATE {$table} SET ad_id = '' WHERE ad_id IS NOT NULL AND leadid IS NOT NULL AND ad_id != '' AND ad_id = leadid");
         // Remove ad_id indevido de leads de formulários do site (Elementor)

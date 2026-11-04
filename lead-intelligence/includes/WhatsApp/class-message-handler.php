@@ -77,7 +77,13 @@ class MessageHandler {
         $msg_id   = $msg['id'] ?? '';
         $type     = $msg['type'] ?? 'text';
         $timestamp = !empty($msg['timestamp']) ? (int) $msg['timestamp'] : null;
-        $msg_date  = $timestamp ? wp_date('Y-m-d H:i:s', $timestamp) : current_time('mysql');
+        $now = current_time('timestamp');
+        // Se o timestamp for mock de testes (ex: Meta usa 2017) ou descalibrado em mais de 48h, usa o momento atual
+        if (!$timestamp || abs($now - $timestamp) > 86400 * 2) {
+            $msg_date = current_time('mysql');
+        } else {
+            $msg_date = wp_date('Y-m-d H:i:s', $timestamp);
+        }
 
         $phone_norm = PhoneNormalizer::normalize($from_raw);
         if (empty($phone_norm)) {
@@ -329,7 +335,7 @@ class MessageHandler {
                 'primeira_mensagem'    => $msg_date,
                 'ultima_mensagem'      => $msg_date,
                 'mensagens_recebidas'  => 1,
-                'data_cadastro'        => $msg_date,
+                'data_cadastro'        => current_time('mysql'),
                 'created_at'           => current_time('mysql'),
                 'updated_at'           => current_time('mysql'),
             ];
