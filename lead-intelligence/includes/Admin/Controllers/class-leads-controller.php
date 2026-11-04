@@ -114,6 +114,19 @@ class LeadsController {
             }
         }
 
+        // 5. Reparo de Cursos e Instâncias dos Leads
+        if (isset($_POST['li_repair_courses_instances'])) {
+            check_admin_referer('li_leads_bulk_verify', 'li_nonce');
+            $repair_count = LeadRepository::repair_courses_and_instances();
+            if ($repair_count > 0) {
+                $action_message = "Sucesso! {$repair_count} lead(s) tiveram o curso e a instância normalizados com sucesso no banco de dados.";
+                $action_type = 'success';
+            } else {
+                $action_message = "Todos os leads verificados já estão com seus cursos e instâncias devidamente normalizados.";
+                $action_type = 'info';
+            }
+        }
+
         if (isset($_POST['li_sync_all_ads'])) {
             $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_all_ads_verify');
             if (!$nonce_valid && !current_user_can('manage_options')) {
@@ -569,6 +582,11 @@ class LeadsController {
                                 <span class="dashicons dashicons-admin-users" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px; color: #0284c7;"></span>
                                 Reparar Nomes das Planilhas
                             </button>
+
+                            <button type="submit" name="li_repair_courses_instances" value="1" class="button" style="color: #059669; border-color: #a7f3d0; background: #ecfdf5; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;" title="Corrige leads onde a Instância/Polo foi gravada erroneamente na coluna de Curso">
+                                <span class="dashicons dashicons-welcome-learn-more" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px; color: #059669;"></span>
+                                Reparar Cursos / Instâncias
+                            </button>
                         </div>
 
                         <div style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 12px;">
@@ -680,7 +698,7 @@ class LeadsController {
                                     $etapa_icon = '📝';
                                 }
 
-                                $lead_course = $lead->tipo_curso ?: ($lead->area_interesse ?: '-');
+                                $lead_course = LeadRepository::resolve_course($lead);
                                 $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
                                 
                                 // Extrai apenas a utm_source limpa

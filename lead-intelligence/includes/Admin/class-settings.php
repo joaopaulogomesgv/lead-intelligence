@@ -30,7 +30,7 @@ class Settings {
                 'email'          => 'email,e-mail,your-email,seumelhor_email',
                 'telefone'       => 'telefone,phone,whatsapp,tel,celular,fone,contato',
                 'tipo_curso'     => 'tipo_curso,curso,modalidade,tipo,nivel',
-                'area_interesse' => 'area_interesse,area,interesse,curso_interesse,especializacao',
+                'area_interesse' => 'area_interesse,area,curso_interesse,especializacao',
                 'polo'           => 'polo,unidade,cidade,polo_apoio,campus,local',
             ],
             'enable_whatsapp_capture'  => 1,

@@ -53,7 +53,7 @@ class Matcher {
         $raw_camp      = self::get_mapped_value($row_data, $mapping, 'campanha');
         $raw_instancia = self::get_mapped_value($row_data, $mapping, 'instancia');
         if (empty($raw_instancia)) {
-            $raw_instancia = $raw_area;
+            $raw_instancia = self::get_mapped_value($row_data, $mapping, 'polo');
         }
         $raw_leadid    = self::get_mapped_value($row_data, $mapping, 'leadid');
 
@@ -682,7 +682,7 @@ class Matcher {
             'curso'     => ['curso', 'tipo_curso', 'modalidade'],
             'instancia' => ['instancia', 'intancia', 'polo', 'unidade', 'filial', 'cidade', 'campus'],
             'leadid'    => ['leadid', 'lead_id', 'id_lead', 'lead id', 'lead-id', 'idlead', 'id_externo', 'id_planilha'],
-            'area'      => ['instancia', 'intancia', 'polo', 'unidade', 'area', 'area_interesse'],
+            'area'      => ['area_interesse', 'areadeinteresse', 'area', 'segmento', 'especializacao', 'area_do_curso'],
             'motivo'    => ['motivo_perda', 'motivoperda', 'motivo_desqualificacao', 'motivodesqualificacao', 'motivo', 'justificativa', 'motivo_da_perda', 'motivodaperda'],
         ];
 

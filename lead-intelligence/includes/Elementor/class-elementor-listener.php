@@ -221,7 +221,8 @@ class ElementorListener {
             'telefone'        => $extracted['telefone'],
             'tipo_curso'      => $extracted['tipo_curso'],
             'area_interesse'  => $extracted['area_interesse'],
-            'polo'            => $extracted['polo'] ?? '',
+            'polo'            => !empty($extracted['polo']) ? $extracted['polo'] : (!empty($extracted['instancia']) ? $extracted['instancia'] : ''),
+            'instancia'       => !empty($extracted['instancia']) ? $extracted['instancia'] : (!empty($extracted['polo']) ? $extracted['polo'] : ''),
             'formulario_id'   => $form_id,
             'formulario_nome' => $form_name,
             'pagina_origem'   => $page_url_candidate,
@@ -281,6 +282,7 @@ class ElementorListener {
             'tipo_curso'     => '',
             'area_interesse' => '',
             'polo'           => '',
+            'instancia'      => '',
         ];
 
         if (empty($raw_fields) || !is_array($raw_fields)) {
@@ -306,6 +308,19 @@ class ElementorListener {
             if ($type === 'tel' && empty($result['telefone'])) {
                 $result['telefone'] = sanitize_text_field($value);
                 continue;
+            }
+
+            // Detecção inteligente de Polo / Instância / Faculdade
+            $known_instances = ['sao paulo', 'são paulo', 'sp', 'faveni', 'unifaveni', 'uniabeu', 'cerquilho', 'vni'];
+            $val_lower = strtolower($value);
+            if (in_array($val_lower, $known_instances, true) || (strpos($title, 'instan') !== false || strpos($id, 'instan') !== false || strpos($title, 'faculdade') !== false || strpos($id, 'faculdade') !== false)) {
+                if (in_array($val_lower, $known_instances, true) || empty($result['instancia'])) {
+                    $result['instancia'] = sanitize_text_field($value);
+                    if (empty($result['polo'])) {
+                        $result['polo'] = sanitize_text_field($value);
+                    }
+                    continue;
+                }
             }
 
             // Heurística direta para Nome pelo ID ou Título comum

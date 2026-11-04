@@ -538,6 +538,102 @@ class LeadRepository {
      * @param object $lead Objeto com colunas do lead
      * @return string 'google_ads' | 'google_lead_form' | 'meta_ads' | 'whatsapp' | 'chatgpt' | 'planilha' | 'planilha_google' | 'planilha_meta' | 'organico'
      */
+    /**
+     * Resolve o curso ou área de interesse real do lead, evitando que a Instância/Polo
+     * seja exibida erroneamente na coluna de Curso.
+     *
+     * @param object|array $lead
+     * @return string Nome do curso/área ou '—'
+     */
+    public static function resolve_course($lead) {
+        if (!$lead) {
+            return '—';
+        }
+        $lead = (object) $lead;
+
+        $instancia  = strtolower(trim((string) ($lead->instancia ?? '')));
+        $polo       = strtolower(trim((string) ($lead->polo ?? '')));
+        $tipo_curso = trim((string) ($lead->tipo_curso ?? ''));
+        $area       = trim((string) ($lead->area_interesse ?? ''));
+
+        // Termos conhecidos de instâncias/polos que nunca devem ser exibidos como curso
+        $known_instances = [
+            'sao paulo', 'são paulo', 'sp', 'faveni', 'unifaveni', 'uniabeu',
+            'cerquilho', 'vni', 'polo', 'instancia', 'instância', 'unidade',
+            'campus', 'faculdade'
+        ];
+
+        $is_instance_value = function($val) use ($instancia, $polo, $known_instances) {
+            if ($val === '') return true;
+            $clean = strtolower(trim($val));
+            if ($instancia !== '' && $clean === $instancia) return true;
+            if ($polo !== '' && $clean === $polo) return true;
+            if (in_array($clean, $known_instances, true)) return true;
+            return false;
+        };
+
+        // 1. Se tipo_curso for válido e não for a instância
+        if (!empty($tipo_curso) && !$is_instance_value($tipo_curso)) {
+            return $tipo_curso;
+        }
+
+        // 2. Se area_interesse for válida e não for a instância
+        if (!empty($area) && !$is_instance_value($area)) {
+            return $area;
+        }
+
+        // 3. Tenta inferir da URL de origem da página
+        if (!empty($lead->pagina_origem) && strpos($lead->pagina_origem, 'http') !== false) {
+            $path = parse_url($lead->pagina_origem, PHP_URL_PATH);
+            if (!empty($path)) {
+                $segments = array_filter(explode('/', trim($path, '/')));
+                $last_slug = end($segments);
+                if (!empty($last_slug) && !in_array(strtolower($last_slug), $known_instances, true)) {
+                    $formatted = str_replace(['-', '_'], ' ', $last_slug);
+                    $formatted = preg_replace('/^(pos gradua[cç][aã]o em|pos gradua[cç][aã]o|curso de|gradua[cç][aã]o em)\s*/iu', '', $formatted);
+                    if (mb_strlen($formatted) >= 3 && !preg_match('/^(home|contato|obrigado|landing|lp|formulario)/iu', $formatted)) {
+                        return mb_convert_case(trim($formatted), MB_CASE_TITLE, 'UTF-8');
+                    }
+                }
+            }
+        }
+
+        // 4. Tenta inferir de UTMs ou Campanha
+        $utm_src  = strtolower(trim((string) ($lead->utm_source ?? '')));
+        $utm_camp = strtolower(trim((string) ($lead->utm_campaign ?? '')));
+
+        foreach ([$utm_camp, $utm_src] as $term) {
+            if (empty($term)) continue;
+            if (strpos($term, 'neuro') !== false) {
+                return 'Neuropsicologia';
+            } elseif (strpos($term, 'direito') !== false || strpos($term, 'jurid') !== false) {
+                return 'Direito';
+            } elseif (strpos($term, 'pedagog') !== false) {
+                return 'Pedagogia';
+            } elseif (strpos($term, 'psico') !== false) {
+                return 'Psicologia';
+            } elseif (strpos($term, 'letras') !== false) {
+                return 'Letras';
+            } elseif (strpos($term, 'gestao') !== false || strpos($term, 'gestão') !== false || strpos($term, 'adm') !== false) {
+                return 'Gestão / Administração';
+            } elseif (strpos($term, 'saude') !== false || strpos($term, 'saúde') !== false) {
+                return 'Saúde';
+            } elseif (strpos($term, 'engenharia') !== false) {
+                return 'Engenharia';
+            }
+        }
+
+        // 5. Tenta inferir do Nome do Formulário
+        if (!empty($lead->formulario_nome)) {
+            $fn = $lead->formulario_nome;
+            if (!in_array(strtolower(trim($fn)), $known_instances, true) && !preg_match('/^(elementor|form[uú]l[aá]rio padro|form \d+|teste)/iu', $fn)) {
+                return $fn;
+            }
+        }
+
+        return '—';
+    }
+
     public static function get_channel($lead) {
         if (!$lead) {
             return 'organico';
@@ -1205,6 +1301,54 @@ class LeadRepository {
      *
      * @return array ['repaired' => int, 'total_missing' => int, 'files_scanned' => int]
      */
+    /**
+     * Corrige leads no banco de dados onde a instância ou polo foi gravada erroneamente
+     * na coluna tipo_curso ou area_interesse.
+     *
+     * @return int Quantidade de leads corrigidos
+     */
+    public static function repair_courses_and_instances() {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+        $leads = $wpdb->get_results("SELECT id, nome, tipo_curso, area_interesse, polo, instancia, pagina_origem, utm_source, utm_campaign, formulario_nome FROM {$table} WHERE (tipo_curso != '' OR area_interesse != '') LIMIT 2000");
+
+        $fixed_count = 0;
+        $known_instances = ['sao paulo', 'são paulo', 'sp', 'faveni', 'unifaveni', 'uniabeu', 'cerquilho', 'vni'];
+
+        foreach ($leads as $l) {
+            $updates = [];
+            $inst_val = strtolower(trim((string) ($l->instancia ?: $l->polo)));
+            $tipo = strtolower(trim((string) $l->tipo_curso));
+            $area = strtolower(trim((string) $l->area_interesse));
+
+            $is_tipo_instance = ($tipo !== '' && ($tipo === $inst_val || in_array($tipo, $known_instances, true)));
+            $is_area_instance = ($area !== '' && ($area === $inst_val || in_array($area, $known_instances, true)));
+
+            if ($is_tipo_instance || $is_area_instance) {
+                // Preserva a instância caso estivesse vazia
+                if (empty($l->instancia)) {
+                    $found_inst = $is_tipo_instance ? $l->tipo_curso : $l->area_interesse;
+                    $updates['instancia'] = sanitize_text_field($found_inst);
+                }
+                if (empty($l->polo)) {
+                    $found_inst = $is_tipo_instance ? $l->tipo_curso : $l->area_interesse;
+                    $updates['polo'] = sanitize_text_field($found_inst);
+                }
+
+                // Resolve o curso real (por URL, UTMs, etc.)
+                $resolved = self::resolve_course($l);
+                $updates['tipo_curso'] = ($resolved !== '—') ? $resolved : '';
+                $updates['area_interesse'] = '';
+
+                $wpdb->update($table, $updates, ['id' => $l->id]);
+                $fixed_count++;
+            }
+        }
+
+        Logger::info('Leads', "Reparação de Cursos e Instâncias concluída: {$fixed_count} leads corrigidos com sucesso.");
+        return $fixed_count;
+    }
+
     public static function repair_missing_names_from_elementor_files() {
         global $wpdb;
         $leads_table   = DbSchema::get_leads_table();
