@@ -76,9 +76,12 @@ class WabaClient {
             $polo_info = PoloRepository::find_by_phone_number_id($phone_number_id);
             $polo_label = $polo_info && !empty($polo_info['nome']) ? " [{$polo_info['nome']}]" : "";
             return [
-                'success' => true,
-                'message' => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id),
-                'data'    => $body,
+                'success'        => true,
+                'message'        => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id),
+                'verified_name'  => $body['verified_name'] ?? ($polo_info['nome'] ?? ''),
+                'display_phone'  => $body['display_phone_number'] ?? ($polo_info['display_phone'] ?? ''),
+                'quality_rating' => $body['quality_rating'] ?? 'GREEN',
+                'data'           => $body,
             ];
         }
 

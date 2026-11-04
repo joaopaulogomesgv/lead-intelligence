@@ -718,9 +718,9 @@ class Settings {
                     <div class="notice notice-success is-dismissible" style="margin-bottom: 20px; padding: 12px 16px;">
                         <strong style="font-size: 14px;">✔ Conexão com a Meta Realizada com Sucesso!</strong>
                         <div style="margin-top: 6px; font-size: 13px;">
-                            Nome Registrado: <strong><?php echo esc_html($test_result['verified_name'] ?? 'N/D'); ?></strong> |
-                            Telefone Oficial: <strong><?php echo esc_html($test_result['display_phone'] ?? 'N/D'); ?></strong> |
-                            Qualidade: <strong><?php echo esc_html($test_result['quality_rating'] ?? 'GREEN'); ?></strong>
+                            Nome Registrado: <strong><?php echo esc_html(!empty($test_result['verified_name']) ? $test_result['verified_name'] : (!empty($test_result['data']['verified_name']) ? $test_result['data']['verified_name'] : 'N/D')); ?></strong> |
+                            Telefone Oficial: <strong><?php echo esc_html(!empty($test_result['display_phone']) ? $test_result['display_phone'] : (!empty($test_result['data']['display_phone_number']) ? $test_result['data']['display_phone_number'] : 'N/D')); ?></strong> |
+                            Qualidade: <strong><?php echo esc_html(!empty($test_result['quality_rating']) ? $test_result['quality_rating'] : (!empty($test_result['data']['quality_rating']) ? $test_result['data']['quality_rating'] : 'GREEN')); ?></strong>
                         </div>
                     </div>
                 <?php else: ?>
