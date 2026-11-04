@@ -585,6 +585,52 @@ class Settings {
                     break;
             }
             ?>
+
+        <script>
+        function liCopyDiagnostic(btn) {
+            var oldHtml = btn.innerHTML;
+            btn.innerHTML = '<span class="dashicons dashicons-update" style="animation: rotation 2s infinite linear; font-size:17px; width:17px; height:17px;"></span> Coletando dados da Caixa-Preta...';
+            btn.disabled = true;
+
+            jQuery.post(ajaxurl, {
+                action: 'li_get_diagnostic_report',
+                nonce: '<?php echo wp_create_nonce("li_diagnostic_nonce"); ?>'
+            }, function(res) {
+                btn.disabled = false;
+                if (res && res.success && res.data && res.data.text) {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        navigator.clipboard.writeText(res.data.text).then(function() {
+                            btn.innerHTML = '✅ Copiado com Sucesso! Cole no Chat com a IA (Ctrl+V)';
+                            btn.style.background = '#059669';
+                            btn.style.borderColor = '#047857';
+                            setTimeout(function() {
+                                btn.innerHTML = oldHtml;
+                                btn.style.background = '#4f46e5';
+                                btn.style.borderColor = '#4338ca';
+                            }, 4500);
+                        }).catch(function() {
+                            prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
+                            btn.innerHTML = oldHtml;
+                        });
+                    } else {
+                        prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
+                        btn.innerHTML = oldHtml;
+                    }
+                } else {
+                    alert("Erro ao obter diagnóstico: " + ((res && res.data) ? res.data : 'Falha na resposta do servidor'));
+                    btn.innerHTML = oldHtml;
+                }
+            }).fail(function() {
+                btn.disabled = false;
+                alert("Erro na requisição AJAX ao servidor.");
+                btn.innerHTML = oldHtml;
+            });
+        }
+        </script>
+        <style>
+        @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
+        </style>
+
         </div>
         <?php
     }
@@ -1763,50 +1809,5 @@ class Settings {
         <?php
     }
 
-        <script>
-        function liCopyDiagnostic(btn) {
-            var oldHtml = btn.innerHTML;
-            btn.innerHTML = '<span class="dashicons dashicons-update" style="animation: rotation 2s infinite linear; font-size:17px; width:17px; height:17px;"></span> Coletando dados da Caixa-Preta...';
-            btn.disabled = true;
-
-            jQuery.post(ajaxurl, {
-                action: 'li_get_diagnostic_report',
-                nonce: '<?php echo wp_create_nonce("li_diagnostic_nonce"); ?>'
-            }, function(res) {
-                btn.disabled = false;
-                if (res && res.success && res.data && res.data.text) {
-                    if (navigator.clipboard && navigator.clipboard.writeText) {
-                        navigator.clipboard.writeText(res.data.text).then(function() {
-                            btn.innerHTML = '✅ Copiado com Sucesso! Cole no Chat com a IA (Ctrl+V)';
-                            btn.style.background = '#059669';
-                            btn.style.borderColor = '#047857';
-                            setTimeout(function() {
-                                btn.innerHTML = oldHtml;
-                                btn.style.background = '#4f46e5';
-                                btn.style.borderColor = '#4338ca';
-                            }, 4500);
-                        }).catch(function() {
-                            prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
-                            btn.innerHTML = oldHtml;
-                        });
-                    } else {
-                        prompt("Copie o texto de diagnóstico abaixo:", res.data.text);
-                        btn.innerHTML = oldHtml;
-                    }
-                } else {
-                    alert("Erro ao obter diagnóstico: " + ((res && res.data) ? res.data : 'Falha na resposta do servidor'));
-                    btn.innerHTML = oldHtml;
-                }
-            }).fail(function() {
-                btn.disabled = false;
-                alert("Erro na requisição AJAX ao servidor.");
-                btn.innerHTML = oldHtml;
-            });
-        }
-        </script>
-        <style>
-        @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
-        </style>
         
-    }
 }

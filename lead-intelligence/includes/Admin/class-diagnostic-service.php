@@ -221,3 +221,4 @@ class DiagnosticService {
         return implode("\n", $out);
     }
 }
+

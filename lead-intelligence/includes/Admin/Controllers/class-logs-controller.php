@@ -411,9 +411,6 @@ class LogsController {
                 });
             });
             </script>
-        </div>
-        <?php
-    }
 
         <script>
         function liCopyDiagnostic(btn) {
@@ -459,6 +456,10 @@ class LogsController {
         <style>
         @keyframes rotation { from { transform: rotate(0deg); } to { transform: rotate(359deg); } }
         </style>
-        
+
+        </div>
+        <?php
     }
+
+        
 }
