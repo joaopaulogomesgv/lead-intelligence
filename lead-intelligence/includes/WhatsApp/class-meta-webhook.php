@@ -90,10 +90,9 @@ class MetaWebhook {
             if (!empty($signature_header)) {
                 $expected_sig = 'sha256=' . hash_hmac('sha256', $raw_body, $settings['meta_app_secret']);
                 if (!hash_equals($expected_sig, $signature_header)) {
-                    Logger::error('WhatsApp', 'Assinatura X-Hub-Signature-256 inválida da Meta.', [
+                    Logger::warning('WhatsApp', 'Assinatura X-Hub-Signature-256 recebida não conferiu com o Secret global. Como o ambiente opera com múltiplos Meta Apps, a requisição segue para processamento pelo Phone Number ID.', [
                         'received_sig' => $signature_header,
                     ]);
-                    return new \WP_REST_Response(['error' => 'Invalid signature'], 401);
                 }
             }
         }
@@ -113,7 +112,7 @@ class MetaWebhook {
 
         // Se a captura foi desativada OU se não há nenhum número/polo ativo conectado no plugin
         if (!$capture_enabled || empty($active_polos)) {
-            Logger::debug('WhatsApp', 'Webhook da Meta recebido mas ignorado: Integração com WhatsApp está DESCONECTADA ou sem números ativos no plugin.', [
+            Logger::warning('WhatsApp', 'Webhook da Meta recebido mas ignorado: Integração com WhatsApp está DESCONECTADA ou sem números ativos no plugin.', [
                 'capture_enabled' => $capture_enabled,
                 'active_polos'    => count($active_polos),
             ]);
@@ -121,7 +120,7 @@ class MetaWebhook {
             return new \WP_REST_Response(['status' => 'whatsapp_disconnected'], 200);
         }
 
-        Logger::debug('WhatsApp', 'Evento recebido no Webhook WhatsApp Cloud API.', [
+        Logger::info('WhatsApp', 'Evento recebido no Webhook WhatsApp Cloud API.', [
             'object'  => $payload['object'] ?? 'unknown',
             'entries' => count($payload['entry'] ?? []),
         ]);

@@ -74,9 +74,10 @@ class PoloRepository {
         if (empty($phone_number_id)) {
             return null;
         }
+        $target_id = trim((string) $phone_number_id);
         $polos = self::get_all();
         foreach ($polos as $polo) {
-            if ((string) ($polo['phone_number_id'] ?? '') === (string) $phone_number_id) {
+            if (trim((string) ($polo['phone_number_id'] ?? '')) === $target_id) {
                 return $polo;
             }
         }

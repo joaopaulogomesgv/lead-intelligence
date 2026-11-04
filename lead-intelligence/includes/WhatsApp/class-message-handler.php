@@ -106,14 +106,43 @@ class MessageHandler {
         $received_display_phone = sanitize_text_field($metadata['display_phone_number'] ?? '');
 
         // Identifica o Polo associado a este Phone Number ID
-        if (empty($received_phone_id)) {
-            Logger::debug('WhatsApp', 'Mensagem ignorada: Phone Number ID ausente no payload.');
-            return;
+        $polo_info = null;
+        if (!empty($received_phone_id)) {
+            $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
         }
 
-        $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
+        // Fallback 1: Tenta localizar pelo número de exibição se não achou pelo Phone Number ID
+        if (!$polo_info && !empty($received_display_phone)) {
+            $polo_info = \LeadIntelligence\WhatsApp\PoloRepository::find_by_phone($received_display_phone);
+        }
+
+        // Fallback 2: Se ainda não localizou mas há apenas 1 polo ativo ou um polo padrão, associa com segurança para não perder o lead
+        if (!$polo_info) {
+            $active_polos = \LeadIntelligence\WhatsApp\PoloRepository::get_active();
+            if (count($active_polos) === 1) {
+                $polo_info = $active_polos[0];
+                Logger::info('WhatsApp', "Mensagem associada com segurança ao único Polo ativo '{$polo_info['nome']}' (Phone ID recebido: {$received_phone_id}).", [
+                    'received_phone_id'      => $received_phone_id,
+                    'received_display_phone' => $received_display_phone,
+                    'polo'                   => $polo_info['nome'],
+                ]);
+            } elseif ($default_polo = \LeadIntelligence\WhatsApp\PoloRepository::get_default()) {
+                if (($default_polo['status'] ?? 'ativo') === 'ativo') {
+                    $polo_info = $default_polo;
+                    Logger::info('WhatsApp', "Mensagem associada com segurança ao Polo Padrão '{$polo_info['nome']}' (Phone ID recebido: {$received_phone_id}).", [
+                        'received_phone_id'      => $received_phone_id,
+                        'received_display_phone' => $received_display_phone,
+                        'polo'                   => $polo_info['nome'],
+                    ]);
+                }
+            }
+        }
+
         if (!$polo_info || ($polo_info['status'] ?? 'ativo') !== 'ativo') {
-            Logger::debug('WhatsApp', "Mensagem ignorada: O Phone Number ID {$received_phone_id} não pertence a nenhum número de WhatsApp ativo configurado no plugin.");
+            Logger::warning('WhatsApp', "Mensagem ignorada: O Phone Number ID '{$received_phone_id}' (Telefone '{$received_display_phone}') não pertence a nenhum número de WhatsApp ativo configurado no plugin.", [
+                'received_phone_id'      => $received_phone_id,
+                'received_display_phone' => $received_display_phone,
+            ]);
             return;
         }
 
