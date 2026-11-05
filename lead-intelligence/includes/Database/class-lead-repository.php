@@ -474,6 +474,9 @@ class LeadRepository {
             $meta_raw = "(
                 (ad_id IS NOT NULL AND TRIM(ad_id) != '' AND (leadid IS NULL OR leadid = '' OR ad_id != leadid) AND LENGTH(TRIM(ad_id)) >= 7) OR
                 (fbclid IS NOT NULL AND TRIM(fbclid) != '') OR
+                (conversation_id IS NOT NULL AND TRIM(conversation_id) != '') OR
+                (formulario_nome IS NOT NULL AND INSTR(LOWER(formulario_nome), 'whatsapp') > 0) OR
+                (whatsapp_status IS NOT NULL AND TRIM(whatsapp_status) != '') OR
                 LOWER(COALESCE(utm_source, '')) IN ('meta', 'facebook', 'instagram', 'fb', 'ig', 'meta_ads', 'facebook_ads', 'instagram_feed', 'stories', 'reels') OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'meta') > 0 OR
                 INSTR(LOWER(COALESCE(utm_source, '')), 'facebook') > 0 OR

@@ -57,7 +57,7 @@ class MessageHandler {
                 // 2. Processa atualizações de status de envio (Sent, Delivered, Read)
                 if (!empty($value['statuses']) && is_array($value['statuses'])) {
                     foreach ($value['statuses'] as $status_event) {
-                        self::handle_status_update($status_event, $value);
+                        self::handle_status_update($status_event, $value, $contacts_map);
                     }
                 }
             }
@@ -325,9 +325,9 @@ class MessageHandler {
                 'adset_name'           => sanitize_text_field($adset_name),
                 'ad_id'                => sanitize_text_field($ad_id),
                 'ad_name'              => sanitize_text_field($ad_name),
-                'utm_source'           => $utm_source,
-                'utm_medium'           => $utm_medium,
-                'utm_campaign'         => $utm_campaign,
+                'utm_source'           => !empty($utm_source) ? $utm_source : 'meta_ads',
+                'utm_medium'           => !empty($utm_medium) ? $utm_medium : 'whatsapp',
+                'utm_campaign'         => !empty($utm_campaign) ? $utm_campaign : 'WhatsApp Inbound',
                 'utm_content'          => $utm_content,
                 'utm_term'             => $utm_term,
                 'qualificacao_status'  => 'pendente',
@@ -406,18 +406,47 @@ class MessageHandler {
 
     /**
      * Processa atualizações de status de mensagens enviadas (sent, delivered, read)
+     * e cria leads caso seja uma conversa iniciada por anúncio Meta (referral_conversion)
      */
-    private static function handle_status_update($status_event, $change_value) {
+    private static function handle_status_update($status_event, $change_value, $contacts_map = []) {
         global $wpdb;
         $whatsapp_table = DbSchema::get_whatsapp_table();
         $leads_table    = DbSchema::get_leads_table();
+        $history_table  = DbSchema::get_history_table();
 
         $msg_id       = $status_event['id'] ?? '';
         $new_status   = $status_event['status'] ?? ''; // sent, delivered, read, failed
         $recipient    = $status_event['recipient_id'] ?? '';
         $conv_id      = $status_event['conversation']['id'] ?? '';
+        $conv_origin  = $status_event['conversation']['origin']['type'] ?? '';
+        $pricing_cat  = $status_event['pricing']['category'] ?? '';
 
         $phone_norm = PhoneNormalizer::normalize($recipient);
+        if (empty($phone_norm)) {
+            return;
+        }
+
+        // Extrai metadados da linha/número receptor da Meta (Multi-Polo)
+        $metadata               = $change_value['metadata'] ?? [];
+        $received_phone_id      = sanitize_text_field($metadata['phone_number_id'] ?? '');
+        $received_display_phone = sanitize_text_field($metadata['display_phone_number'] ?? '');
+
+        $polo_info = null;
+        if (!empty($received_phone_id)) {
+            $polo_info = \LeadIntelligence\Admin\Settings::find_polo_by_phone_number_id($received_phone_id);
+        }
+        if (!$polo_info && !empty($received_display_phone)) {
+            $polo_info = \LeadIntelligence\WhatsApp\PoloRepository::find_by_phone($received_display_phone);
+        }
+        if (!$polo_info) {
+            $active_polos = \LeadIntelligence\WhatsApp\PoloRepository::get_active();
+            if (count($active_polos) === 1) {
+                $polo_info = $active_polos[0];
+            } elseif ($default_polo = \LeadIntelligence\WhatsApp\PoloRepository::get_default()) {
+                $polo_info = $default_polo;
+            }
+        }
+        $polo_nome = !empty($polo_info['nome']) ? $polo_info['nome'] : (!empty($received_display_phone) ? ('Polo ' . $received_display_phone) : 'Polo WhatsApp');
 
         // Atualiza status na tabela de mensagens se já existir
         if (!empty($msg_id)) {
@@ -428,21 +457,83 @@ class MessageHandler {
             );
         }
 
-        // Se tiver conversation_id e lead correspondente, atualiza conversation_id no lead
-        if (!empty($phone_norm)) {
-            $lead = LeadRepository::find_by_phone($phone_norm);
-            if ($lead) {
-                $lead_updates = [];
-                if (!empty($conv_id) && empty($lead->conversation_id)) {
-                    $lead_updates['conversation_id'] = sanitize_text_field($conv_id);
-                }
-                if ($new_status === 'read') {
-                    $lead_updates['whatsapp_status'] = 'lida';
-                }
-                if (!empty($lead_updates)) {
-                    $lead_updates['updated_at'] = current_time('mysql');
-                    $wpdb->update($leads_table, $lead_updates, ['id' => $lead->id]);
-                }
+        $lead = LeadRepository::find_by_phone($phone_norm);
+
+        if ($lead) {
+            $lead_updates = [];
+            if (!empty($conv_id) && empty($lead->conversation_id)) {
+                $lead_updates['conversation_id'] = sanitize_text_field($conv_id);
+            }
+            if ($new_status === 'read') {
+                $lead_updates['whatsapp_status'] = 'lida';
+            } elseif (empty($lead->whatsapp_status)) {
+                $lead_updates['whatsapp_status'] = sanitize_text_field($new_status);
+            }
+            if (empty($lead->polo) && !empty($polo_nome)) {
+                $lead_updates['polo'] = $polo_nome;
+            }
+            if (empty($lead->phone_number_id) && !empty($received_phone_id)) {
+                $lead_updates['phone_number_id'] = $received_phone_id;
+            }
+            if (!empty($lead_updates)) {
+                $lead_updates['updated_at'] = current_time('mysql');
+                $wpdb->update($leads_table, $lead_updates, ['id' => $lead->id]);
+            }
+        } else {
+            // Se o lead ainda não existe e este evento indica um contato no WhatsApp (especialmente anúncio Meta Ads)
+            $is_referral  = ($conv_origin === 'referral_conversion' || $pricing_cat === 'referral_conversion');
+            $contact_name = $contacts_map[$recipient] ?? ($contacts_map[$phone_norm] ?? '');
+            if (empty($contact_name)) {
+                $contact_name = $is_referral ? 'Lead WhatsApp (Meta Ads)' : ('Lead WhatsApp ' . substr($phone_norm, -4));
+            }
+
+            $now_mysql = current_time('mysql');
+            $new_lead_data = [
+                'uuid'                 => wp_generate_uuid4(),
+                'nome'                 => sanitize_text_field($contact_name),
+                'telefone'             => sanitize_text_field($recipient),
+                'telefone_normalizado' => $phone_norm,
+                'formulario_nome'      => $is_referral ? 'WhatsApp Click-to-WhatsApp (Meta Ads)' : 'WhatsApp Cloud API',
+                'polo'                 => $polo_nome,
+                'phone_number_id'      => $received_phone_id,
+                'conversation_id'      => sanitize_text_field($conv_id),
+                'fbclid'               => $is_referral ? sanitize_text_field($conv_id) : '',
+                'ad_id'                => $is_referral ? sanitize_text_field($conv_id) : '',
+                'utm_source'           => 'meta_ads',
+                'utm_medium'           => 'whatsapp',
+                'utm_campaign'         => $is_referral ? 'Click-to-WhatsApp' : 'WhatsApp Inbound',
+                'qualificacao_status'  => 'pendente',
+                'whatsapp_status'      => ($new_status === 'read' ? 'lida' : sanitize_text_field($new_status)),
+                'primeira_mensagem'    => $now_mysql,
+                'ultima_mensagem'      => $now_mysql,
+                'mensagens_recebidas'  => 0,
+                'mensagens_enviadas'   => 1,
+                'data_cadastro'        => $now_mysql,
+                'created_at'           => $now_mysql,
+                'updated_at'           => $now_mysql,
+            ];
+
+            $wpdb->insert($leads_table, $new_lead_data);
+            $new_lead_id = (int) $wpdb->insert_id;
+
+            if ($new_lead_id > 0) {
+                $polo_txt = !empty($polo_nome) ? " via {$polo_nome}" : "";
+                $wpdb->insert($history_table, [
+                    'lead_id'        => $new_lead_id,
+                    'campo'          => 'criacao',
+                    'valor_anterior' => '',
+                    'valor_novo'     => "Lead criado a partir de evento WhatsApp ({$new_lead_data['formulario_nome']}{$polo_txt})",
+                    'origem'         => 'whatsapp',
+                    'usuario_id'     => 0,
+                    'created_at'     => $now_mysql,
+                ]);
+
+                Logger::info('WhatsApp', "Novo lead #{$new_lead_id} criado a partir de evento WhatsApp ({$phone_norm}).", [
+                    'polo'        => $polo_nome,
+                    'status'      => $new_status,
+                    'conv_id'     => $conv_id,
+                    'conv_origin' => $conv_origin,
+                ]);
             }
         }
     }
