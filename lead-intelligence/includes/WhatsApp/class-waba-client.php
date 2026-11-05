@@ -50,7 +50,7 @@ class WabaClient {
             ];
         }
 
-        $url = "https://graph.facebook.com/{$version}/{$waba_id}/subscribed_apps";
+        $url = "https://graph.facebook.com/{$version}/{$waba_id}/subscribed_apps?subscribed_fields=messages";
 
         $response = wp_remote_post($url, [
             'headers' => [
@@ -154,12 +154,55 @@ class WabaClient {
                 }
             }
 
+            // Inspeciona qual Meta App gerou este Token
+            $app_name = 'Desconhecido';
+            $app_id   = 'N/D';
+            $app_resp = wp_remote_get("https://graph.facebook.com/{$version}/app", [
+                'headers' => ['Authorization' => 'Bearer ' . $token],
+                'timeout' => 10,
+            ]);
+            if (!is_wp_error($app_resp)) {
+                $app_data = json_decode(wp_remote_retrieve_body($app_resp), true);
+                if (!empty($app_data['id'])) {
+                    $app_name = $app_data['name'] ?? 'Sem Nome';
+                    $app_id   = $app_data['id'];
+                }
+            }
+
+            // Inspeciona a lista de Apps inscritos nesta WABA
+            $sub_apps_info = [];
+            if (!empty($target_waba)) {
+                $sub_resp = wp_remote_get("https://graph.facebook.com/{$version}/{$target_waba}/subscribed_apps", [
+                    'headers' => ['Authorization' => 'Bearer ' . $token],
+                    'timeout' => 10,
+                ]);
+                if (!is_wp_error($sub_resp)) {
+                    $sub_data = json_decode(wp_remote_retrieve_body($sub_resp), true);
+                    if (!empty($sub_data['data'])) {
+                        foreach ($sub_data['data'] as $sa) {
+                            $wa_data = $sa['whatsapp_business_api_data'] ?? [];
+                            $sub_apps_info[] = ($wa_data['name'] ?? ($sa['name'] ?? 'App')) . ' (ID ' . ($wa_data['id'] ?? ($sa['id'] ?? '')) . ')';
+                        }
+                    }
+                }
+            }
+
+            $diag_msg = "App do Token: {$app_name} (ID {$app_id})";
+            if (!empty($sub_apps_info)) {
+                $diag_msg .= " | Apps Inscritos na WABA: " . implode(', ', $sub_apps_info);
+            }
+
+            Logger::info('WhatsApp', "Diagnóstico WABA: {$diag_msg}");
+
             return [
                 'success'        => true,
-                'message'        => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id) . $sub_msg,
+                'message'        => "Conexão validada com sucesso!{$polo_label} Linha: " . ($body['display_phone_number'] ?? $phone_number_id) . $sub_msg . " | " . $diag_msg,
                 'verified_name'  => $body['verified_name'] ?? ($polo_info['nome'] ?? ''),
                 'display_phone'  => $body['display_phone_number'] ?? ($polo_info['display_phone'] ?? ''),
                 'quality_rating' => $body['quality_rating'] ?? 'GREEN',
+                'app_name'       => $app_name,
+                'app_id'         => $app_id,
+                'subscribed_apps'=> $sub_apps_info,
                 'data'           => $body,
             ];
         }

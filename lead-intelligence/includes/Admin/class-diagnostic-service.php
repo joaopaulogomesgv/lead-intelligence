@@ -73,6 +73,41 @@ class DiagnosticService {
 
         // 1. Polos / Números
         $raw_polos = PoloRepository::get_all();
+        $token_app_info = 'Não verificado';
+        $waba_subscribed_apps = [];
+
+        if (!empty($raw_polos)) {
+            $first_polo = $raw_polos[0];
+            $t = PoloRepository::get_access_token_for_polo($first_polo);
+            $w = $first_polo['waba_id'] ?? '';
+            if (!empty($t)) {
+                $a_resp = wp_remote_get('https://graph.facebook.com/v26.0/app', [
+                    'headers' => ['Authorization' => 'Bearer ' . $t],
+                    'timeout' => 8,
+                ]);
+                if (!is_wp_error($a_resp)) {
+                    $a_body = json_decode(wp_remote_retrieve_body($a_resp), true);
+                    if (!empty($a_body['id'])) {
+                        $token_app_info = ($a_body['name'] ?? 'App') . ' (ID ' . $a_body['id'] . ')';
+                    }
+                }
+                if (!empty($w)) {
+                    $s_resp = wp_remote_get("https://graph.facebook.com/v26.0/{$w}/subscribed_apps", [
+                        'headers' => ['Authorization' => 'Bearer ' . $t],
+                        'timeout' => 8,
+                    ]);
+                    if (!is_wp_error($s_resp)) {
+                        $s_body = json_decode(wp_remote_retrieve_body($s_resp), true);
+                        if (!empty($s_body['data'])) {
+                            foreach ($s_body['data'] as $s_item) {
+                                $wa_d = $s_item['whatsapp_business_api_data'] ?? [];
+                                $waba_subscribed_apps[] = ($wa_d['name'] ?? ($s_item['name'] ?? 'App')) . ' (ID ' . ($wa_d['id'] ?? ($s_item['id'] ?? '')) . ')';
+                            }
+                        }
+                    }
+                }
+            }
+        }
         $polos = [];
         foreach ($raw_polos as $p) {
             $polos[] = [
@@ -133,6 +168,8 @@ class DiagnosticService {
                 'verify_token_preview'     => !empty($settings['meta_verify_token']) ? substr($settings['meta_verify_token'], 0, 4) . '***' : 'vazio',
             ],
             'whatsapp_polos'       => $polos,
+            'token_app_info'       => $token_app_info,
+            'waba_subscribed_apps' => $waba_subscribed_apps,
             'last_webhook_payload' => $last_webhook,
             'recent_logs'          => $recent_logs,
             'recent_leads'         => $recent_leads,
@@ -157,6 +194,11 @@ class DiagnosticService {
         $out[] = "🔑 Verify Token: " . $rep['settings']['verify_token_preview'];
         $out[] = "⚙️ Captura WhatsApp: " . ($rep['settings']['enable_whatsapp_capture'] ? '🟢 ATIVA' : '🔴 DESATIVADA') . " | Captura Elementor: " . ($rep['settings']['enable_elementor_capture'] ? '🟢 ATIVA' : '🔴 DESATIVADA');
         $out[] = "📊 Total de Leads: " . $rep['stats']['total_leads'] . " | Mensagens WhatsApp no BD: " . $rep['stats']['total_messages'];
+        $out[] = "";
+
+        $out[] = "--- AUDITORIA DE TOKENS & APPS NA META ---";
+        $out[] = "🔑 Meta App que gerou este Token: " . ($rep['token_app_info'] ?? 'Não verificado');
+        $out[] = "📡 Apps oficialmente inscritos na WABA: " . (!empty($rep['waba_subscribed_apps']) ? implode(', ', $rep['waba_subscribed_apps']) : 'NENHUM APP INSCRITO (ou erro de permissão)');
         $out[] = "";
 
         $out[] = "--- NÚMEROS DE WHATSAPP / POLOS CADASTRADOS ---";
