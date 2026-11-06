@@ -354,6 +354,116 @@ class MetaAdsController {
         return ob_get_clean();
     }
 
+    /**
+     * Exporta os leads do filtro ativo em formato CSV compatível com Excel
+     */
+    public static function export_leads_csv($list_sql, $list_params, $filter_status = '', $periodo = '') {
+        if (!current_user_can('manage_options')) {
+            wp_die('Permissão negada.');
+        }
+
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+
+        // Consulta até 10.000 leads que atendem aos filtros ativos
+        $query = "SELECT * FROM {$table} WHERE {$list_sql} ORDER BY id DESC LIMIT 10000";
+        $leads = !empty($list_params) ? $wpdb->get_results($wpdb->prepare($query, $list_params)) : $wpdb->get_results($query);
+        $leads = is_array($leads) ? $leads : [];
+
+        $suffix = !empty($filter_status) ? sanitize_file_name($filter_status) : 'todos';
+        $filename = 'leads-meta-ads-' . $suffix . '-' . gmdate('Y-m-d_H-i') . '.csv';
+
+        // Cabeçalhos HTTP para download forçado
+        nocache_headers();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Transfer-Encoding: binary');
+
+        $output = fopen('php://output', 'w');
+
+        // BOM UTF-8 para o Excel abrir direto com acentuação e emojis corretos
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        // Cabeçalhos das colunas
+        fputcsv($output, [
+            'ID',
+            'Data Cadastro',
+            'Nome',
+            'Telefone',
+            'Telefone Normalizado',
+            'Email',
+            'Polo / Instância',
+            'Origem / Canal',
+            'Etapa do Funil',
+            'Status Qualificação',
+            'Mensagens Recebidas',
+            'Campanha Meta',
+            'Conjunto (AdSet)',
+            'Anúncio Meta',
+            'Ad ID',
+            'Lead ID Form/Planilha',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_content',
+            'utm_term',
+            'Venda Registrada',
+            'Valor Venda',
+            'CAPI Purchase Enviado',
+            'CAPI Qualified Enviado',
+            'CAPI Lead Enviado',
+        ], ';');
+
+        foreach ($leads as $l) {
+            $is_wa = (!empty($l->whatsapp_status) || !empty($l->conversation_id) || stripos($l->formulario_nome ?? '', 'whatsapp') !== false || !empty($l->phone_number_id));
+            $msg_rec = (int) ($l->mensagens_recebidas ?? 0);
+
+            // Determina a etapa do funil exatamente igual à tabela
+            $etapa = !empty($l->etapa_funil) ? $l->etapa_funil : ($l->qualificacao_status === 'qualificado' ? 'Qualificado' : ($l->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : ''));
+            if (empty($etapa) || in_array($etapa, ['Formulário Enviado', 'Lead Criado', 'Pendente'], true)) {
+                if ($is_wa) {
+                    $etapa = ($msg_rec > 0) ? 'Conversa Iniciada' : 'Visualizou Anúncio';
+                } else {
+                    $etapa = 'Formulário Enviado';
+                }
+            }
+
+            $is_sale = !empty($l->capi_purchase_sent) || stripos($l->etapa_funil ?? '', 'venda') !== false || stripos($l->etapa_funil ?? '', 'matr') !== false;
+
+            fputcsv($output, [
+                $l->id,
+                !empty($l->data_cadastro) ? wp_date('d/m/Y H:i:s', strtotime($l->data_cadastro)) : '',
+                $l->nome ?: '',
+                PhoneNormalizer::format_display($l->telefone ?: $l->telefone_normalizado),
+                preg_replace('/\D/', '', $l->telefone_normalizado ?: ($l->telefone ?? '')),
+                $l->email ?: '',
+                !empty($l->instancia) ? $l->instancia : (!empty($l->polo) ? $l->polo : ''),
+                $is_wa ? 'WhatsApp (Meta Ads)' : 'Formulário Site',
+                $etapa,
+                $l->qualificacao_status ?: 'pendente',
+                $msg_rec,
+                $l->campaign_name ?: '',
+                $l->adset_name ?: '',
+                $l->ad_name ?: '',
+                $l->ad_id ?: '',
+                $l->leadid ?: '',
+                $l->utm_source ?: '',
+                $l->utm_medium ?: '',
+                $l->utm_campaign ?: '',
+                $l->utm_content ?: '',
+                $l->utm_term ?: '',
+                $is_sale ? 'Sim' : 'Não',
+                !empty($l->valor_venda) ? number_format((float) $l->valor_venda, 2, ',', '.') : '',
+                !empty($l->capi_purchase_sent) ? 'Sim' : 'Não',
+                !empty($l->capi_qualified_sent) ? 'Sim' : 'Não',
+                !empty($l->capi_lead_sent) ? 'Sim' : 'Não',
+            ], ';');
+        }
+
+        fclose($output);
+        exit;
+    }
+
     public static function render() {
         global $wpdb;
         $table = DbSchema::get_leads_table();
@@ -562,9 +672,31 @@ class MetaAdsController {
         }
 
         $list_sql = implode(' AND ', $list_where);
+
+        // Exportação CSV dos Leads Filtrados
+        if (isset($_GET['action']) && $_GET['action'] === 'export_meta_csv') {
+            check_admin_referer('li_export_meta_csv');
+            self::export_leads_csv($list_sql, $list_params, $filter_status, $periodo);
+            exit;
+        }
+
         $query_leads = "SELECT * FROM {$table} WHERE {$list_sql} ORDER BY id DESC LIMIT 150";
         $leads = !empty($list_params) ? $wpdb->get_results($wpdb->prepare($query_leads, $list_params)) : $wpdb->get_results($query_leads);
         $leads = is_array($leads) ? $leads : [];
+
+        $export_url = wp_nonce_url(
+            add_query_arg([
+                'page'      => 'lead-intelligence-meta',
+                'action'    => 'export_meta_csv',
+                'periodo'   => $periodo,
+                'status'    => $filter_status,
+                's'         => $search_term,
+                'utm_source'=> $utm_source,
+                'from'      => $custom_from,
+                'to'        => $custom_to,
+            ], admin_url('admin.php')),
+            'li_export_meta_csv'
+        );
 
         $input_from = !empty($custom_from) ? $custom_from : (!empty($date_start) ? substr($date_start, 0, 10) : '');
         $input_to   = !empty($custom_to) ? $custom_to : (!empty($date_end) ? substr($date_end, 0, 10) : '');
@@ -588,7 +720,11 @@ class MetaAdsController {
                     </h2>
                     <p class="li-subtitle" style="margin: 4px 0 0;">Performance integrada de campanhas, formulários e contatos do ecossistema Meta (Facebook, Instagram e WhatsApp).</p>
                 </div>
-                <div>
+                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                    <a href="<?php echo esc_url($export_url); ?>" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: #047857; border-color: #a7f3d0; background: #ecfdf5;" title="Baixar relatório CSV dos leads Meta">
+                        <span class="dashicons dashicons-download" style="font-size: 16px; width: 16px; height: 16px; line-height: 16px;"></span>
+                        Baixar Leads em CSV
+                    </a>
                     <form method="post" action="" style="display: inline;">
                         <?php wp_nonce_field('li_sync_all_ads_verify', 'li_nonce'); ?>
                         <button type="submit" name="li_sync_all_ads" value="1" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 6px; font-weight: 600; color: #0284c7; border-color: #7dd3fc; background: #f0f9ff;" title="Consulta a Meta Marketing API e preenche os nomes de anúncios e campanhas faltantes dos leads que possuem Ad ID">
@@ -736,6 +872,10 @@ class MetaAdsController {
                         <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence-meta&view=leads')); ?>" class="button button-secondary" style="height: 32px; line-height: 30px;">
                             Limpar
                         </a>
+                        <a href="<?php echo esc_url($export_url); ?>" class="button button-secondary" style="height: 32px; line-height: 30px; font-weight: 700; color: #047857; border-color: #a7f3d0; background: #ecfdf5; display: inline-flex; align-items: center; gap: 4px;" title="Baixar relatório CSV dos leads que atendem aos filtros ativos">
+                            <span class="dashicons dashicons-download" style="font-size: 15px; width: 15px; height: 15px; line-height: 30px;"></span>
+                            Baixar CSV
+                        </a>
                     </div>
                 </form>
             </div>
@@ -803,7 +943,11 @@ class MetaAdsController {
                         <h3 class="li-card-title" style="margin: 0; font-size: 15px; color: #0f172a;">Leads do Ecossistema Meta (Ads &amp; WhatsApp)</h3>
                         <p class="li-card-desc" style="margin: 2px 0 0; font-size: 12px; color: #64748b;">Contatos identificados com origem de Facebook Ads, Instagram Ads e conversas do WhatsApp Cloud API.</p>
                     </div>
-                    <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                        <a href="<?php echo esc_url($export_url); ?>" class="button button-secondary" style="height: 30px; font-size: 12px; font-weight: 700; color: #047857; border-color: #a7f3d0; background: #ecfdf5; display: inline-flex; align-items: center; gap: 5px;" title="Baixar todos os leads filtrados em formato CSV (compatível com Excel)">
+                            <span class="dashicons dashicons-download" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px;"></span>
+                            Baixar CSV (<?php echo count($leads); ?>)
+                        </a>
                         <button type="button" id="li-btn-sync-all-meta-ads" class="button button-secondary" style="height: 30px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;" title="Consulta a Meta Marketing API para atualizar nomes de campanhas e anúncios de todos os leads pendentes">
                             <span class="dashicons dashicons-update" style="font-size: 14px; width: 14px; height: 14px; line-height: 14px;"></span> Sincronizar Nomes de Anúncios na Meta
                         </button>
