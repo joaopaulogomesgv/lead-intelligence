@@ -762,7 +762,6 @@ class MetaAdsController {
                                 <th style="min-width: 130px; padding: 10px 12px;">Nome / Lead</th>
                                 <th style="width: 165px; min-width: 155px; white-space: nowrap; padding: 10px 12px;">WhatsApp &amp; Polo</th>
                                 <th style="min-width: 270px; padding: 10px 12px;">Origem &amp; Anúncio Meta</th>
-                                <th style="width: 130px; min-width: 120px; padding: 10px 12px;">Curso / Interesse</th>
                                 <th style="width: 145px; min-width: 135px; text-align: center; white-space: nowrap; padding: 10px 12px;">Status &amp; Funil</th>
                                 <th style="width: 185px; min-width: 175px; text-align: center; white-space: nowrap; padding: 10px 12px;">Qualificação &amp; CAPI</th>
                             </tr>
@@ -770,7 +769,7 @@ class MetaAdsController {
                         <tbody>
                             <?php if (empty($leads)): ?>
                                 <tr>
-                                    <td colspan="7" style="text-align: center; padding: 40px; color: #64748b; font-size: 14px;">
+                                    <td colspan="6" style="text-align: center; padding: 40px; color: #64748b; font-size: 14px;">
                                         Nenhum lead Meta encontrado no período selecionado.
                                     </td>
                                 </tr>
@@ -921,20 +920,7 @@ class MetaAdsController {
                                             </div>
                                         </td>
 
-                                        <!-- 5. CURSO / INTERESSE -->
-                                        <td style="vertical-align: top; padding: 10px 12px;">
-                                            <?php 
-                                            $curso_txt = $lead->tipo_curso ?: ($lead->area_interesse ?: '');
-                                            if (!empty($curso_txt)): ?>
-                                                <span style="font-size: 11px; font-weight: 600; color: #334155; display: inline-block; padding: 2px 6px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; word-break: break-word;">
-                                                    🎓 <?php echo esc_html($curso_txt); ?>
-                                                </span>
-                                            <?php else: ?>
-                                                <span style="color: #cbd5e1; font-size: 12px;">—</span>
-                                            <?php endif; ?>
-                                        </td>
-
-                                        <!-- 6. STATUS & FUNIL -->
+                                        <!-- 5. STATUS & FUNIL -->
                                         <td class="li-col-status-funil" style="text-align: center; vertical-align: top; padding: 10px 12px; white-space: nowrap;">
                                             <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
                                                 <?php echo self::render_etapa_badge_html($lead); ?>
@@ -942,7 +928,7 @@ class MetaAdsController {
                                             </div>
                                         </td>
 
-                                        <!-- 7. QUALIFICAÇÃO & META CAPI -->
+                                        <!-- 6. QUALIFICAÇÃO & META CAPI -->
                                         <td class="li-col-actions" style="text-align: center; vertical-align: top; padding: 10px 12px; white-space: nowrap;">
                                             <?php echo self::render_meta_actions_html($lead); ?>
                                         </td>
