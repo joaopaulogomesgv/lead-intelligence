@@ -335,7 +335,10 @@ class MetaAdsController {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
-        // Auto-cura leve e segura: unifica duplicados causados por concorrência de webhooks e limpa placeholders
+        // 1. Reparação e blindagem de classificação: limpa conversation_id indevido em leads do Google/Elementor
+        LeadRepository::repair_misclassified_leads();
+
+        // 2. Auto-cura leve e segura: unifica duplicados causados por concorrência de webhooks ESTRITAMENTE do WhatsApp
         LeadRepository::deduplicate_whatsapp_leads();
         LeadRepository::enrich_placeholder_leads();
 
@@ -427,6 +430,16 @@ class MetaAdsController {
             // Padrão: Todos da Meta juntos (Anúncios + WhatsApp)
             $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond})";
         }
+
+        // Blindagem Absoluta: A tela de Meta Ads NUNCA deve puxar leads do Google Ads ou de Planilhas Google
+        $google_cond      = LeadRepository::get_channel_sql_condition('google_ads');
+        $google_form_cond = LeadRepository::get_channel_sql_condition('google_lead_form');
+        $planilha_cond    = LeadRepository::get_channel_sql_condition('planilha');
+
+        $meta_condition .= " AND NOT ({$google_cond}) AND NOT ({$google_form_cond}) AND NOT ({$planilha_cond})";
+        $meta_condition .= " AND (formulario_nome IS NULL OR INSTR(LOWER(formulario_nome), 'google') = 0)";
+        $meta_condition .= " AND (utm_source IS NULL OR LOWER(utm_source) NOT IN ('google', 'google_ads', 'gads', 'demanda-mkt', 'online-19-10-26', 'google_lead_form'))";
+        $meta_condition .= " AND (gclid IS NULL OR gclid = '')";
 
         $where_conditions = ["1=1", $meta_condition];
         $params = [];

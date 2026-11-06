@@ -1796,14 +1796,17 @@ class LeadRepository {
         $whatsapp_table = DbSchema::get_whatsapp_table();
         $history_table  = DbSchema::get_history_table();
 
-        // Busca telefones que possuem mais de 1 lead cadastrado
+        // Busca telefones que possuem mais de 1 lead cadastrado ESTRITAMENTE de WhatsApp (evita tocar em Google Ads ou outros canais)
         $dupes = $wpdb->get_results(
             "SELECT telefone_normalizado, COUNT(*) as total_dupes, GROUP_CONCAT(id ORDER BY id ASC) as ids_list 
              FROM {$leads_table} 
              WHERE telefone_normalizado != '' 
+               AND (formulario_nome LIKE '%WhatsApp%' OR formulario_nome = 'Click-to-WhatsApp Ads')
+               AND (utm_source IS NULL OR utm_source NOT IN ('google', 'google_ads', 'gads', 'demanda-mkt', 'online-19-10-26'))
+               AND (gclid IS NULL OR gclid = '')
              GROUP BY telefone_normalizado 
              HAVING total_dupes > 1 
-             ORDER BY total_dupes DESC LIMIT 100"
+             ORDER BY total_dupes DESC LIMIT 50"
         );
 
         if (empty($dupes)) {
@@ -1938,6 +1941,31 @@ class LeadRepository {
     }
 
     /**
+     * Repara imediatamente qualquer lead de Google Ads / Elementor / Planilha
+     * que tenha recebido conversation_id indevido
+     */
+    public static function repair_misclassified_leads() {
+        global $wpdb;
+        $leads_table    = DbSchema::get_leads_table();
+        $whatsapp_table = DbSchema::get_whatsapp_table();
+
+        // Limpa conversation_id e whatsapp_status de leads que comprovadamente NÃO são de WhatsApp
+        $wpdb->query(
+            "UPDATE {$leads_table} 
+             SET conversation_id = '', whatsapp_status = NULL 
+             WHERE (
+                 (formulario_nome IS NOT NULL AND INSTR(LOWER(formulario_nome), 'google') > 0)
+                 OR (utm_source IS NOT NULL AND LOWER(utm_source) IN ('google', 'google_ads', 'gads', 'demanda-mkt', 'online-19-10-26', 'google_lead_form'))
+                 OR (gclid IS NOT NULL AND TRIM(gclid) != '')
+                 OR (gad_source IS NOT NULL AND TRIM(gad_source) != '')
+                 OR (leadid IS NOT NULL AND TRIM(leadid) != '' AND (formulario_nome IS NULL OR INSTR(LOWER(formulario_nome), 'whatsapp') = 0))
+             )
+             AND (formulario_nome IS NULL OR INSTR(LOWER(formulario_nome), 'whatsapp') = 0)
+             AND id NOT IN (SELECT DISTINCT lead_id FROM {$whatsapp_table} WHERE lead_id IS NOT NULL AND lead_id > 0)"
+        );
+    }
+
+    /**
      * Enriquece leads recentes com nome genérico ou com hash provisório no ad_id
      */
     public static function enrich_placeholder_leads() {
@@ -1945,12 +1973,13 @@ class LeadRepository {
         $leads_table    = DbSchema::get_leads_table();
         $whatsapp_table = DbSchema::get_whatsapp_table();
 
-        // 1. Limpa ad_id com hash de conversa (não numérico de 8 a 25 dígitos) e transfere para conversation_id
+        // 1. SÓ limpa ad_id se for hash e pertencer a lead comprovadamente de WhatsApp
         $wpdb->query(
             "UPDATE {$leads_table} 
-             SET conversation_id = IF(conversation_id IS NULL OR conversation_id = '', ad_id, conversation_id), 
-                 ad_id = '' 
-             WHERE ad_id != '' AND ad_id NOT REGEXP '^[0-9]{8,25}$'"
+             SET ad_id = '' 
+             WHERE ad_id != '' 
+               AND ad_id NOT REGEXP '^[0-9]{8,25}$' 
+               AND (formulario_nome LIKE '%WhatsApp%' OR utm_source = 'meta_ads')"
         );
 
         // 2. Busca até 30 leads recentes com nome genérico que tenham mensagens recebidas
