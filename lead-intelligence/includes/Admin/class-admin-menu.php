@@ -33,6 +33,11 @@ class AdminMenu {
         if (class_exists(ImportController::class)) {
             ImportController::init();
         }
+
+        // Inicializa listener de exportação CSV da Meta Ads
+        if (class_exists(MetaAdsController::class)) {
+            MetaAdsController::init();
+        }
     }
 
     public static function register_menus() {

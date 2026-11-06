@@ -15,6 +15,45 @@ if (!defined('ABSPATH')) {
  */
 class MetaAdsController {
     /**
+     * Inicializa hooks do controller
+     */
+    public static function init() {
+        add_action('admin_init', [__CLASS__, 'handle_export_csv']);
+    }
+
+    /**
+     * Intercepta a requisição de download de CSV antes do carregamento do layout HTML do WordPress
+     */
+    public static function handle_export_csv() {
+        if (!isset($_GET['page']) || $_GET['page'] !== 'lead-intelligence-meta') {
+            return;
+        }
+        if (!isset($_GET['action']) || $_GET['action'] !== 'export_meta_csv') {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            wp_die('Permissão negada.');
+        }
+
+        check_admin_referer('li_export_meta_csv');
+
+        // Limpa qualquer buffer de saída do PHP (evita HTML ou espaços antes do CSV)
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        $ctx = self::build_filters_context();
+        self::export_leads_csv(
+            $ctx['list_sql'],
+            $ctx['list_params'],
+            $ctx['filter_status'],
+            $ctx['periodo']
+        );
+        exit;
+    }
+
+    /**
      * Endpoint AJAX para obter dados do criativo e anúncio Meta para o Modal
      */
     public static function ajax_get_ad_creative_preview() {
@@ -355,137 +394,11 @@ class MetaAdsController {
     }
 
     /**
-     * Exporta os leads do filtro ativo em formato CSV compatível com Excel
+     * Constrói e retorna o contexto unificado de filtros, métricas e SQL para listagem e exportação
      */
-    public static function export_leads_csv($list_sql, $list_params, $filter_status = '', $periodo = '') {
-        if (!current_user_can('manage_options')) {
-            wp_die('Permissão negada.');
-        }
-
+    public static function build_filters_context() {
         global $wpdb;
         $table = DbSchema::get_leads_table();
-
-        // Consulta até 10.000 leads que atendem aos filtros ativos
-        $query = "SELECT * FROM {$table} WHERE {$list_sql} ORDER BY id DESC LIMIT 10000";
-        $leads = !empty($list_params) ? $wpdb->get_results($wpdb->prepare($query, $list_params)) : $wpdb->get_results($query);
-        $leads = is_array($leads) ? $leads : [];
-
-        $suffix = !empty($filter_status) ? sanitize_file_name($filter_status) : 'todos';
-        $filename = 'leads-meta-ads-' . $suffix . '-' . gmdate('Y-m-d_H-i') . '.csv';
-
-        // Cabeçalhos HTTP para download forçado
-        nocache_headers();
-        header('Content-Type: text/csv; charset=UTF-8');
-        header('Content-Disposition: attachment; filename="' . $filename . '"');
-        header('Content-Transfer-Encoding: binary');
-
-        $output = fopen('php://output', 'w');
-
-        // BOM UTF-8 para o Excel abrir direto com acentuação e emojis corretos
-        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
-
-        // Cabeçalhos das colunas
-        fputcsv($output, [
-            'ID',
-            'Data Cadastro',
-            'Nome',
-            'Telefone',
-            'Telefone Normalizado',
-            'Email',
-            'Polo / Instância',
-            'Origem / Canal',
-            'Etapa do Funil',
-            'Status Qualificação',
-            'Mensagens Recebidas',
-            'Campanha Meta',
-            'Conjunto (AdSet)',
-            'Anúncio Meta',
-            'Ad ID',
-            'Lead ID Form/Planilha',
-            'utm_source',
-            'utm_medium',
-            'utm_campaign',
-            'utm_content',
-            'utm_term',
-            'Venda Registrada',
-            'Valor Venda',
-            'CAPI Purchase Enviado',
-            'CAPI Qualified Enviado',
-            'CAPI Lead Enviado',
-        ], ';');
-
-        foreach ($leads as $l) {
-            $is_wa = (!empty($l->whatsapp_status) || !empty($l->conversation_id) || stripos($l->formulario_nome ?? '', 'whatsapp') !== false || !empty($l->phone_number_id));
-            $msg_rec = (int) ($l->mensagens_recebidas ?? 0);
-
-            // Determina a etapa do funil exatamente igual à tabela
-            $etapa = !empty($l->etapa_funil) ? $l->etapa_funil : ($l->qualificacao_status === 'qualificado' ? 'Qualificado' : ($l->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : ''));
-            if (empty($etapa) || in_array($etapa, ['Formulário Enviado', 'Lead Criado', 'Pendente'], true)) {
-                if ($is_wa) {
-                    $etapa = ($msg_rec > 0) ? 'Conversa Iniciada' : 'Visualizou Anúncio';
-                } else {
-                    $etapa = 'Formulário Enviado';
-                }
-            }
-
-            $is_sale = !empty($l->capi_purchase_sent) || stripos($l->etapa_funil ?? '', 'venda') !== false || stripos($l->etapa_funil ?? '', 'matr') !== false;
-
-            fputcsv($output, [
-                $l->id,
-                !empty($l->data_cadastro) ? wp_date('d/m/Y H:i:s', strtotime($l->data_cadastro)) : '',
-                $l->nome ?: '',
-                PhoneNormalizer::format_display($l->telefone ?: $l->telefone_normalizado),
-                preg_replace('/\D/', '', $l->telefone_normalizado ?: ($l->telefone ?? '')),
-                $l->email ?: '',
-                !empty($l->instancia) ? $l->instancia : (!empty($l->polo) ? $l->polo : ''),
-                $is_wa ? 'WhatsApp (Meta Ads)' : 'Formulário Site',
-                $etapa,
-                $l->qualificacao_status ?: 'pendente',
-                $msg_rec,
-                $l->campaign_name ?: '',
-                $l->adset_name ?: '',
-                $l->ad_name ?: '',
-                $l->ad_id ?: '',
-                $l->leadid ?: '',
-                $l->utm_source ?: '',
-                $l->utm_medium ?: '',
-                $l->utm_campaign ?: '',
-                $l->utm_content ?: '',
-                $l->utm_term ?: '',
-                $is_sale ? 'Sim' : 'Não',
-                !empty($l->valor_venda) ? number_format((float) $l->valor_venda, 2, ',', '.') : '',
-                !empty($l->capi_purchase_sent) ? 'Sim' : 'Não',
-                !empty($l->capi_qualified_sent) ? 'Sim' : 'Não',
-                !empty($l->capi_lead_sent) ? 'Sim' : 'Não',
-            ], ';');
-        }
-
-        fclose($output);
-        exit;
-    }
-
-    public static function render() {
-        global $wpdb;
-        $table = DbSchema::get_leads_table();
-
-        // 1. Reparação e blindagem de classificação: limpa conversation_id indevido em leads do Google/Elementor
-        LeadRepository::repair_misclassified_leads();
-
-        // 2. Auto-cura leve e segura: unifica duplicados causados por concorrência de webhooks ESTRITAMENTE do WhatsApp
-        LeadRepository::deduplicate_whatsapp_leads();
-        LeadRepository::enrich_placeholder_leads();
-
-        // Sincronização manual em lote com a Meta Marketing API
-        $sync_message = null;
-        $sync_success = false;
-        if (isset($_POST['li_sync_all_ads'])) {
-            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_all_ads_verify');
-            if ($nonce_valid || current_user_can('manage_options')) {
-                $sync_res = \LeadIntelligence\WhatsApp\WabaClient::sync_all_pending_leads();
-                $sync_message = $sync_res['message'];
-                $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
-            }
-        }
 
         // 1. Tratamento de Período (Padrão: Hoje, ou Todo se houver pesquisa ativa)
         $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
@@ -673,12 +586,193 @@ class MetaAdsController {
 
         $list_sql = implode(' AND ', $list_where);
 
-        // Exportação CSV dos Leads Filtrados
-        if (isset($_GET['action']) && $_GET['action'] === 'export_meta_csv') {
-            check_admin_referer('li_export_meta_csv');
-            self::export_leads_csv($list_sql, $list_params, $filter_status, $periodo);
-            exit;
+        return [
+            'periodo'               => $periodo,
+            'custom_from'           => $custom_from,
+            'custom_to'             => $custom_to,
+            'search_term'           => $search_term,
+            'filter_status'         => $filter_status,
+            'utm_source'            => $utm_source,
+            'available_utm_sources' => $available_utm_sources,
+            'where_conditions'      => $where_conditions,
+            'params'                => $params,
+            'list_where'            => $list_where,
+            'list_sql'              => $list_sql,
+            'list_params'           => $list_params,
+            'metrics'               => $metrics,
+            'total_leads'           => $total_leads,
+            'conversaram'           => $conversaram,
+            'sem_resposta'          => $sem_resposta,
+            'vendas'                => $vendas,
+            'desq'                  => $desq,
+            'pendentes'             => $pendentes,
+            'taxa'                  => $taxa,
+            'date_start'            => $date_start,
+            'date_end'              => $date_end,
+        ];
+    }
+
+    /**
+     * Exporta os leads do filtro ativo em formato CSV compatível com Excel
+     */
+    public static function export_leads_csv($list_sql, $list_params, $filter_status = '', $periodo = '') {
+        if (!current_user_can('manage_options')) {
+            wp_die('Permissão negada.');
         }
+
+        // Limpa buffers anteriores para não corromper o arquivo com avisos ou HTML do WP
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+
+        // Consulta até 10.000 leads que atendem aos filtros ativos
+        $query = "SELECT * FROM {$table} WHERE {$list_sql} ORDER BY id DESC LIMIT 10000";
+        $leads = !empty($list_params) ? $wpdb->get_results($wpdb->prepare($query, $list_params)) : $wpdb->get_results($query);
+        $leads = is_array($leads) ? $leads : [];
+
+        $suffix = !empty($filter_status) ? sanitize_file_name($filter_status) : 'todos';
+        $filename = 'leads-meta-ads-' . $suffix . '-' . gmdate('Y-m-d_H-i') . '.csv';
+
+        // Cabeçalhos HTTP para download forçado imediato
+        nocache_headers();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Transfer-Encoding: binary');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+
+        // BOM UTF-8 para o Excel abrir direto com acentuação e emojis corretos
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        // Cabeçalhos das colunas
+        fputcsv($output, [
+            'ID',
+            'Data Cadastro',
+            'Nome',
+            'Telefone',
+            'Telefone Normalizado',
+            'Email',
+            'Polo / Instância',
+            'Origem / Canal',
+            'Etapa do Funil',
+            'Status Qualificação',
+            'Mensagens Recebidas',
+            'Campanha Meta',
+            'Conjunto (AdSet)',
+            'Anúncio Meta',
+            'Ad ID',
+            'Lead ID Form/Planilha',
+            'utm_source',
+            'utm_medium',
+            'utm_campaign',
+            'utm_content',
+            'utm_term',
+            'Venda Registrada',
+            'Valor Venda',
+            'CAPI Purchase Enviado',
+            'CAPI Qualified Enviado',
+            'CAPI Lead Enviado',
+        ], ';');
+
+        foreach ($leads as $l) {
+            $is_wa = (!empty($l->whatsapp_status) || !empty($l->conversation_id) || stripos($l->formulario_nome ?? '', 'whatsapp') !== false || !empty($l->phone_number_id));
+            $msg_rec = (int) ($l->mensagens_recebidas ?? 0);
+
+            // Determina a etapa do funil exatamente igual à tabela
+            $etapa = !empty($l->etapa_funil) ? $l->etapa_funil : ($l->qualificacao_status === 'qualificado' ? 'Qualificado' : ($l->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : ''));
+            if (empty($etapa) || in_array($etapa, ['Formulário Enviado', 'Lead Criado', 'Pendente'], true)) {
+                if ($is_wa) {
+                    $etapa = ($msg_rec > 0) ? 'Conversa Iniciada' : 'Visualizou Anúncio';
+                } else {
+                    $etapa = 'Formulário Enviado';
+                }
+            }
+
+            $is_sale = !empty($l->capi_purchase_sent) || stripos($l->etapa_funil ?? '', 'venda') !== false || stripos($l->etapa_funil ?? '', 'matr') !== false;
+
+            fputcsv($output, [
+                $l->id,
+                !empty($l->data_cadastro) ? wp_date('d/m/Y H:i:s', strtotime($l->data_cadastro)) : '',
+                $l->nome ?: '',
+                PhoneNormalizer::format_display($l->telefone ?: $l->telefone_normalizado),
+                preg_replace('/\D/', '', $l->telefone_normalizado ?: ($l->telefone ?? '')),
+                $l->email ?: '',
+                !empty($l->instancia) ? $l->instancia : (!empty($l->polo) ? $l->polo : ''),
+                $is_wa ? 'WhatsApp (Meta Ads)' : 'Formulário Site',
+                $etapa,
+                $l->qualificacao_status ?: 'pendente',
+                $msg_rec,
+                $l->campaign_name ?: '',
+                $l->adset_name ?: '',
+                $l->ad_name ?: '',
+                $l->ad_id ?: '',
+                $l->leadid ?: '',
+                $l->utm_source ?: '',
+                $l->utm_medium ?: '',
+                $l->utm_campaign ?: '',
+                $l->utm_content ?: '',
+                $l->utm_term ?: '',
+                $is_sale ? 'Sim' : 'Não',
+                !empty($l->valor_venda) ? number_format((float) $l->valor_venda, 2, ',', '.') : '',
+                !empty($l->capi_purchase_sent) ? 'Sim' : 'Não',
+                !empty($l->capi_qualified_sent) ? 'Sim' : 'Não',
+                !empty($l->capi_lead_sent) ? 'Sim' : 'Não',
+            ], ';');
+        }
+
+        fclose($output);
+        exit;
+    }
+
+    public static function render() {
+        global $wpdb;
+        $table = DbSchema::get_leads_table();
+
+        // 1. Reparação e blindagem de classificação: limpa conversation_id indevido em leads do Google/Elementor
+        LeadRepository::repair_misclassified_leads();
+
+        // 2. Auto-cura leve e segura: unifica duplicados causados por concorrência de webhooks ESTRITAMENTE do WhatsApp
+        LeadRepository::deduplicate_whatsapp_leads();
+        LeadRepository::enrich_placeholder_leads();
+
+        // Sincronização manual em lote com a Meta Marketing API
+        $sync_message = null;
+        $sync_success = false;
+        if (isset($_POST['li_sync_all_ads'])) {
+            $nonce_valid = isset($_POST['li_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['li_nonce'])), 'li_sync_all_ads_verify');
+            if ($nonce_valid || current_user_can('manage_options')) {
+                $sync_res = \LeadIntelligence\WhatsApp\WabaClient::sync_all_pending_leads();
+                $sync_message = $sync_res['message'];
+                $sync_success = ($sync_res['updated'] > 0 || $sync_res['total'] === 0);
+            }
+        }
+
+        // Obtenção do contexto unificado de filtros, métricas e SQL
+        $filters = self::build_filters_context();
+        $periodo               = $filters['periodo'];
+        $custom_from           = $filters['custom_from'];
+        $custom_to             = $filters['custom_to'];
+        $search_term           = $filters['search_term'];
+        $filter_status         = $filters['filter_status'];
+        $utm_source            = $filters['utm_source'];
+        $available_utm_sources = $filters['available_utm_sources'];
+        $list_sql              = $filters['list_sql'];
+        $list_params           = $filters['list_params'];
+        $metrics               = $filters['metrics'];
+        $total_leads           = $filters['total_leads'];
+        $conversaram           = $filters['conversaram'];
+        $sem_resposta          = $filters['sem_resposta'];
+        $vendas                = $filters['vendas'];
+        $desq                  = $filters['desq'];
+        $pendentes             = $filters['pendentes'];
+        $taxa                  = $filters['taxa'];
+        $date_start            = $filters['date_start'];
+        $date_end              = $filters['date_end'];
 
         $query_leads = "SELECT * FROM {$table} WHERE {$list_sql} ORDER BY id DESC LIMIT 150";
         $leads = !empty($list_params) ? $wpdb->get_results($wpdb->prepare($query_leads, $list_params)) : $wpdb->get_results($query_leads);
