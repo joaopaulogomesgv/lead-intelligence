@@ -243,8 +243,31 @@ class MetaAdsController {
     }
 
     public static function render_etapa_badge_html($lead) {
-        $etapa = !empty($lead->etapa_funil) ? $lead->etapa_funil : ($lead->qualificacao_status === 'qualificado' ? 'Qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+        $msg_count = (int) ($lead->mensagens_recebidas ?? 0);
+        $is_wa = (!empty($lead->whatsapp_status) || !empty($lead->conversation_id) || stripos($lead->formulario_nome ?? '', 'whatsapp') !== false || !empty($lead->phone_number_id));
+
+        $etapa = !empty($lead->etapa_funil) ? $lead->etapa_funil : ($lead->qualificacao_status === 'qualificado' ? 'Qualificado' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : ''));
+        
+        // Se a etapa for padrão ou vazia, diferencia quem conversou de quem só visualizou o anúncio
+        if (empty($etapa) || in_array($etapa, ['Formulário Enviado', 'Lead Criado', 'Pendente'], true)) {
+            if ($is_wa) {
+                if ($msg_count > 0) {
+                    $etapa = 'Conversa Iniciada';
+                } else {
+                    $etapa = 'Visualizou Anúncio';
+                }
+            } else {
+                $etapa = 'Formulário Enviado';
+            }
+        }
+
         $status = $lead->qualificacao_status ?? 'pendente';
+        if ($etapa === 'Visualizou Anúncio') {
+            return '<span class="li-badge" style="background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; font-size: 11px; font-weight: 600;" title="O contato abriu o WhatsApp pelo anúncio da Meta, mas NÃO enviou nenhuma mensagem. Não consta no CRM de atendimento!">👀 ' . esc_html($etapa) . '</span>';
+        } elseif ($etapa === 'Conversa Iniciada') {
+            return '<span class="li-badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.25); font-size: 11px; font-weight: 600;" title="O contato enviou mensagem no WhatsApp (' . $msg_count . ' msgs recebidas). Consta no CRM de atendimento!">💬 ' . esc_html($etapa) . '</span>';
+        }
+
         $class = ($status === 'qualificado') ? 'li-status-qualificado' : (($status === 'nao_qualificado') ? 'li-status-desqualificado' : 'li-status-cinza');
         return '<span class="li-badge ' . esc_attr($class) . '" style="font-size: 11px;">' . esc_html($etapa) . '</span>';
     }
@@ -426,6 +449,10 @@ class MetaAdsController {
             $meta_condition = $meta_ads_cond;
         } elseif ($meta_type === 'whatsapp_only') {
             $meta_condition = $whatsapp_cond;
+        } elseif ($meta_type === 'engaged') {
+            $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond}) AND (mensagens_recebidas > 0)";
+        } elseif ($meta_type === 'viewed_only') {
+            $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond}) AND (mensagens_recebidas IS NULL OR mensagens_recebidas = 0)";
         } else {
             // Padrão: Todos da Meta juntos (Anúncios + WhatsApp)
             $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond})";
@@ -453,10 +480,12 @@ class MetaAdsController {
             $params[] = $date_end;
         }
 
-        // Métricas Globais do Canal no Período
+        // Métricas Globais do Canal no Período (com contagem de engajados vs apenas visualizados)
         $where_metrics_sql = implode(' AND ', $where_conditions);
         $metrics_query = "SELECT 
             COUNT(*) as total,
+            SUM(CASE WHEN (mensagens_recebidas > 0) THEN 1 ELSE 0 END) as conversaram,
+            SUM(CASE WHEN (mensagens_recebidas IS NULL OR mensagens_recebidas = 0) THEN 1 ELSE 0 END) as sem_resposta,
             SUM(CASE WHEN (qualificacao_status = 'qualificado' OR etapa_funil LIKE '%venda%' OR etapa_funil LIKE '%matr%') THEN 1 ELSE 0 END) as qualificados,
             SUM(CASE WHEN qualificacao_status = 'nao_qualificado' THEN 1 ELSE 0 END) as desqualificados,
             SUM(CASE WHEN qualificacao_status = 'pendente' THEN 1 ELSE 0 END) as pendentes
@@ -464,11 +493,13 @@ class MetaAdsController {
 
         $metrics = !empty($params) ? $wpdb->get_row($wpdb->prepare($metrics_query, $params)) : $wpdb->get_row($metrics_query);
 
-        $total_leads = $metrics ? (int) $metrics->total : 0;
-        $vendas      = $metrics ? (int) $metrics->qualificados : 0;
-        $desq        = $metrics ? (int) $metrics->desqualificados : 0;
-        $pendentes   = max(0, $total_leads - $vendas - $desq);
-        $taxa        = $total_leads > 0 ? round(($vendas / $total_leads) * 100, 1) : 0;
+        $total_leads  = $metrics ? (int) $metrics->total : 0;
+        $conversaram  = $metrics ? (int) $metrics->conversaram : 0;
+        $sem_resposta = $metrics ? (int) $metrics->sem_resposta : 0;
+        $vendas       = $metrics ? (int) $metrics->qualificados : 0;
+        $desq         = $metrics ? (int) $metrics->desqualificados : 0;
+        $pendentes    = max(0, $total_leads - $vendas - $desq);
+        $taxa         = $total_leads > 0 ? round(($vendas / $total_leads) * 100, 1) : 0;
 
         // Filtros Adicionais para Listagem de Leads (Busca e Status)
         $list_where = $where_conditions;
@@ -626,22 +657,22 @@ class MetaAdsController {
                 <div class="li-metric-card" style="border-left: 4px solid #0081fb;">
                     <span class="li-metric-label">Leads da Meta</span>
                     <span class="li-metric-value" id="li-metric-total" style="color: #0081fb;"><?php echo number_format_i18n($total_leads); ?></span>
-                    <span class="li-metric-sub">Ads + WhatsApp Oficial</span>
+                    <span class="li-metric-sub">Total de contatos do anúncio</span>
                 </div>
                 <div class="li-metric-card li-card-success" style="border-left: 4px solid #10b981;">
-                    <span class="li-metric-label">Vendas / Matrículas</span>
-                    <span class="li-metric-value" id="li-metric-vendas" style="color: #10b981;"><?php echo number_format_i18n($vendas); ?></span>
-                    <span class="li-metric-sub">Alunos confirmados</span>
+                    <span class="li-metric-label">💬 Responderam (No CRM)</span>
+                    <span class="li-metric-value" id="li-metric-conversaram" style="color: #059669;"><?php echo number_format_i18n($conversaram); ?></span>
+                    <span class="li-metric-sub">Iniciaram conversa no chat</span>
                 </div>
                 <div class="li-metric-card" style="border-left: 4px solid #f59e0b;">
-                    <span class="li-metric-label">Pendentes Comercial</span>
-                    <span class="li-metric-value" id="li-metric-pendentes" style="color: #f59e0b;"><?php echo number_format_i18n($pendentes); ?></span>
-                    <span class="li-metric-sub">Aguardando atendimento</span>
+                    <span class="li-metric-label">👀 Apenas Visualizaram</span>
+                    <span class="li-metric-value" id="li-metric-sem-resposta" style="color: #d97706;"><?php echo number_format_i18n($sem_resposta); ?></span>
+                    <span class="li-metric-sub">Clicaram mas não responderam</span>
                 </div>
-                <div class="li-metric-card" style="border-left: 4px solid #ef4444;">
-                    <span class="li-metric-label">Não Qualificados</span>
-                    <span class="li-metric-value" id="li-metric-desq" style="color: #ef4444;"><?php echo number_format_i18n($desq); ?></span>
-                    <span class="li-metric-sub">Descartes / Sem perfil</span>
+                <div class="li-metric-card" style="border-left: 4px solid #8b5cf6;">
+                    <span class="li-metric-label">Vendas / Matrículas</span>
+                    <span class="li-metric-value" id="li-metric-vendas" style="color: #7c3aed;"><?php echo number_format_i18n($vendas); ?></span>
+                    <span class="li-metric-sub">Alunos confirmados</span>
                 </div>
                 <div class="li-metric-card" style="border-left: 4px solid #14b8a6;">
                     <span class="li-metric-label">Taxa de Conversão</span>
@@ -698,13 +729,15 @@ class MetaAdsController {
                         </div>
                     <?php endif; ?>
 
-                    <!-- Tipo de Origem Meta -->
+                    <!-- Tipo de Origem Meta & Engajamento -->
                     <div>
-                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Canal Meta</label>
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Engajamento &amp; Canal</label>
                         <select name="meta_type" style="height: 32px; font-size: 13px;">
                             <option value="all" <?php selected($meta_type, 'all'); ?>>🔵💬 Todos da Meta (Ads + WhatsApp)</option>
-                            <option value="ads_only" <?php selected($meta_type, 'ads_only'); ?>>🔵 Apenas Meta Ads (Formulários/Site)</option>
-                            <option value="whatsapp_only" <?php selected($meta_type, 'whatsapp_only'); ?>>💬 Apenas WhatsApp (Meta Cloud)</option>
+                            <option value="engaged" <?php selected($meta_type, 'engaged'); ?>>💬 Apenas Responderam (No CRM)</option>
+                            <option value="viewed_only" <?php selected($meta_type, 'viewed_only'); ?>>👀 Apenas Visualizaram (Sem Resposta)</option>
+                            <option value="ads_only" <?php selected($meta_type, 'ads_only'); ?>>🔵 Apenas Formulários do Site</option>
+                            <option value="whatsapp_only" <?php selected($meta_type, 'whatsapp_only'); ?>>💬 Todos do WhatsApp</option>
                         </select>
                     </div>
 
@@ -865,9 +898,18 @@ class MetaAdsController {
                                         <div style="display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 310px;">
                                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                                 <?php if ($is_wa): ?>
-                                                    <span class="li-badge" style="background: rgba(21, 128, 61, 0.1); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25); font-size: 10px; padding: 1px 7px;" title="Contato recebido via WhatsApp Cloud API / Click-to-WhatsApp">
-                                                        💬 WhatsApp (Meta Ads)
-                                                    </span>
+                                                    <?php 
+                                                    $msg_rec = (int) ($lead->mensagens_recebidas ?? 0);
+                                                    ?>
+                                                    <?php if ($msg_rec > 0): ?>
+                                                        <span class="li-badge" style="background: rgba(21, 128, 61, 0.1); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25); font-size: 10px; padding: 2px 7px;" title="O cliente enviou mensagem no WhatsApp (<?php echo $msg_rec; ?> msgs). Consta na caixa de entrada do CRM!">
+                                                            💬 Respondeu no Chat (<?php echo $msg_rec; ?>)
+                                                        </span>
+                                                    <?php else: ?>
+                                                        <span class="li-badge" style="background: #fef3c7; color: #92400e; font-weight: 700; border: 1px solid #fde68a; font-size: 10px; padding: 2px 7px;" title="O contato clicou no anúncio e abriu o WhatsApp, mas NÃO enviou nenhuma mensagem de volta. Não consta no CRM de atendimento!">
+                                                            👀 Apenas Visualizou (Sem Resposta)
+                                                        </span>
+                                                    <?php endif; ?>
                                                 <?php else: ?>
                                                     <span class="li-badge" style="background: rgba(8, 102, 255, 0.1); color: #0866ff; font-weight: 700; border: 1px solid rgba(8, 102, 255, 0.25); font-size: 10px; padding: 1px 7px;" title="Lead gerado via Anúncio / Formulário Meta">
                                                         🔵 Anúncio / Form
