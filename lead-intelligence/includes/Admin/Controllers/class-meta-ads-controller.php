@@ -567,8 +567,6 @@ class MetaAdsController {
 
         $input_from = !empty($custom_from) ? $custom_from : (!empty($date_start) ? substr($date_start, 0, 10) : '');
         $input_to   = !empty($custom_to) ? $custom_to : (!empty($date_end) ? substr($date_end, 0, 10) : '');
-
-        $meta_url_params = 'utm_source=meta&utm_medium=cpc&utm_campaign={{campaign.name}}&utm_content={{adset.name}}&utm_term={{ad.name}}&campaign_id={{campaign.id}}&adset_id={{adset.id}}&ad_id={{ad.id}}&campaign_name={{campaign.name}}&adset_name={{adset.name}}&ad_name={{ad.name}}';
         ?>
         <div class="wrap li-wrap">
             <!-- NOTIFICAÇÃO DE SINCRONIZAÇÃO EM MASSA -->
@@ -597,58 +595,6 @@ class MetaAdsController {
                             Sincronizar Nomes de Anúncios Meta
                         </button>
                     </form>
-                </div>
-            </div>
-
-            <!-- GUIA VISUAL: COMO MARCAR E RASTREAR NOME DE ANÚNCIO E CAMPANHA NO META ADS -->
-            <div class="li-card" style="margin-bottom: 20px; border-left: 4px solid #0081fb; background: #ffffff;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 15px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 300px;">
-                        <h3 class="li-card-title" style="margin: 0 0 6px 0; font-size: 15px; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                            <span>🎯</span> Como Rastrear Nome de Anúncio e Campanha no Meta Ads (Facebook &amp; Instagram)
-                        </h3>
-                        <p class="li-card-desc" style="margin: 0 0 12px 0; font-size: 13px; color: #475569;">
-                            Para que os leads cheguem com o <strong>Nome do Anúncio</strong>, <strong>Conjunto</strong> e <strong>Campanha</strong> identificados perfeitamente, você só precisa colar os parâmetros dinâmicos abaixo no seu anúncio:
-                        </p>
-                    </div>
-                </div>
-
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 6px;">
-                    <!-- FLUXO 1: FORMULÁRIOS DO SITE / ELEMENTOR -->
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px;">
-                        <div style="font-weight: 700; font-size: 12px; color: #1e3a8a; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                            <span>🌐</span> 1. Anúncios para o Site (Elementor / Landing Page)
-                        </div>
-                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #475569; line-height: 1.5;">
-                            No <strong>Gerenciador de Anúncios da Meta</strong>, vá no nível do <strong>Anúncio (Ad)</strong> &gt; Seção <strong>Rastreamento</strong> &gt; Campo <strong>"Parâmetros de URL"</strong> e cole:
-                        </p>
-                        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-                            <code id="li_meta_params_code" style="font-size: 11px; background: #ffffff; color: #0369a1; padding: 7px 10px; border-radius: 4px; border: 1px solid #cbd5e1; flex: 1; overflow-x: auto; white-space: nowrap; font-family: monospace; font-weight: 600;">
-                                <?php echo esc_html($meta_url_params); ?>
-                            </code>
-                            <button type="button" class="button button-secondary button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($meta_url_params); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);" style="font-weight: 600; white-space: nowrap;">
-                                📋 Copiar Parâmetros
-                            </button>
-                        </div>
-                        <div style="font-size: 11px; color: #64748b; line-height: 1.4;">
-                            ✔ A Meta substitui automaticamente <code>{{ad.name}}</code> e <code>{{campaign.name}}</code> pelos nomes reais.<br>
-                            ✔ O plugin preserva as UTMs mesmo se o lead navegar por várias páginas antes de preencher o formulário.
-                        </div>
-                    </div>
-
-                    <!-- FLUXO 2: ANÚNCIOS CLICK-TO-WHATSAPP (CTWA) -->
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 14px 16px;">
-                        <div style="font-weight: 700; font-size: 12px; color: #166534; text-transform: uppercase; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                            <span>💬</span> 2. Anúncios Click-to-WhatsApp (Conversas Diretas)
-                        </div>
-                        <p style="margin: 0 0 8px 0; font-size: 12px; color: #334155; line-height: 1.5;">
-                            Quando o cliente clica no anúncio e abre o WhatsApp, a Meta envia o identificador <code>ad_id</code> nativamente pelo webhook.
-                        </p>
-                        <div style="font-size: 12px; color: #15803d; line-height: 1.5; margin-bottom: 8px;">
-                            • Com a permissão <code>ads_read</code> no token em <strong>Configurações &gt; Conexão Meta</strong>, o plugin consulta a Graph API da Meta e preenche automaticamente o <strong>Nome do Anúncio</strong>, <strong>Conjunto</strong> e <strong>Campanha</strong>!<br>
-                            • Se algum lead antigo estiver sem nome, use o botão <strong>"Sincronizar Nomes de Anúncios Meta"</strong> no topo para puxar os dados oficiais.
-                        </div>
-                    </div>
                 </div>
             </div>
 
