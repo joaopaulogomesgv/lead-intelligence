@@ -46,6 +46,226 @@ class LeadsController {
         wp_send_json_success($result);
     }
 
+    /**
+     * Inicializa hooks do controller
+     */
+    public static function init() {
+        add_action('admin_init', [__CLASS__, 'handle_export_csv']);
+    }
+
+    /**
+     * Intercepta requisição de download de CSV antes do envio do cabeçalho HTML do WordPress
+     */
+    public static function handle_export_csv() {
+        if (!isset($_GET['page']) || !in_array($_GET['page'], ['lead-intelligence', 'lead-intelligence-qualificacoes'], true)) {
+            return;
+        }
+        if (!isset($_GET['action']) || $_GET['action'] !== 'export_leads_csv') {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            wp_die('Permissão negada.');
+        }
+
+        check_admin_referer('li_export_leads_csv');
+
+        // Limpa buffers anteriores para não corromper o arquivo com HTML ou avisos
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        $current_page = sanitize_text_field(wp_unslash($_GET['page']));
+        $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');
+
+        // Tratamento de Período e Filtros (idêntico ao render)
+        $custom_from      = isset($_GET['from']) ? sanitize_text_field(wp_unslash($_GET['from'])) : '';
+        $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
+        $search           = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
+        $has_custom_dates = (!empty($custom_from) || !empty($custom_to));
+        $explicit_period  = isset($_GET['periodo']) && $_GET['periodo'] !== '';
+        $is_period_fixed  = !empty($_GET['li_explicit_period']);
+
+        if ($has_custom_dates) {
+            $periodo = 'custom';
+        } elseif ($explicit_period) {
+            $periodo = sanitize_text_field(wp_unslash($_GET['periodo']));
+            if (!empty($search) && $periodo === 'today' && !$is_period_fixed) {
+                $periodo = 'all';
+            }
+        } else {
+            $periodo = !empty($search) ? 'all' : 'today';
+        }
+
+        $date_start = '';
+        $date_end   = '';
+
+        switch ($periodo) {
+            case 'today':
+                $date_start = wp_date('Y-m-d 00:00:00');
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'yesterday':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-1 day'));
+                $date_end   = wp_date('Y-m-d 23:59:59', strtotime('-1 day'));
+                break;
+            case '7d':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-7 days'));
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case '30d':
+                $date_start = wp_date('Y-m-d 00:00:00', strtotime('-30 days'));
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'month':
+                $date_start = wp_date('Y-m-01 00:00:00');
+                $date_end   = wp_date('Y-m-d 23:59:59');
+                break;
+            case 'custom':
+                if (!empty($custom_from)) $date_start = $custom_from . ' 00:00:00';
+                if (!empty($custom_to))   $date_end   = $custom_to . ' 23:59:59';
+                break;
+            case 'all':
+            default:
+                $date_start = '';
+                $date_end   = '';
+                break;
+        }
+
+        $status     = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : ($is_qualificacoes ? 'qualificado' : '');
+        $channel    = isset($_GET['canal']) ? sanitize_key(wp_unslash($_GET['canal'])) : '';
+        $utm_source = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
+        $instancia  = isset($_GET['instancia']) ? sanitize_text_field(wp_unslash($_GET['instancia'])) : '';
+
+        $filter_args = [
+            'search'     => $search,
+            'status'     => $status,
+            'channel'    => $channel,
+            'utm_source' => $utm_source,
+            'instancia'  => $instancia,
+            'date_from'  => !empty($date_start) ? substr($date_start, 0, 10) : '',
+            'date_to'    => !empty($date_end) ? substr($date_end, 0, 10) : '',
+            'per_page'   => 10000,
+            'page'       => 1,
+            'orderby'    => 'id',
+            'order'      => 'DESC',
+        ];
+
+        self::export_leads_csv($filter_args, $is_qualificacoes ? 'qualificados' : 'capturados');
+        exit;
+    }
+
+    /**
+     * Exporta os leads do filtro ativo em formato CSV compatível com Excel pt-BR
+     */
+    public static function export_leads_csv($args, $suffix = 'leads') {
+        if (!current_user_can('manage_options')) {
+            wp_die('Permissão negada.');
+        }
+
+        while (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        $leads_data = LeadRepository::get_leads($args);
+        $leads = is_array($leads_data['items']) ? $leads_data['items'] : [];
+
+        $filename = 'lead-intelligence-' . sanitize_file_name($suffix) . '-' . gmdate('Y-m-d_H-i') . '.csv';
+
+        nocache_headers();
+        header('Content-Type: text/csv; charset=UTF-8');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Content-Transfer-Encoding: binary');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+
+        $output = fopen('php://output', 'w');
+
+        // BOM UTF-8 para Excel
+        fprintf($output, chr(0xEF) . chr(0xBB) . chr(0xBF));
+
+        fputcsv($output, [
+            'ID',
+            'Lead ID Planilha',
+            'Data Cadastro',
+            'Nome',
+            'Telefone',
+            'Telefone Normalizado',
+            'Email',
+            'Instância / Polo',
+            'Curso / Interesse',
+            'Canal',
+            'Formulário / Origem',
+            'Etapa do Funil',
+            'Status Qualificação',
+            'Mensagens WhatsApp',
+            'Campanha (utm_campaign)',
+            'utm_source',
+            'utm_medium',
+            'utm_content',
+            'utm_term',
+            'Anúncio Meta',
+            'Conjunto Meta',
+            'Campanha Meta',
+            'Ad ID',
+            'Venda Registrada',
+            'Valor Venda',
+            'CAPI Purchase Enviado',
+            'CAPI Qualified Enviado',
+            'CAPI Lead Enviado',
+        ], ';');
+
+        foreach ($leads as $lead) {
+            $lead_channel = LeadRepository::get_channel($lead);
+            $chan_info    = LeadRepository::get_channel_info($lead_channel);
+            $lead_course  = LeadRepository::resolve_course($lead);
+            $lead_phone_clean = preg_replace('/\D/', '', $lead->telefone_normalizado ?: ($lead->telefone ?? ''));
+            $inst_val     = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
+
+            $etapa_raw = !empty($lead->etapa_funil) && strcasecmp(trim($lead->etapa_funil), 'pendente') !== 0
+                ? trim($lead->etapa_funil)
+                : ($lead->qualificacao_status === 'qualificado' ? 'Matrícula Realizada' : ($lead->qualificacao_status === 'nao_qualificado' ? 'Desqualificado' : 'Formulário Enviado'));
+
+            $is_sale = !empty($lead->capi_purchase_sent) || stripos($lead->etapa_funil ?? '', 'venda') !== false || stripos($lead->etapa_funil ?? '', 'matr') !== false;
+
+            $form_origem = !empty($lead->formulario_nome) ? $lead->formulario_nome : (!empty($lead->origem) ? $lead->origem : (!empty($lead->pagina_origem) ? $lead->pagina_origem : ''));
+
+            fputcsv($output, [
+                $lead->id,
+                $lead->leadid ?: '',
+                !empty($lead->data_cadastro) ? wp_date('d/m/Y H:i:s', strtotime($lead->data_cadastro)) : '',
+                $lead->nome ?: '',
+                PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado),
+                $lead_phone_clean,
+                $lead->email ?: '',
+                $inst_val,
+                $lead_course ?: '',
+                $chan_info['label'] ?? $lead_channel,
+                $form_origem,
+                $etapa_raw,
+                $lead->qualificacao_status ?: 'pendente',
+                (int) ($lead->mensagens_recebidas ?? 0),
+                $lead->utm_campaign ?: '',
+                $lead->utm_source ?: '',
+                $lead->utm_medium ?: '',
+                $lead->utm_content ?: '',
+                $lead->utm_term ?: '',
+                $lead->ad_name ?: '',
+                $lead->adset_name ?: '',
+                $lead->campaign_name ?: '',
+                $lead->ad_id ?: '',
+                $is_sale ? 'Sim' : 'Não',
+                !empty($lead->valor_venda) ? number_format((float) $lead->valor_venda, 2, ',', '.') : '',
+                !empty($lead->capi_purchase_sent) ? 'Sim' : 'Não',
+                !empty($lead->capi_qualified_sent) ? 'Sim' : 'Não',
+                !empty($lead->capi_lead_sent) ? 'Sim' : 'Não',
+            ], ';');
+        }
+
+        fclose($output);
+        exit;
+    }
+
     public static function render() {
         $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence';
         $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');
@@ -304,6 +524,23 @@ class LeadsController {
         $page_sub   = $is_qualificacoes 
             ? 'Listagem consolidada de leads confirmados via cruzamento de planilhas e WhatsApp.' 
             : 'Monitoramento em tempo real dos leads capturados via formulários Elementor Pro e planilhas.';
+
+        $export_url = wp_nonce_url(
+            add_query_arg([
+                'page'               => $current_page,
+                'action'             => 'export_leads_csv',
+                'periodo'            => $periodo,
+                'status'             => $status,
+                'canal'              => $channel,
+                's'                  => $search,
+                'utm_source'         => $utm_source,
+                'instancia'          => $instancia,
+                'from'               => $custom_from,
+                'to'                 => $custom_to,
+                'li_explicit_period' => $is_period_fixed ? 1 : null,
+            ], admin_url('admin.php')),
+            'li_export_leads_csv'
+        );
         ?>
         <div class="wrap li-wrap">
             <div class="li-header" style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:15px; margin-bottom: 20px;">
@@ -312,6 +549,9 @@ class LeadsController {
                     <p class="li-subtitle"><?php echo esc_html($page_sub); ?></p>
                 </div>
                 <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <a href="<?php echo esc_url($export_url); ?>" class="button button-secondary" style="display:inline-flex; align-items:center; gap:6px; font-weight:700; color:#047857; border-color:#a7f3d0; background:#ecfdf5;" title="Baixar relatório CSV dos leads que atendem aos filtros ativos">
+                        <span class="dashicons dashicons-download" style="font-size:16px; width:16px; height:16px; line-height:16px; color:#059669;"></span> Baixar CSV
+                    </a>
                     <?php 
                     $is_gsheets_connected = \LeadIntelligence\Qualification\GoogleSheetsClient::is_connected();
                     $gsheet_settings = \LeadIntelligence\Qualification\GoogleSheetsSync::get_source_settings('google_ads');
@@ -492,13 +732,16 @@ class LeadsController {
                         </select>
                     </div>
 
-                    <!-- Botões Filtrar e Limpar -->
+                    <!-- Botões Filtrar, Limpar e Baixar CSV -->
                     <div style="display: flex; gap: 8px;">
                         <button type="submit" class="button button-primary" style="height: 32px; display: inline-flex; align-items: center; gap: 5px;">
                             🔍 Filtrar
                         </button>
                         <a href="<?php echo esc_url($current_url); ?>" class="button button-secondary" style="height: 32px; line-height: 30px;">
                             Limpar
+                        </a>
+                        <a href="<?php echo esc_url($export_url); ?>" class="button button-secondary" style="height: 32px; line-height: 30px; font-weight: 700; color: #047857; border-color: #a7f3d0; background: #ecfdf5; display: inline-flex; align-items: center; gap: 4px;" title="Baixar relatório CSV dos leads que atendem aos filtros ativos">
+                            <span class="dashicons dashicons-download" style="font-size: 15px; width: 15px; height: 15px; line-height: 15px; color: #059669;"></span> Baixar CSV
                         </a>
                     </div>
                 </form>
@@ -598,7 +841,11 @@ class LeadsController {
                             </button>
                         </div>
 
-                        <div style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 12px;">
+                        <div style="font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 10px;">
+                            <a href="<?php echo esc_url($export_url); ?>" class="button" style="font-size: 11px; height: 26px; line-height: 24px; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #047857; border-color: #a7f3d0; background: #ecfdf5; padding: 0 9px;" title="Baixar todos os leads filtrados em formato CSV (compatível com Excel)">
+                                <span class="dashicons dashicons-download" style="font-size: 13px; width: 13px; height: 13px; line-height: 13px; color: #059669;"></span>
+                                Baixar CSV
+                            </a>
                             <button type="button" id="liResetColWidths" class="button" style="font-size: 11px; height: 26px; line-height: 24px; display: inline-flex; align-items: center; gap: 4px; color: #475569; padding: 0 9px; border-color: #cbd5e1; background: #ffffff;" title="Restaura as larguras padrão de todas as colunas">
                                 <span class="dashicons dashicons-image-rotate" style="font-size: 13px; width: 13px; height: 13px; line-height: 13px; color: #64748b;"></span>
                                 Redefinir Colunas

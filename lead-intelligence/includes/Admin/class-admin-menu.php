@@ -34,6 +34,11 @@ class AdminMenu {
             ImportController::init();
         }
 
+        // Inicializa listener de exportação CSV de Leads Capturados
+        if (class_exists(LeadsController::class)) {
+            LeadsController::init();
+        }
+
         // Inicializa listener de exportação CSV da Meta Ads
         if (class_exists(MetaAdsController::class)) {
             MetaAdsController::init();
