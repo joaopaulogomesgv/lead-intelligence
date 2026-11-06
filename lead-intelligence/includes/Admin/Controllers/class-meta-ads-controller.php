@@ -709,6 +709,24 @@ class MetaAdsController {
                                                     </code>
                                                 </div>
                                             <?php endif; ?>
+
+                                            <?php 
+                                            // Link direto para visualizar o anúncio/criativo na Meta
+                                            $creative_link = '';
+                                            if (!empty($lead->pagina_origem) && filter_var($lead->pagina_origem, FILTER_VALIDATE_URL)) {
+                                                $creative_link = $lead->pagina_origem;
+                                            } elseif (!empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', $lead->ad_id)) {
+                                                $creative_link = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $lead->ad_id;
+                                            }
+                                            ?>
+                                            <?php if (!empty($creative_link)): ?>
+                                                <div style="margin-top: 3px;">
+                                                    <a href="<?php echo esc_url($creative_link); ?>" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; text-decoration: none; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe';" onmouseout="this.style.background='#f0f9ff';" title="Abrir o anúncio diretamente na Meta para ver o criativo e o texto da campanha">
+                                                        <span>👁️ Ver Anúncio / Criativo</span>
+                                                        <span class="dashicons dashicons-external" style="font-size: 11px; width: 11px; height: 11px; line-height: 11px;"></span>
+                                                    </a>
+                                                </div>
+                                            <?php endif; ?>
                                         </div>
                                     </td>
                                     <td>

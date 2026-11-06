@@ -274,6 +274,15 @@ class MessageHandler {
                 $update_lead['utm_term'] = $utm_term;
             }
 
+            // Atualiza página de origem / link do anúncio se o lead ainda não tiver
+            if (empty($lead->pagina_origem)) {
+                if (!empty($source_url)) {
+                    $update_lead['pagina_origem'] = esc_url_raw($source_url);
+                } elseif (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id)) {
+                    $update_lead['pagina_origem'] = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
+                }
+            }
+
             // Atualiza polo e phone_number_id se o lead ainda não tiver
             if (empty($lead->polo) && !empty($polo_nome)) {
                 $update_lead['polo'] = $polo_nome;
@@ -314,6 +323,7 @@ class MessageHandler {
                 'telefone'             => sanitize_text_field($from_raw),
                 'telefone_normalizado' => $phone_norm,
                 'formulario_nome'      => $form_origem,
+                'pagina_origem'        => !empty($source_url) ? esc_url_raw($source_url) : (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id) ? ('https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id) : ''),
                 'tipo_curso'           => $inferred_tipo_curso,
                 'area_interesse'       => $inferred_area,
                 'polo'                 => $polo_nome,
