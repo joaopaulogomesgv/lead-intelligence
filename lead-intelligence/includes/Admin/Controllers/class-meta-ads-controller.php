@@ -48,8 +48,9 @@ class MetaAdsController {
         }
 
         $raw_msg = $wpdb->get_row($wpdb->prepare(
-            "SELECT conteudo, payload_bruto FROM {$whatsapp_table} WHERE lead_id = %d ORDER BY id DESC LIMIT 1",
-            $lead_id
+            "SELECT conteudo, payload_bruto FROM {$whatsapp_table} WHERE (lead_id = %d OR (telefone_normalizado != '' AND telefone_normalizado = %s)) ORDER BY id DESC LIMIT 1",
+            $lead_id,
+            $lead->telefone_normalizado
         ));
 
         if (empty($referral) && $raw_msg && !empty($raw_msg->payload_bruto)) {
@@ -843,6 +844,118 @@ class MetaAdsController {
             var ajaxNonce = '<?php echo esc_js(wp_create_nonce('li_ajax_nonce')); ?>';
 
             // Sincronizar todos os anúncios da Meta
+                        // Abrir Modal de Criativo
+            $(document).on('click', '.li-btn-open-creative-modal', function(e) {
+                e.preventDefault();
+                var leadId = $(this).data('lead-id');
+                var $modal = $('#li-creative-modal');
+                var $body  = $('#li-modal-creative-body');
+                var $links = $('#li-modal-action-links');
+
+                $modal.css('display', 'flex');
+                $body.html('<div style="text-align:center; padding: 40px; color: #64748b;"><span class="dashicons dashicons-update" style="animation: rotation 1.5s infinite linear; font-size: 24px; width: 24px; height: 24px;"></span><div style="margin-top: 10px; font-weight: 600;">Carregando detalhes do anúncio...</div></div>');
+                $links.empty();
+
+                $.post(ajaxurl, {
+                    action: 'li_get_ad_creative_preview',
+                    lead_id: leadId,
+                    nonce: ajaxNonce
+                }, function(res) {
+                    if (res && res.success && res.data) {
+                        var d = res.data;
+                        $('#li-modal-lead-title').text('Criativo do Lead: ' + d.lead_nome);
+                        $('#li-modal-lead-sub').text('WhatsApp: ' + d.lead_telefone + (d.ad_id ? ' • Ad ID: ' + d.ad_id : ''));
+
+                        var html = '';
+
+                        // Card Mockup estilo Instagram/Facebook Ad
+                        html += '<div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">';
+                        
+                        // Header
+                        html += '<div style="padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9;">';
+                        html += '  <div style="display: flex; align-items: center; gap: 10px;">';
+                        html += '    <div style="width: 36px; height: 36px; border-radius: 50%; background: #0081fb; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">F</div>';
+                        html += '    <div>';
+                        html += '      <div style="font-size: 13px; font-weight: 700; color: #0f172a;">Matrículas FAVENI</div>';
+                        html += '      <div style="font-size: 11px; color: #64748b;">Patrocinado &bull; 🌐</div>';
+                        html += '    </div>';
+                        html += '  </div>';
+                        html += '</div>';
+
+                        // Texto / Copy do Anúncio
+                        if (d.body_text) {
+                            html += '<div style="padding: 12px 14px; font-size: 13px; color: #1e293b; line-height: 1.5; white-space: pre-wrap; background: #ffffff;">' + $('<div>').text(d.body_text).html() + '</div>';
+                        }
+
+                        // Imagem / Vídeo do Criativo
+                        if (d.image_url) {
+                            html += '<div style="background: #000; text-align: center; max-height: 320px; overflow: hidden;">';
+                            html += '  <img src="' + d.image_url + '" style="max-width: 100%; max-height: 320px; display: block; margin: 0 auto; object-fit: contain;" alt="Criativo do Anúncio">';
+                            html += '</div>';
+                        } else if (d.media_type) {
+                            html += '<div style="background: #f1f5f9; padding: 25px; text-align: center; color: #64748b;">';
+                            html += '  <span style="font-size: 32px;">🎬</span><div style="margin-top: 6px; font-weight: 600;">Criativo em formato: ' + d.media_type + '</div>';
+                            html += '</div>';
+                        }
+
+                        // CTA Bar (Click-to-WhatsApp)
+                        html += '<div style="padding: 10px 14px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">';
+                        html += '  <div>';
+                        html += '    <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600;">WHATSAPP</div>';
+                        html += '    <div style="font-size: 13px; font-weight: 700; color: #0f172a;">' + $('<div>').text(d.headline || 'Converse conosco').html() + '</div>';
+                        html += '  </div>';
+                        html += '  <div style="background: #25d366; color: #ffffff; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">💬 Enviar mensagem</div>';
+                        html += '</div>';
+
+                        html += '</div>'; // fim do card
+
+                        // Bloco de Dados Técnicos
+                        html += '<div style="margin-top: 16px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px;">';
+                        html += '  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">';
+                        html += '    <div><strong>🆔 Ad ID na Meta:</strong> <code id="li-ad-id-val">' + (d.ad_id || 'N/D') + '</code></div>';
+                        if (d.ad_id) {
+                            html += '    <button type="button" class="button button-small" id="li-copy-ad-id-btn" style="font-size: 11px;">📋 Copiar Ad ID</button>';
+                        }
+                        html += '  </div>';
+                        if (d.campaign_name) html += '<div style="margin-bottom: 4px;"><strong>📂 Campanha:</strong> ' + $('<div>').text(d.campaign_name).html() + '</div>';
+                        if (d.adset_name)    html += '<div style="margin-bottom: 4px;"><strong>🎯 Conjunto:</strong> ' + $('<div>').text(d.adset_name).html() + '</div>';
+                        if (d.first_message) html += '<div><strong>💬 Mensagem enviada pelo lead:</strong> <em>"' + $('<div>').text(d.first_message).html() + '"</em></div>';
+                        html += '</div>';
+
+                        $body.html(html);
+
+                        // Botão Copiar Ad ID
+                        $('#li-copy-ad-id-btn').on('click', function() {
+                            navigator.clipboard.writeText(d.ad_id).then(function() {
+                                alert('Ad ID ' + d.ad_id + ' copiado com sucesso! Você pode colar na barra de busca do Gerenciador de Anúncios.');
+                            });
+                        });
+
+                        // Botões de ação externa
+                        if (d.source_url) {
+                            $links.append('<a href="' + d.source_url + '" target="_blank" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 4px;">🔗 Link Direto do Post <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
+                        }
+                        if (d.ads_manager_url) {
+                            $links.append('<a href="' + d.ads_manager_url + '" target="_blank" class="button button-primary" style="display: inline-flex; align-items: center; gap: 4px;">📊 Abrir no Gerenciador <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
+                        }
+                    } else {
+                        $body.html('<div style="padding: 20px; color: #b91c1c; text-align: center;">Não foi possível carregar os detalhes deste anúncio.</div>');
+                    }
+                }).fail(function() {
+                    $body.html('<div style="padding: 20px; color: #b91c1c; text-align: center;">Erro de rede ao buscar o anúncio.</div>');
+                });
+            });
+
+            // Fechar Modal
+            $('#li-close-creative-modal, #li-modal-btn-close').on('click', function() {
+                $('#li-creative-modal').hide();
+            });
+            $(document).on('click', '#li-creative-modal', function(e) {
+                if ($(e.target).is('#li-creative-modal')) {
+                    $('#li-creative-modal').hide();
+                }
+            });
+
             $('#li-btn-sync-all-meta-ads').on('click', function() {
                 var $btn = $(this);
                 $btn.prop('disabled', true).text('⏳ Sincronizando com a Meta...');
