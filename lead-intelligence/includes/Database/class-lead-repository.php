@@ -1783,4 +1783,208 @@ class LeadRepository {
             'capi_result' => $capi_result,
         ];
     }
+
+    /**
+     * Identifica e unifica leads duplicados pelo mesmo telefone (concorrência de webhooks)
+     * Consolida dados, mensagens e histórico, removendo duplicados fantasmas
+     *
+     * @return array
+     */
+    public static function deduplicate_whatsapp_leads() {
+        global $wpdb;
+        $leads_table    = DbSchema::get_leads_table();
+        $whatsapp_table = DbSchema::get_whatsapp_table();
+        $history_table  = DbSchema::get_history_table();
+
+        // Busca telefones que possuem mais de 1 lead cadastrado
+        $dupes = $wpdb->get_results(
+            "SELECT telefone_normalizado, COUNT(*) as total_dupes, GROUP_CONCAT(id ORDER BY id ASC) as ids_list 
+             FROM {$leads_table} 
+             WHERE telefone_normalizado != '' 
+             GROUP BY telefone_normalizado 
+             HAVING total_dupes > 1 
+             ORDER BY total_dupes DESC LIMIT 100"
+        );
+
+        if (empty($dupes)) {
+            return ['unified' => 0, 'cleaned' => 0];
+        }
+
+        $unified_count = 0;
+        $cleaned_count = 0;
+
+        foreach ($dupes as $d) {
+            $ids = array_map('intval', explode(',', $d->ids_list));
+            if (count($ids) < 2) {
+                continue;
+            }
+
+            // O lead mestre (keep_id) será o primeiro cadastrado
+            $master_id = $ids[0];
+            $master = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$leads_table} WHERE id = %d", $master_id));
+            if (!$master) {
+                continue;
+            }
+
+            $other_ids = array_slice($ids, 1);
+            $master_updates = [];
+
+            // Se o lead mestre tiver nome genérico ("Lead WhatsApp..."), busca se algum dos outros tem nome real
+            $master_has_placeholder_name = empty($master->nome) || in_array(trim($master->nome), ['Lead WhatsApp (Meta Ads)', 'Sem nome', 'Lead WhatsApp'], true) || preg_match('/^Lead WhatsApp/i', trim($master->nome));
+
+            foreach ($other_ids as $sub_id) {
+                $sub = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$leads_table} WHERE id = %d", $sub_id));
+                if (!$sub) {
+                    continue;
+                }
+
+                // Resgata o nome real se o sub tiver
+                $sub_has_real_name = !empty($sub->nome) && !in_array(trim($sub->nome), ['Lead WhatsApp (Meta Ads)', 'Sem nome', 'Lead WhatsApp'], true) && !preg_match('/^Lead WhatsApp/i', trim($sub->nome));
+                if ($master_has_placeholder_name && $sub_has_real_name) {
+                    $master_updates['nome'] = $sub->nome;
+                    $master->nome = $sub->nome;
+                    $master_has_placeholder_name = false;
+                }
+
+                // Resgata Ad ID real (numérico) se o master estiver vazio ou for hash de conversa
+                $master_has_conv_hash = (!empty($master->ad_id) && !preg_match('/^[0-9]{8,25}$/', (string) $master->ad_id));
+                $sub_has_numeric_ad = (!empty($sub->ad_id) && preg_match('/^[0-9]{8,25}$/', (string) $sub->ad_id));
+                if ((empty($master->ad_id) || $master_has_conv_hash) && $sub_has_numeric_ad) {
+                    $master_updates['ad_id'] = $sub->ad_id;
+                    $master->ad_id = $sub->ad_id;
+                }
+
+                // Se o master tiver hash de conversa em ad_id e nenhum sub tiver ad_id numérico, limpa para não ficar "Ad #de2de6..."
+                if ($master_has_conv_hash && !$sub_has_numeric_ad) {
+                    if (empty($master->conversation_id)) {
+                        $master_updates['conversation_id'] = $master->ad_id;
+                    }
+                    $master_updates['ad_id'] = '';
+                }
+
+                // Resgata outros campos se o master estiver vazio
+                foreach (['campaign_id', 'campaign_name', 'adset_id', 'adset_name', 'ad_name', 'tipo_curso', 'area_interesse', 'email', 'pagina_origem', 'qualificacao_status', 'etapa_funil', 'polo', 'instancia'] as $f) {
+                    if (empty($master->$f) && !empty($sub->$f)) {
+                        $master_updates[$f] = $sub->$f;
+                        $master->$f = $sub->$f;
+                    }
+                }
+
+                // Reatribui histórico e mensagens do WhatsApp para o lead mestre
+                $wpdb->update($whatsapp_table, ['lead_id' => $master_id], ['lead_id' => $sub_id]);
+                $wpdb->update($history_table, ['lead_id' => $master_id], ['lead_id' => $sub_id]);
+
+                // Remove o registro duplicado
+                $wpdb->delete($leads_table, ['id' => $sub_id]);
+                $cleaned_count++;
+            }
+
+            // Se o master ainda estiver com hash de conversa em ad_id, limpa
+            if (!empty($master->ad_id) && !preg_match('/^[0-9]{8,25}$/', (string) $master->ad_id)) {
+                if (empty($master->conversation_id)) {
+                    $master_updates['conversation_id'] = $master->ad_id;
+                }
+                $master_updates['ad_id'] = '';
+            }
+
+            // Tenta resgatar nome do perfil do WhatsApp em wp_li_whatsapp_messages se o master ainda estiver sem nome
+            if ($master_has_placeholder_name) {
+                $raw_msg = $wpdb->get_row($wpdb->prepare(
+                    "SELECT payload_bruto FROM {$whatsapp_table} WHERE (lead_id = %d OR telefone_normalizado = %s) AND payload_bruto LIKE '%profile%' ORDER BY id DESC LIMIT 1",
+                    $master_id,
+                    $master->telefone_normalizado
+                ));
+                if ($raw_msg && !empty($raw_msg->payload_bruto)) {
+                    $p_arr = json_decode($raw_msg->payload_bruto, true);
+                    $contacts = $p_arr['contacts'] ?? ($p_arr['entry'][0]['changes'][0]['value']['contacts'] ?? []);
+                    if (!empty($contacts[0]['profile']['name'])) {
+                        $real_profile_name = sanitize_text_field($contacts[0]['profile']['name']);
+                        if (!empty($real_profile_name)) {
+                            $master_updates['nome'] = $real_profile_name;
+                        }
+                    }
+                }
+            }
+
+            // Tenta resgatar ad_id numérico real de referral se ainda não tiver
+            if (empty($master->ad_id) && empty($master_updates['ad_id'])) {
+                $raw_ref = $wpdb->get_row($wpdb->prepare(
+                    "SELECT payload_bruto FROM {$whatsapp_table} WHERE (lead_id = %d OR telefone_normalizado = %s) AND payload_bruto LIKE '%source_id%' ORDER BY id DESC LIMIT 1",
+                    $master_id,
+                    $master->telefone_normalizado
+                ));
+                if ($raw_ref && !empty($raw_ref->payload_bruto)) {
+                    $p_ref = json_decode($raw_ref->payload_bruto, true);
+                    $ad_source = $p_ref['referral']['source_id'] ?? ($p_ref['entry'][0]['changes'][0]['value']['messages'][0]['referral']['source_id'] ?? '');
+                    if (!empty($ad_source) && preg_match('/^[0-9]{8,25}$/', (string) $ad_source)) {
+                        $master_updates['ad_id'] = sanitize_text_field($ad_source);
+                    }
+                }
+            }
+
+            if (!empty($master_updates)) {
+                $master_updates['updated_at'] = current_time('mysql');
+                $wpdb->update($leads_table, $master_updates, ['id' => $master_id]);
+            }
+
+            $unified_count++;
+        }
+
+        if ($cleaned_count > 0) {
+            Logger::info('Leads', "Rotina de deduplicação unificou {$cleaned_count} leads duplicados em {$unified_count} contatos únicos.");
+        }
+
+        return ['unified' => $unified_count, 'cleaned' => $cleaned_count];
+    }
+
+    /**
+     * Enriquece leads recentes com nome genérico ou com hash provisório no ad_id
+     */
+    public static function enrich_placeholder_leads() {
+        global $wpdb;
+        $leads_table    = DbSchema::get_leads_table();
+        $whatsapp_table = DbSchema::get_whatsapp_table();
+
+        // 1. Limpa ad_id com hash de conversa (não numérico de 8 a 25 dígitos) e transfere para conversation_id
+        $wpdb->query(
+            "UPDATE {$leads_table} 
+             SET conversation_id = IF(conversation_id IS NULL OR conversation_id = '', ad_id, conversation_id), 
+                 ad_id = '' 
+             WHERE ad_id != '' AND ad_id NOT REGEXP '^[0-9]{8,25}$'"
+        );
+
+        // 2. Busca até 30 leads recentes com nome genérico que tenham mensagens recebidas
+        $placeholders = $wpdb->get_results(
+            "SELECT id, telefone_normalizado, nome 
+             FROM {$leads_table} 
+             WHERE (nome = 'Lead WhatsApp (Meta Ads)' OR nome = 'Sem nome' OR nome LIKE 'Lead WhatsApp%')
+               AND telefone_normalizado != ''
+             ORDER BY id DESC LIMIT 30"
+        );
+
+        if (!empty($placeholders)) {
+            foreach ($placeholders as $lead) {
+                // Tenta achar nome no perfil de wp_li_whatsapp_messages
+                $raw_msg = $wpdb->get_row($wpdb->prepare(
+                    "SELECT payload_bruto FROM {$whatsapp_table} WHERE (lead_id = %d OR telefone_normalizado = %s) AND payload_bruto LIKE '%profile%' ORDER BY id DESC LIMIT 1",
+                    $lead->id,
+                    $lead->telefone_normalizado
+                ));
+
+                if ($raw_msg && !empty($raw_msg->payload_bruto)) {
+                    $p_arr = json_decode($raw_msg->payload_bruto, true);
+                    $contacts = $p_arr['contacts'] ?? ($p_arr['entry'][0]['changes'][0]['value']['contacts'] ?? []);
+                    if (!empty($contacts[0]['profile']['name'])) {
+                        $real_profile_name = sanitize_text_field($contacts[0]['profile']['name']);
+                        if (!empty($real_profile_name)) {
+                            $wpdb->update($leads_table, [
+                                'nome'       => $real_profile_name,
+                                'updated_at' => current_time('mysql'),
+                            ], ['id' => $lead->id]);
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

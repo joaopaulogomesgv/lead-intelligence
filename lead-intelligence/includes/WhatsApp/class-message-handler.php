@@ -225,8 +225,12 @@ class MessageHandler {
                 $update_lead['primeira_mensagem'] = $msg_date;
             }
 
-            // Se não tinha nome e o perfil do WhatsApp forneceu
-            if (empty($lead->nome) && !empty($contact_name)) {
+            // Se o lead não tinha nome OU tinha nome provisório/genérico ("Lead WhatsApp...") e o perfil forneceu o nome real
+            $is_placeholder_name = empty($lead->nome) 
+                || in_array(trim($lead->nome), ['Lead WhatsApp (Meta Ads)', 'Sem nome', 'Lead WhatsApp'], true)
+                || preg_match('/^Lead WhatsApp/i', trim($lead->nome));
+
+            if (!empty($contact_name) && $is_placeholder_name) {
                 $update_lead['nome'] = sanitize_text_field($contact_name);
             }
 
@@ -240,9 +244,15 @@ class MessageHandler {
             if (empty($lead->fbclid) && !empty($ctwa_clid)) {
                 $update_lead['fbclid'] = sanitize_text_field($ctwa_clid);
             }
-            if (empty($lead->ad_id) && !empty($ad_id)) {
+
+            // Se o ad_id atual estiver vazio ou for um hash provisório de conversa (não numérico de 8 a 25 dígitos)
+            $is_conv_hash = (!empty($lead->ad_id) && !preg_match('/^[0-9]{8,25}$/', (string) $lead->ad_id));
+            if ((empty($lead->ad_id) || $is_conv_hash) && !empty($ad_id) && preg_match('/^[0-9]{8,25}$/', (string) $ad_id)) {
+                $update_lead['ad_id'] = sanitize_text_field($ad_id);
+            } elseif (empty($lead->ad_id) && !empty($ad_id)) {
                 $update_lead['ad_id'] = sanitize_text_field($ad_id);
             }
+
             if (empty($lead->campaign_id) && !empty($campaign_id)) {
                 $update_lead['campaign_id'] = sanitize_text_field($campaign_id);
             }
@@ -315,6 +325,42 @@ class MessageHandler {
                 'preview'  => wp_trim_words($body, 8),
             ]);
         } else {
+            // Lock atômico para evitar duplicações concorrentes por múltiplos webhooks simultâneos da Meta
+            $lock_key = 'li_lead_lock_' . $phone_norm;
+            $got_lock = add_option($lock_key, time(), '', 'no');
+            if (!$got_lock) {
+                usleep(120000); // 120ms
+                $existing_lead = LeadRepository::find_by_phone($phone_norm);
+                if ($existing_lead) {
+                    $lead_id = (int) $existing_lead->id;
+                    $wpdb->update($leads_table, [
+                        'whatsapp_status'     => 'conversando',
+                        'ultima_mensagem'     => $msg_date,
+                        'mensagens_recebidas' => ((int) $existing_lead->mensagens_recebidas) + 1,
+                        'updated_at'          => current_time('mysql'),
+                    ], ['id' => $lead_id]);
+
+                    if (!empty($msg_id)) {
+                        $wpdb->insert($whatsapp_table, [
+                            'lead_id'              => $lead_id,
+                            'message_id'           => $msg_id,
+                            'direcao'              => 'inbound',
+                            'tipo'                 => $type,
+                            'conteudo'             => $body,
+                            'polo'                 => $polo_nome,
+                            'phone_number_id'      => $received_phone_id,
+                            'telefone'             => $from_raw,
+                            'telefone_normalizado' => $phone_norm,
+                            'status_entrega'       => 'recebido',
+                            'payload_bruto'        => !empty($change_value) ? wp_json_encode($change_value, JSON_UNESCAPED_UNICODE) : null,
+                            'data_envio'           => $msg_date,
+                            'created_at'           => current_time('mysql'),
+                        ]);
+                    }
+                    return;
+                }
+            }
+
             // Lead novo que iniciou contato direto pelo WhatsApp
             $form_origem = !empty($referral) ? 'Click-to-WhatsApp Ads' : 'WhatsApp Cloud Inbound';
             $insert_lead = [
@@ -353,6 +399,7 @@ class MessageHandler {
 
             $wpdb->insert($leads_table, $insert_lead);
             $lead_id = $wpdb->insert_id;
+            delete_option($lock_key);
 
             $polo_info_txt = !empty($polo_nome) ? " via {$polo_nome}" : "";
             $wpdb->insert($history_table, [
@@ -491,6 +538,20 @@ class MessageHandler {
                 $wpdb->update($leads_table, $lead_updates, ['id' => $lead->id]);
             }
         } else {
+            // Lock atômico para evitar duplicações concorrentes por múltiplos webhooks simultâneos da Meta
+            $lock_key = 'li_lead_lock_' . $phone_norm;
+            $got_lock = add_option($lock_key, time(), '', 'no');
+            if (!$got_lock) {
+                usleep(120000); // Aguarda 120ms para o processo concorrente concluir
+                $existing_lead = LeadRepository::find_by_phone($phone_norm);
+                if ($existing_lead) {
+                    if (!empty($conv_id) && empty($existing_lead->conversation_id)) {
+                        $wpdb->update($leads_table, ['conversation_id' => sanitize_text_field($conv_id)], ['id' => $existing_lead->id]);
+                    }
+                    return;
+                }
+            }
+
             // Se o lead ainda não existe e este evento indica um contato no WhatsApp (especialmente anúncio Meta Ads)
             $is_referral  = ($conv_origin === 'referral_conversion' || $pricing_cat === 'referral_conversion');
             $contact_name = $contacts_map[$recipient] ?? ($contacts_map[$phone_norm] ?? '');
@@ -509,7 +570,7 @@ class MessageHandler {
                 'phone_number_id'      => $received_phone_id,
                 'conversation_id'      => sanitize_text_field($conv_id),
                 'fbclid'               => $is_referral ? sanitize_text_field($conv_id) : '',
-                'ad_id'                => $is_referral ? sanitize_text_field($conv_id) : '',
+                'ad_id'                => '', // Não gravar hash de conversa em ad_id (evita "Ad #de2de687c2...")
                 'utm_source'           => 'meta_ads',
                 'utm_medium'           => 'whatsapp',
                 'utm_campaign'         => $is_referral ? 'Click-to-WhatsApp' : 'WhatsApp Inbound',
@@ -527,6 +588,7 @@ class MessageHandler {
 
             $wpdb->insert($leads_table, $new_lead_data);
             $new_lead_id = (int) $wpdb->insert_id;
+            delete_option($lock_key);
 
             if ($new_lead_id > 0) {
                 $polo_txt = !empty($polo_nome) ? " via {$polo_nome}" : "";

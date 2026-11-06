@@ -335,6 +335,10 @@ class MetaAdsController {
         global $wpdb;
         $table = DbSchema::get_leads_table();
 
+        // Auto-cura leve e segura: unifica duplicados causados por concorrência de webhooks e limpa placeholders
+        LeadRepository::deduplicate_whatsapp_leads();
+        LeadRepository::enrich_placeholder_leads();
+
         // Sincronização manual em lote com a Meta Marketing API
         $sync_message = null;
         $sync_success = false;
@@ -859,7 +863,7 @@ class MetaAdsController {
                                                 <div style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
                                                     📢 <strong>Anúncio:</strong> <?php echo esc_html($lead->ad_name); ?>
                                                 </div>
-                                            <?php elseif (!empty($lead->ad_id)): ?>
+                                            <?php elseif (!empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', (string) $lead->ad_id)): ?>
                                                 <div style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
                                                     📢 <?php echo $has_generic_ad ? 'Converse Conosco (Ad #' . esc_html($lead->ad_id) . ')' : 'Ad #' . esc_html($lead->ad_id); ?>
                                                 </div>
