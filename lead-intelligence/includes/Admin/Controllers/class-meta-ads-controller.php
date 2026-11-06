@@ -14,6 +14,83 @@ if (!defined('ABSPATH')) {
  * Controller Administrativo dedicado ao Meta Ads (Design Padrão WordPress)
  */
 class MetaAdsController {
+    /**
+     * Endpoint AJAX para obter dados do criativo e anúncio Meta para o Modal
+     */
+    public static function ajax_get_ad_creative_preview() {
+        check_ajax_referer('li_ajax_nonce', 'nonce');
+
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permissão negada.']);
+        }
+
+        global $wpdb;
+        $leads_table = DbSchema::get_leads_table();
+        $whatsapp_table = DbSchema::get_whatsapp_table();
+
+        $lead_id = isset($_POST['lead_id']) ? (int) $_POST['lead_id'] : 0;
+        if ($lead_id <= 0) {
+            wp_send_json_error(['message' => 'Lead inválido.']);
+        }
+
+        $lead = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$leads_table} WHERE id = %d", $lead_id));
+        if (!$lead) {
+            wp_send_json_error(['message' => 'Lead não encontrado.']);
+        }
+
+        // Tenta obter dados do referral em qualificacao_dados ou em wp_li_whatsapp_messages
+        $referral = [];
+        if (!empty($lead->qualificacao_dados)) {
+            $qd = json_decode($lead->qualificacao_dados, true);
+            if (!empty($qd['referral'])) {
+                $referral = $qd['referral'];
+            }
+        }
+
+        $raw_msg = $wpdb->get_row($wpdb->prepare(
+            "SELECT conteudo, payload_bruto FROM {$whatsapp_table} WHERE lead_id = %d ORDER BY id DESC LIMIT 1",
+            $lead_id
+        ));
+
+        if (empty($referral) && $raw_msg && !empty($raw_msg->payload_bruto)) {
+            $p_data = json_decode($raw_msg->payload_bruto, true);
+            if (!empty($p_data['referral'])) {
+                $referral = $p_data['referral'];
+            }
+        }
+
+        $ad_id       = !empty($referral['source_id']) ? $referral['source_id'] : $lead->ad_id;
+        $headline    = !empty($referral['headline']) ? $referral['headline'] : ($lead->ad_name ?: 'Converse Conosco');
+        $body_text   = !empty($referral['body']) ? $referral['body'] : '';
+        $media_type  = !empty($referral['media_type']) ? strtoupper($referral['media_type']) : '';
+        $image_url   = !empty($referral['image_url']) ? $referral['image_url'] : '';
+        $video_url   = !empty($referral['video_url']) ? $referral['video_url'] : '';
+        $source_url  = !empty($referral['source_url']) ? $referral['source_url'] : $lead->pagina_origem;
+
+        // Se tiver Ad ID numérico, gera o link direto do Gerenciador de Anúncios da Meta
+        $ads_manager_url = '';
+        if (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id)) {
+            $ads_manager_url = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
+        }
+
+        wp_send_json_success([
+            'lead_id'         => $lead->id,
+            'lead_nome'       => $lead->nome ?: 'Lead #' . $lead->id,
+            'lead_telefone'   => PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado),
+            'ad_id'           => $ad_id,
+            'headline'        => $headline,
+            'body_text'       => $body_text,
+            'media_type'      => $media_type,
+            'image_url'       => $image_url,
+            'video_url'       => $video_url,
+            'source_url'      => $source_url,
+            'ads_manager_url' => $ads_manager_url,
+            'campaign_name'   => $lead->campaign_name,
+            'adset_name'      => $lead->adset_name,
+            'ad_name'         => $lead->ad_name,
+            'first_message'   => $raw_msg ? $raw_msg->conteudo : '',
+        ]);
+    }
 
     /**
      * Endpoint AJAX para atualização de qualificação/venda e envio para a Meta CAPI
@@ -721,10 +798,9 @@ class MetaAdsController {
                                             ?>
                                             <?php if (!empty($creative_link)): ?>
                                                 <div style="margin-top: 3px;">
-                                                    <a href="<?php echo esc_url($creative_link); ?>" target="_blank" rel="noopener noreferrer" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; text-decoration: none; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe';" onmouseout="this.style.background='#f0f9ff';" title="Abrir o anúncio diretamente na Meta para ver o criativo e o texto da campanha">
-                                                        <span>👁️ Ver Anúncio / Criativo</span>
-                                                        <span class="dashicons dashicons-external" style="font-size: 11px; width: 11px; height: 11px; line-height: 11px;"></span>
-                                                    </a>
+                                                    <button type="button" class="li-btn-open-creative-modal" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe';" onmouseout="this.style.background='#f0f9ff';" title="Clique para ver a prévia completa do anúncio (imagem, texto e links) sem sair do WordPress">
+                                                        <span>👁️ Ver Criativo do Anúncio</span>
+                                                    </button>
                                                 </div>
                                             <?php endif; ?>
                                         </div>
@@ -888,6 +964,35 @@ class MetaAdsController {
             }
         });
         </script>
-        <?php
+    
+    <!-- MODAL DE PRÉVIA DO CRIATIVO META ADS -->
+    <div id="li-creative-modal" style="display: none; position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+        <div style="background: #ffffff; width: 92%; max-width: 520px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+            <!-- Modal Header -->
+            <div style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-size: 20px;">🎨</span>
+                    <div>
+                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" id="li-modal-lead-title">Criativo do Anúncio</h4>
+                        <p style="margin: 0; font-size: 11px; color: #64748b;" id="li-modal-lead-sub">Meta Ads &bull; Click-to-WhatsApp</p>
+                    </div>
+                </div>
+                <button type="button" id="li-close-creative-modal" style="border: none; background: none; font-size: 22px; cursor: pointer; color: #94a3b8; line-height: 1;">&times;</button>
+            </div>
+            
+            <!-- Modal Body (Preview Mockup) -->
+            <div style="padding: 20px; overflow-y: auto; flex: 1;" id="li-modal-creative-body">
+                <div style="text-align: center; padding: 30px; color: #64748b;">Carregando criativo...</div>
+            </div>
+
+            <!-- Modal Footer -->
+            <div style="padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; gap: 10px;" id="li-modal-creative-footer">
+                <button type="button" class="button button-secondary" id="li-modal-btn-close">Fechar</button>
+                <div style="display: flex; gap: 8px;" id="li-modal-action-links"></div>
+            </div>
+        </div>
+    </div>
+
+    <?php
     }
 }

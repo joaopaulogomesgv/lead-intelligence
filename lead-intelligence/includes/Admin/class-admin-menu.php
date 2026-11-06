@@ -27,6 +27,7 @@ class AdminMenu {
         add_action('wp_ajax_li_sync_lead_ad', [LeadsController::class, 'ajax_sync_lead_ad']);
         add_action('wp_ajax_li_sync_all_ads', [LeadsController::class, 'ajax_sync_all_ads']);
         add_action('wp_ajax_li_meta_ads_update_lead', [MetaAdsController::class, 'ajax_update_lead_status']);
+        add_action('wp_ajax_li_get_ad_creative_preview', [MetaAdsController::class, 'ajax_get_ad_creative_preview']);
 
         // Inicializa listeners de formulários do controller de importação
         if (class_exists(ImportController::class)) {
