@@ -382,6 +382,13 @@ class MetaAdsController {
         $custom_to        = isset($_GET['to']) ? sanitize_text_field(wp_unslash($_GET['to'])) : '';
         $search_term      = isset($_GET['s']) ? sanitize_text_field(wp_unslash($_GET['s'])) : '';
         $filter_status    = isset($_GET['status']) ? sanitize_text_field(wp_unslash($_GET['status'])) : '';
+        // Retrocompatibilidade se veio via meta_type
+        if (empty($filter_status) && !empty($_GET['meta_type'])) {
+            $mt = sanitize_key($_GET['meta_type']);
+            if ($mt === 'engaged') $filter_status = 'conversa_iniciada';
+            elseif ($mt === 'viewed_only') $filter_status = 'visualizou_anuncio';
+            elseif ($mt === 'ads_only') $filter_status = 'formulario_enviado';
+        }
         $utm_source       = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
         $has_custom_dates = (!empty($custom_from) || !empty($custom_to));
         $is_period_fixed  = !empty($_GET['li_explicit_period']);
@@ -439,24 +446,10 @@ class MetaAdsController {
                 break;
         }
 
-        // Construção da Query Segura: Meta Ads + WhatsApp (Ecossistema Meta)
-        $meta_type = isset($_GET['meta_type']) ? sanitize_key($_GET['meta_type']) : 'all';
-
+        // Construção da Query Segura: Base do Canal Meta Ads + WhatsApp (Ecossistema Meta)
         $meta_ads_cond = LeadRepository::get_channel_sql_condition('meta_ads');
         $whatsapp_cond = LeadRepository::get_channel_sql_condition('whatsapp');
-
-        if ($meta_type === 'ads_only') {
-            $meta_condition = $meta_ads_cond;
-        } elseif ($meta_type === 'whatsapp_only') {
-            $meta_condition = $whatsapp_cond;
-        } elseif ($meta_type === 'engaged') {
-            $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond}) AND (mensagens_recebidas > 0)";
-        } elseif ($meta_type === 'viewed_only') {
-            $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond}) AND (mensagens_recebidas IS NULL OR mensagens_recebidas = 0)";
-        } else {
-            // Padrão: Todos da Meta juntos (Anúncios + WhatsApp)
-            $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond})";
-        }
+        $meta_condition = "({$meta_ads_cond} OR {$whatsapp_cond})";
 
         // Blindagem Absoluta: A tela de Meta Ads NUNCA deve puxar leads do Google Ads ou de Planilhas Google
         $google_cond      = LeadRepository::get_channel_sql_condition('google_ads');
@@ -543,12 +536,20 @@ class MetaAdsController {
         }
 
         if (!empty($filter_status)) {
-            if ($filter_status === 'venda') {
+            if ($filter_status === 'conversa_iniciada' || $filter_status === 'engaged') {
+                $list_where[] = "(mensagens_recebidas > 0)";
+            } elseif ($filter_status === 'visualizou_anuncio' || $filter_status === 'viewed_only') {
+                $list_where[] = "(mensagens_recebidas IS NULL OR mensagens_recebidas = 0) AND (whatsapp_status IS NOT NULL OR conversation_id IS NOT NULL OR phone_number_id IS NOT NULL OR formulario_nome LIKE '%whatsapp%')";
+            } elseif ($filter_status === 'formulario_enviado' || $filter_status === 'ads_only') {
+                $list_where[] = "(whatsapp_status IS NULL AND conversation_id IS NULL AND phone_number_id IS NULL AND (formulario_nome IS NULL OR formulario_nome NOT LIKE '%whatsapp%'))";
+            } elseif ($filter_status === 'qualificado') {
+                $list_where[] = "(qualificacao_status = 'qualificado')";
+            } elseif ($filter_status === 'venda') {
                 $like_v = '%' . $wpdb->esc_like('venda') . '%';
                 $like_m = '%' . $wpdb->esc_like('matr') . '%';
                 $list_where[] = "(qualificacao_status = 'qualificado' OR etapa_funil LIKE %s OR etapa_funil LIKE %s)";
                 $list_params = array_merge($list_params, [$like_v, $like_m]);
-            } elseif ($filter_status === 'desqualificado') {
+            } elseif ($filter_status === 'desqualificado' || $filter_status === 'nao_qualificado') {
                 $like_d = '%' . $wpdb->esc_like('desq') . '%';
                 $list_where[] = "(qualificacao_status = 'nao_qualificado' OR etapa_funil LIKE %s)";
                 $list_params[] = $like_d;
@@ -598,28 +599,44 @@ class MetaAdsController {
                 </div>
             </div>
 
-            <!-- CARDS DE MÉTRICAS (GRID PADRÃO DO PLUGIN / MODELO WHATSAPP) -->
+            <!-- CARDS DE MÉTRICAS INTERATIVOS (CLIQUE PARA FILTRAR O FUNIL) -->
             <div class="li-metric-grid" style="margin-bottom: 20px;">
-                <div class="li-metric-card" style="border-left: 4px solid #0081fb;">
+                <a href="<?php echo esc_url(add_query_arg(['periodo' => $periodo, 'view' => 'leads', 's' => $search_term, 'utm_source' => $utm_source], remove_query_arg(['status', 'meta_type']))); ?>" 
+                   class="li-metric-card" 
+                   style="border-left: 4px solid #0081fb; text-decoration: none; display: block; cursor: pointer; transition: all 0.2s; <?php echo empty($filter_status) ? 'box-shadow: 0 0 0 2px #0081fb; background: #f8fafc;' : ''; ?>" 
+                   title="Clique para ver todos os leads do Ecossistema Meta">
                     <span class="li-metric-label">Leads da Meta</span>
                     <span class="li-metric-value" id="li-metric-total" style="color: #0081fb;"><?php echo number_format_i18n($total_leads); ?></span>
                     <span class="li-metric-sub">Total de contatos do anúncio</span>
-                </div>
-                <div class="li-metric-card li-card-success" style="border-left: 4px solid #10b981;">
+                </a>
+
+                <a href="<?php echo esc_url(add_query_arg(['periodo' => $periodo, 'view' => 'leads', 'status' => 'conversa_iniciada', 's' => $search_term, 'utm_source' => $utm_source], remove_query_arg('meta_type'))); ?>" 
+                   class="li-metric-card li-card-success" 
+                   style="border-left: 4px solid #10b981; text-decoration: none; display: block; cursor: pointer; transition: all 0.2s; <?php echo ($filter_status === 'conversa_iniciada' || $filter_status === 'engaged') ? 'box-shadow: 0 0 0 2px #10b981; background: #f0fdf4;' : ''; ?>" 
+                   title="Clique para filtrar apenas leads que responderam no WhatsApp (Conversa Iniciada)">
                     <span class="li-metric-label">💬 Responderam (No CRM)</span>
                     <span class="li-metric-value" id="li-metric-conversaram" style="color: #059669;"><?php echo number_format_i18n($conversaram); ?></span>
-                    <span class="li-metric-sub">Iniciaram conversa no chat</span>
-                </div>
-                <div class="li-metric-card" style="border-left: 4px solid #f59e0b;">
+                    <span class="li-metric-sub">Iniciaram conversa no chat ↗</span>
+                </a>
+
+                <a href="<?php echo esc_url(add_query_arg(['periodo' => $periodo, 'view' => 'leads', 'status' => 'visualizou_anuncio', 's' => $search_term, 'utm_source' => $utm_source], remove_query_arg('meta_type'))); ?>" 
+                   class="li-metric-card" 
+                   style="border-left: 4px solid #f59e0b; text-decoration: none; display: block; cursor: pointer; transition: all 0.2s; <?php echo ($filter_status === 'visualizou_anuncio' || $filter_status === 'viewed_only') ? 'box-shadow: 0 0 0 2px #f59e0b; background: #fffbeb;' : ''; ?>" 
+                   title="Clique para filtrar apenas contatos que abriram o WhatsApp mas NÃO enviaram mensagem (Visualizou Anúncio)">
                     <span class="li-metric-label">👀 Apenas Visualizaram</span>
                     <span class="li-metric-value" id="li-metric-sem-resposta" style="color: #d97706;"><?php echo number_format_i18n($sem_resposta); ?></span>
-                    <span class="li-metric-sub">Clicaram mas não responderam</span>
-                </div>
-                <div class="li-metric-card" style="border-left: 4px solid #8b5cf6;">
+                    <span class="li-metric-sub">Sem resposta no chat ↗</span>
+                </a>
+
+                <a href="<?php echo esc_url(add_query_arg(['periodo' => $periodo, 'view' => 'leads', 'status' => 'venda', 's' => $search_term, 'utm_source' => $utm_source], remove_query_arg('meta_type'))); ?>" 
+                   class="li-metric-card" 
+                   style="border-left: 4px solid #8b5cf6; text-decoration: none; display: block; cursor: pointer; transition: all 0.2s; <?php echo ($filter_status === 'venda') ? 'box-shadow: 0 0 0 2px #8b5cf6; background: #faf5ff;' : ''; ?>" 
+                   title="Clique para filtrar apenas leads com venda/matrícula confirmada">
                     <span class="li-metric-label">Vendas / Matrículas</span>
                     <span class="li-metric-value" id="li-metric-vendas" style="color: #7c3aed;"><?php echo number_format_i18n($vendas); ?></span>
-                    <span class="li-metric-sub">Alunos confirmados</span>
-                </div>
+                    <span class="li-metric-sub">Alunos confirmados ↗</span>
+                </a>
+
                 <div class="li-metric-card" style="border-left: 4px solid #14b8a6;">
                     <span class="li-metric-label">Taxa de Conversão</span>
                     <span class="li-metric-value" id="li-metric-taxa" style="color: #0d9488;"><?php echo esc_html($taxa); ?>%</span>
@@ -675,15 +692,22 @@ class MetaAdsController {
                         </div>
                     <?php endif; ?>
 
-                    <!-- Tipo de Origem Meta & Engajamento -->
+                    <!-- Seletor de Status & Funil -->
                     <div>
-                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Engajamento &amp; Canal</label>
-                        <select name="meta_type" style="height: 32px; font-size: 13px;">
-                            <option value="all" <?php selected($meta_type, 'all'); ?>>🔵💬 Todos da Meta (Ads + WhatsApp)</option>
-                            <option value="engaged" <?php selected($meta_type, 'engaged'); ?>>💬 Apenas Responderam (No CRM)</option>
-                            <option value="viewed_only" <?php selected($meta_type, 'viewed_only'); ?>>👀 Apenas Visualizaram (Sem Resposta)</option>
-                            <option value="ads_only" <?php selected($meta_type, 'ads_only'); ?>>🔵 Apenas Formulários do Site</option>
-                            <option value="whatsapp_only" <?php selected($meta_type, 'whatsapp_only'); ?>>💬 Todos do WhatsApp</option>
+                        <label style="display: block; font-size: 11px; font-weight: 700; text-transform: uppercase; color: #64748b; margin-bottom: 6px;">Status &amp; Funil</label>
+                        <select name="status" style="height: 32px; font-size: 13px; font-weight: 500;">
+                            <option value="">🔍 Todos (Funil &amp; Status)</option>
+                            <optgroup label="Etapa do Funil">
+                                <option value="conversa_iniciada" <?php selected($filter_status === 'conversa_iniciada' || $filter_status === 'engaged', true); ?>>💬 Conversa Iniciada (Respondeu no WhatsApp)</option>
+                                <option value="visualizou_anuncio" <?php selected($filter_status === 'visualizou_anuncio' || $filter_status === 'viewed_only', true); ?>>👀 Visualizou Anúncio (Sem Resposta)</option>
+                                <option value="formulario_enviado" <?php selected($filter_status === 'formulario_enviado' || $filter_status === 'ads_only', true); ?>>📝 Formulário Enviado (Site / Elementor)</option>
+                            </optgroup>
+                            <optgroup label="Qualificação &amp; Venda">
+                                <option value="venda" <?php selected($filter_status, 'venda'); ?>>💰 Venda / Matrícula</option>
+                                <option value="qualificado" <?php selected($filter_status, 'qualificado'); ?>>✅ Qualificado</option>
+                                <option value="desqualificado" <?php selected($filter_status === 'desqualificado' || $filter_status === 'nao_qualificado', true); ?>>❌ Não Qualificado</option>
+                                <option value="pendente" <?php selected($filter_status, 'pendente'); ?>>⏳ Pendente</option>
+                            </optgroup>
                         </select>
                     </div>
 
@@ -715,6 +739,41 @@ class MetaAdsController {
                     </div>
                 </form>
             </div>
+
+            <!-- CARD DE DESTAQUE: FILTRO ATIVO POR STATUS / FUNIL -->
+            <?php if (!empty($filter_status)): 
+                $funil_labels = [
+                    'conversa_iniciada'  => '💬 Conversa Iniciada (Responderam no WhatsApp)',
+                    'engaged'            => '💬 Conversa Iniciada (Responderam no WhatsApp)',
+                    'visualizou_anuncio' => '👀 Visualizou Anúncio (Sem Resposta)',
+                    'viewed_only'        => '👀 Visualizou Anúncio (Sem Resposta)',
+                    'formulario_enviado' => '📝 Formulário Enviado (Site / Elementor)',
+                    'ads_only'           => '📝 Formulário Enviado (Site / Elementor)',
+                    'venda'              => '💰 Venda / Matrícula',
+                    'qualificado'        => '✅ Qualificado',
+                    'desqualificado'     => '❌ Não Qualificado',
+                    'nao_qualificado'    => '❌ Não Qualificado',
+                    'pendente'           => '⏳ Pendente',
+                ];
+                $active_funil_label = $funil_labels[$filter_status] ?? $filter_status;
+            ?>
+                <div style="margin-bottom: 15px; padding: 10px 16px; background: #fefce8; border: 1px solid #fef08a; border-left: 4px solid #eab308; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <span style="font-size: 16px;">🎯</span>
+                        <div style="font-size: 13px; color: #854d0e;">
+                            Filtro ativo de Status &amp; Funil: <strong><?php echo esc_html($active_funil_label); ?></strong>
+                            <span style="margin-left: 10px; color: #713f12; font-weight: 600;">
+                                (<?php echo count($leads); ?> leads exibidos)
+                            </span>
+                        </div>
+                    </div>
+                    <div>
+                        <a href="<?php echo esc_url(remove_query_arg(['status', 'meta_type'])); ?>" class="button button-secondary button-small" style="color: #b91c1c; border-color: #fca5a5;">
+                            ✕ Limpar Filtro de Funil
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <!-- CARD DE DESTAQUE: FILTRO ATIVO POR UTM SOURCE -->
             <?php if (!empty($utm_source)): ?>
