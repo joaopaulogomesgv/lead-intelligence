@@ -252,19 +252,38 @@ class LeadRepository {
         $params = [];
 
         if (!empty($args['search'])) {
-            $search = '%' . $wpdb->esc_like(trim($args['search'])) . '%';
-            $where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR area_interesse LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR pagina_origem LIKE %s OR instancia LIKE %s OR leadid LIKE %s OR polo LIKE %s)";
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
-            $params[] = $search;
+            $raw_search = trim($args['search']);
+            $search = '%' . $wpdb->esc_like($raw_search) . '%';
+            $clean_id = (int) ltrim($raw_search, '#');
+            $digits_only = preg_replace('/\D/', '', $raw_search);
+
+            $search_conds = [
+                "nome LIKE %s",
+                "email LIKE %s",
+                "telefone LIKE %s",
+                "telefone_normalizado LIKE %s",
+                "area_interesse LIKE %s",
+                "utm_source LIKE %s",
+                "utm_campaign LIKE %s",
+                "pagina_origem LIKE %s",
+                "instancia LIKE %s",
+                "leadid LIKE %s",
+                "polo LIKE %s"
+            ];
+            $search_params = array_fill(0, count($search_conds), $search);
+
+            if ($clean_id > 0) {
+                array_unshift($search_conds, "id = %d");
+                array_unshift($search_params, $clean_id);
+            }
+
+            if (!empty($digits_only) && strlen($digits_only) >= 8) {
+                $search_conds[] = "telefone_normalizado LIKE %s";
+                $search_params[] = '%' . $wpdb->esc_like($digits_only) . '%';
+            }
+
+            $where[] = "(" . implode(' OR ', $search_conds) . ")";
+            $params = array_merge($params, $search_params);
         }
 
         if (!empty($args['utm_source'])) {

@@ -475,9 +475,30 @@ class MetaAdsController {
         $list_params = $params;
 
         if (!empty($search_term)) {
-            $like = '%' . $wpdb->esc_like(trim($search_term)) . '%';
-            $list_where[] = "(nome LIKE %s OR email LIKE %s OR telefone LIKE %s OR telefone_normalizado LIKE %s OR utm_source LIKE %s OR utm_campaign LIKE %s OR ad_name LIKE %s OR campaign_name LIKE %s OR leadid LIKE %s OR instancia LIKE %s OR polo LIKE %s)";
-            $list_params = array_merge($list_params, [$like, $like, $like, $like, $like, $like, $like, $like, $like, $like, $like]);
+            $raw_st = trim($search_term);
+            $like = '%' . $wpdb->esc_like($raw_st) . '%';
+            $clean_id = (int) ltrim($raw_st, '#');
+            $digits_only = preg_replace('/\D/', '', $raw_st);
+
+            $st_conds = [
+                "nome LIKE %s", "email LIKE %s", "telefone LIKE %s", "telefone_normalizado LIKE %s",
+                "utm_source LIKE %s", "utm_campaign LIKE %s", "ad_name LIKE %s", "campaign_name LIKE %s",
+                "leadid LIKE %s", "instancia LIKE %s", "polo LIKE %s"
+            ];
+            $st_params = array_fill(0, count($st_conds), $like);
+
+            if ($clean_id > 0) {
+                array_unshift($st_conds, "id = %d");
+                array_unshift($st_params, $clean_id);
+            }
+
+            if (!empty($digits_only) && strlen($digits_only) >= 8) {
+                $st_conds[] = "telefone_normalizado LIKE %s";
+                $st_params[] = '%' . $wpdb->esc_like($digits_only) . '%';
+            }
+
+            $list_where[] = "(" . implode(' OR ', $st_conds) . ")";
+            $list_params = array_merge($list_params, $st_params);
         }
 
         if (!empty($utm_source)) {
@@ -798,7 +819,9 @@ class MetaAdsController {
                             ?>
                                 <tr id="li-lead-row-<?php echo esc_attr($lead->id); ?>" style="transition: background 0.15s ease;">
                                     <td style="white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: top; padding: 12px 14px;">
-                                        <div style="font-size: 13px; font-weight: 800; color: #0f172a;">#<?php echo esc_html($lead->id); ?></div>
+                                        <div style="font-size: 13px; font-weight: 800;">
+                                            <a href="<?php echo esc_url(admin_url('admin.php?page=lead-intelligence&s=' . $lead->id)); ?>" target="_blank" style="color: #0284c7; text-decoration: none;" title="Clique para abrir este lead na tela de Todos os Leads e ver seus logs/detalhes">#<?php echo esc_html($lead->id); ?> ↗</a>
+                                        </div>
                                         <?php if (!empty($lead->leadid)): ?>
                                             <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;" title="Lead ID da Planilha / Meta Form: <?php echo esc_attr($lead->leadid); ?>">
                                                 LID: <?php echo esc_html($lead->leadid); ?>
