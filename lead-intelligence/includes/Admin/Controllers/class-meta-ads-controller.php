@@ -71,45 +71,69 @@ class MetaAdsController {
         // Se tiver Ad ID numérico, gera o link direto do Gerenciador de Anúncios da Meta
         $ads_manager_url = '';
         $ad_meta = [];
-        if (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id)) {
-            $ads_manager_url = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
-            $ad_meta = \LeadIntelligence\WhatsApp\WabaClient::get_ad_details($ad_id);
-        }
+        $page_name = '';
+        $page_picture = '';
 
-        // Identificação da Página Real do Facebook / Instagram que veicula o anúncio
-        $page_name    = !empty($ad_meta['page_name']) ? $ad_meta['page_name'] : '';
-        $page_picture = !empty($ad_meta['page_picture']) ? $ad_meta['page_picture'] : '';
-
-        // Fallback inteligente: se não encontrou a foto da Página, tenta a foto do Perfil Oficial da WABA
-        if (empty($page_picture)) {
-            $polo_info = null;
-            if (!empty($lead->instancia) || !empty($lead->polo)) {
-                $polo_query = !empty($lead->instancia) ? $lead->instancia : $lead->polo;
-                $polo_info  = \LeadIntelligence\WhatsApp\PoloRepository::find_by_name($polo_query);
-            }
-            if (!$polo_info) {
-                $polo_info = \LeadIntelligence\WhatsApp\PoloRepository::get_default();
-            }
-            if ($polo_info && !empty($polo_info['phone_number_id']) && !empty($polo_info['access_token'])) {
-                $cache_prof_key = 'li_wa_prof_pic_' . $polo_info['phone_number_id'];
-                $cached_pic = get_transient($cache_prof_key);
-                if ($cached_pic !== false) {
-                    $page_picture = $cached_pic;
-                } else {
-                    $settings = \LeadIntelligence\Admin\Settings::get_settings();
-                    $v = !empty($settings['meta_graph_version']) ? $settings['meta_graph_version'] : 'v26.0';
-                    $w_url = "https://graph.facebook.com/{$v}/{$polo_info['phone_number_id']}/whatsapp_business_profile?fields=profile_picture_url,about";
-                    $w_res = wp_remote_get($w_url, [
-                        'headers' => ['Authorization' => 'Bearer ' . $polo_info['access_token']],
-                        'timeout' => 5,
-                    ]);
-                    if (!is_wp_error($w_res) && wp_remote_retrieve_response_code($w_res) === 200) {
-                        $w_body = json_decode(wp_remote_retrieve_body($w_res), true);
-                        $page_picture = $w_body['data'][0]['profile_picture_url'] ?? '';
-                        set_transient($cache_prof_key, $page_picture, 24 * HOUR_IN_SECONDS);
-                    }
+        try {
+            if (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id)) {
+                $ads_manager_url = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
+                $ad_meta = \LeadIntelligence\WhatsApp\WabaClient::get_ad_details($ad_id);
+                if (!empty($ad_meta['page_name'])) {
+                    $page_name = $ad_meta['page_name'];
+                }
+                if (!empty($ad_meta['page_picture'])) {
+                    $page_picture = $ad_meta['page_picture'];
                 }
             }
+
+            // Fallback inteligente: se não encontrou a foto da Página, tenta a foto do Perfil Oficial da WABA
+            if (empty($page_picture)) {
+                $polo_info = null;
+                $all_polos = \LeadIntelligence\WhatsApp\PoloRepository::get_all();
+                $polo_target = strtolower(trim((string) (!empty($lead->instancia) ? $lead->instancia : $lead->polo)));
+                
+                if (!empty($all_polos) && is_array($all_polos)) {
+                    foreach ($all_polos as $p) {
+                        $p_name = strtolower($p['nome'] ?? '');
+                        if ($polo_target !== '' && ($p_name === $polo_target || stripos($p_name, $polo_target) !== false || stripos($polo_target, $p_name) !== false)) {
+                            $polo_info = $p;
+                            break;
+                        }
+                    }
+                }
+                if (!$polo_info) {
+                    $polo_info = \LeadIntelligence\WhatsApp\PoloRepository::get_default();
+                }
+
+                if ($polo_info && !empty($polo_info['phone_number_id']) && !empty($polo_info['access_token'])) {
+                    $cache_prof_key = 'li_wa_prof_pic_' . $polo_info['phone_number_id'];
+                    $cached_pic = get_transient($cache_prof_key);
+                    if ($cached_pic !== false) {
+                        $page_picture = $cached_pic;
+                    } else {
+                        $settings = \LeadIntelligence\Admin\Settings::get_settings();
+                        $v = !empty($settings['meta_graph_version']) ? $settings['meta_graph_version'] : 'v26.0';
+                        $w_url = "https://graph.facebook.com/{$v}/{$polo_info['phone_number_id']}/whatsapp_business_profile?fields=profile_picture_url,about";
+                        $w_res = wp_remote_get($w_url, [
+                            'headers' => ['Authorization' => 'Bearer ' . $polo_info['access_token']],
+                            'timeout' => 4,
+                        ]);
+                        if (!is_wp_error($w_res) && wp_remote_retrieve_response_code($w_res) === 200) {
+                            $w_body = json_decode(wp_remote_retrieve_body($w_res), true);
+                            $page_picture = $w_body['data'][0]['profile_picture_url'] ?? '';
+                            set_transient($cache_prof_key, $page_picture, 24 * HOUR_IN_SECONDS);
+                        } else {
+                            set_transient($cache_prof_key, '', 2 * HOUR_IN_SECONDS);
+                        }
+                    }
+                }
+
+                if (empty($page_name) && $polo_info && !empty($polo_info['nome'])) {
+                    $page_name = $polo_info['nome'];
+                }
+            }
+        } catch (\Throwable $e) {
+            \LeadIntelligence\Logger::warning('WhatsApp', 'Erro ao obter dados da Página/WABA: ' . $e->getMessage());
         }
 
         if (empty($page_name)) {
