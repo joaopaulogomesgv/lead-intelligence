@@ -75,12 +75,15 @@ class DiagnosticService {
         $raw_polos = PoloRepository::get_all();
         $token_app_info = 'Não verificado';
         $waba_subscribed_apps = [];
+        $token_perms_info = 'Não verificado';
+        $ad_test_info = 'Nenhum Ad ID numérico para teste';
 
         if (!empty($raw_polos)) {
             $first_polo = $raw_polos[0];
             $t = PoloRepository::get_access_token_for_polo($first_polo);
             $w = $first_polo['waba_id'] ?? '';
             if (!empty($t)) {
+                // Inspeciona App
                 $a_resp = wp_remote_get('https://graph.facebook.com/v26.0/app', [
                     'headers' => ['Authorization' => 'Bearer ' . $t],
                     'timeout' => 8,
@@ -91,6 +94,30 @@ class DiagnosticService {
                         $token_app_info = ($a_body['name'] ?? 'App') . ' (ID ' . $a_body['id'] . ')';
                     }
                 }
+
+                // Inspeciona permissões do Token
+                $p_resp = wp_remote_get('https://graph.facebook.com/v26.0/me/permissions', [
+                    'headers' => ['Authorization' => 'Bearer ' . $t],
+                    'timeout' => 8,
+                ]);
+                if (!is_wp_error($p_resp)) {
+                    $p_body = json_decode(wp_remote_retrieve_body($p_resp), true);
+                    if (!empty($p_body['data'])) {
+                        $granted = [];
+                        foreach ($p_body['data'] as $p_item) {
+                            if (($p_item['status'] ?? '') === 'granted') {
+                                $granted[] = $p_item['permission'];
+                            }
+                        }
+                        if (in_array('ads_read', $granted, true)) {
+                            $token_perms_info = '🟢 ATIVA (ads_read concedida) | Permissões: ' . implode(', ', $granted);
+                        } else {
+                            $token_perms_info = '🔴 AUSENTE (ads_read NÃO CONCEDIDA - impossibilita ler nomes de anúncios) | Permissões ativas: ' . implode(', ', $granted);
+                        }
+                    }
+                }
+
+                // Inspeciona apps inscritos na WABA
                 if (!empty($w)) {
                     $s_resp = wp_remote_get("https://graph.facebook.com/v26.0/{$w}/subscribed_apps", [
                         'headers' => ['Authorization' => 'Bearer ' . $t],
@@ -104,6 +131,26 @@ class DiagnosticService {
                                 $waba_subscribed_apps[] = ($wa_d['name'] ?? ($s_item['name'] ?? 'App')) . ' (ID ' . ($wa_d['id'] ?? ($s_item['id'] ?? '')) . ')';
                             }
                         }
+                    }
+                }
+
+                // Teste de leitura de anúncio no último Ad ID numérico real
+                $last_num_ad = $wpdb->get_var("SELECT ad_id FROM {$leads_table} WHERE ad_id REGEXP '^[0-9]{10,25}$' ORDER BY id DESC LIMIT 1");
+                if (!empty($last_num_ad)) {
+                    $ad_resp = wp_remote_get("https://graph.facebook.com/v26.0/{$last_num_ad}?fields=id,name,campaign{name},adset{name}", [
+                        'headers' => ['Authorization' => 'Bearer ' . $t],
+                        'timeout' => 8,
+                    ]);
+                    if (!is_wp_error($ad_resp)) {
+                        $ad_b = json_decode(wp_remote_retrieve_body($ad_resp), true);
+                        if (!empty($ad_b['name'])) {
+                            $ad_test_info = "🟢 SUCESSO no Ad #{$last_num_ad}: Anúncio '{$ad_b['name']}' | Campanha: '" . ($ad_b['campaign']['name'] ?? 'N/D') . "'";
+                        } else {
+                            $ad_err = $ad_b['error']['message'] ?? 'Resposta sem dados';
+                            $ad_test_info = "🔴 ERRO da Meta no Ad #{$last_num_ad}: {$ad_err}";
+                        }
+                    } else {
+                        $ad_test_info = "🔴 Falha HTTP: " . $ad_resp->get_error_message();
                     }
                 }
             }
@@ -170,6 +217,8 @@ class DiagnosticService {
             'whatsapp_polos'       => $polos,
             'token_app_info'       => $token_app_info,
             'waba_subscribed_apps' => $waba_subscribed_apps,
+            'token_perms_info'     => $token_perms_info,
+            'ad_test_info'         => $ad_test_info,
             'last_webhook_payload' => $last_webhook,
             'recent_logs'          => $recent_logs,
             'recent_leads'         => $recent_leads,
@@ -199,6 +248,8 @@ class DiagnosticService {
         $out[] = "--- AUDITORIA DE TOKENS & APPS NA META ---";
         $out[] = "🔑 Meta App que gerou este Token: " . ($rep['token_app_info'] ?? 'Não verificado');
         $out[] = "📡 Apps oficialmente inscritos na WABA: " . (!empty($rep['waba_subscribed_apps']) ? implode(', ', $rep['waba_subscribed_apps']) : 'NENHUM APP INSCRITO (ou erro de permissão)');
+        $out[] = "🛡️ Permissão ads_read no Token: " . ($rep['token_perms_info'] ?? 'Não verificado');
+        $out[] = "📢 Teste de Leitura de Anúncio Meta: " . ($rep['ad_test_info'] ?? 'Nenhum Ad ID');
         $out[] = "";
 
         $out[] = "--- NÚMEROS DE WHATSAPP / POLOS CADASTRADOS ---";

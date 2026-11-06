@@ -37,6 +37,15 @@ class LeadsController {
         }
     }
 
+    public static function ajax_sync_all_ads() {
+        check_ajax_referer('li_ajax_nonce', 'nonce');
+        if (!current_user_can('manage_options')) {
+            wp_send_json_error(['message' => 'Permissão negada.']);
+        }
+        $result = \LeadIntelligence\WhatsApp\WabaClient::sync_all_pending_leads();
+        wp_send_json_success($result);
+    }
+
     public static function render() {
         $current_page = isset($_GET['page']) ? sanitize_text_field(wp_unslash($_GET['page'])) : 'lead-intelligence';
         $is_qualificacoes = ($current_page === 'lead-intelligence-qualificacoes');

@@ -574,9 +574,14 @@ class MetaAdsController {
                         <h3 class="li-card-title" style="margin: 0; font-size: 16px;">Leads do Ecossistema Meta (Ads &amp; WhatsApp)</h3>
                         <p class="li-card-desc" style="margin: 2px 0 0; font-size: 12px;">Contatos identificados com origem de Facebook Ads, Instagram Ads e conversas do WhatsApp Cloud API.</p>
                     </div>
-                    <span class="li-badge" style="background: rgba(0, 129, 251, 0.15); color: #0081fb; font-weight: 700;">
-                        <?php echo count($leads); ?> leads exibidos
-                    </span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button type="button" id="li-btn-sync-all-meta-ads" class="button button-secondary" style="height: 30px; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;" title="Consulta a Meta Marketing API para atualizar nomes de campanhas e anúncios de todos os leads pendentes">
+                            <span class="dashicons dashicons-update" style="font-size: 14px; width: 14px; height: 14px; line-height: 14px;"></span> Sincronizar Nomes de Anúncios na Meta
+                        </button>
+                        <span class="li-badge" style="background: rgba(0, 129, 251, 0.15); color: #0081fb; font-weight: 700;">
+                            <?php echo count($leads); ?> leads exibidos
+                        </span>
+                    </div>
                 </div>
 
                 <table class="wp-list-table widefat fixed striped li-table">
@@ -677,16 +682,23 @@ class MetaAdsController {
                                                     </span>
                                                 <?php endif; ?>
                                             </div>
-                                            <?php if (!empty($lead->ad_name)): ?>
+                                            <?php 
+                                            $has_generic_ad = (!empty($lead->ad_name) && in_array(strtolower(trim($lead->ad_name)), ['converse conosco', 'converse conosco!', 'click-to-whatsapp', 'whatsapp cloud inbound']));
+                                            $show_sync_btn = !empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', $lead->ad_id);
+                                            ?>
+                                            <?php if (!empty($lead->ad_name) && !$has_generic_ad): ?>
                                                 <div title="Nome do Anúncio Meta: <?php echo esc_attr($lead->ad_name); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
                                                         📢 <?php echo esc_html($lead->ad_name); ?>
                                                     </code>
                                                 </div>
                                             <?php elseif (!empty($lead->ad_id)): ?>
                                                 <div title="Ad ID do Anúncio: <?php echo esc_attr($lead->ad_id); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
-                                                        📢 Ad #<?php echo esc_html($lead->ad_id); ?>
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                        📢 <?php echo $has_generic_ad ? 'Converse Conosco (Ad #' . esc_html($lead->ad_id) . ')' : 'Ad #' . esc_html($lead->ad_id); ?>
+                                                        <?php if ($show_sync_btn): ?>
+                                                            <button type="button" class="li-btn-sync-single-ad" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="border:none; background:none; cursor:pointer; padding:0; font-size:12px; line-height:1;" title="Buscar nome do anúncio na Meta Marketing API">🔄</button>
+                                                        <?php endif; ?>
                                                     </code>
                                                 </div>
                                             <?php endif; ?>
@@ -734,6 +746,52 @@ class MetaAdsController {
         <script>
         jQuery(document).ready(function($) {
             var metaNonce = '<?php echo esc_js(wp_create_nonce('li_meta_ads_nonce')); ?>';
+            var ajaxNonce = '<?php echo esc_js(wp_create_nonce('li_ajax_nonce')); ?>';
+
+            // Sincronizar todos os anúncios da Meta
+            $('#li-btn-sync-all-meta-ads').on('click', function() {
+                var $btn = $(this);
+                $btn.prop('disabled', true).text('⏳ Sincronizando com a Meta...');
+                $.post(ajaxurl, {
+                    action: 'li_sync_all_ads',
+                    nonce: ajaxNonce
+                }, function(res) {
+                    if (res && res.success && res.data) {
+                        alert(res.data.message || 'Sincronização concluída!');
+                        window.location.reload();
+                    } else {
+                        alert('Aviso: ' + ((res && res.data && res.data.message) ? res.data.message : 'Falha na comunicação com a Meta.'));
+                        $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sincronizar Nomes de Anúncios na Meta');
+                    }
+                }).fail(function() {
+                    alert('Erro de rede ao conectar à API do WordPress.');
+                    $btn.prop('disabled', false).html('<span class="dashicons dashicons-update"></span> Sincronizar Nomes de Anúncios na Meta');
+                });
+            });
+
+            // Sincronizar anúncio de um lead individual
+            $(document).on('click', '.li-btn-sync-single-ad', function(e) {
+                e.preventDefault();
+                var $btn = $(this);
+                var leadId = $btn.data('lead-id');
+                $btn.text('⏳');
+                $.post(ajaxurl, {
+                    action: 'li_sync_lead_ad',
+                    lead_id: leadId,
+                    nonce: ajaxNonce
+                }, function(res) {
+                    if (res && res.success) {
+                        alert(res.data.message || 'Anúncio sincronizado!');
+                        window.location.reload();
+                    } else {
+                        alert('Não foi possível obter dados na Meta: ' + ((res && res.data && res.data.message) ? res.data.message : 'Verifique se o token tem a permissão ads_read.'));
+                        $btn.text('🔄');
+                    }
+                }).fail(function() {
+                    alert('Erro de requisição.');
+                    $btn.text('🔄');
+                });
+            });
 
             $(document).on('click', '.li-action-btn', function(e) {
                 e.preventDefault();
