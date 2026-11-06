@@ -74,22 +74,29 @@ class MetaAdsController {
             $ads_manager_url = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
         }
 
+        $clean_phone = preg_replace('/\D+/', '', $lead->telefone_normalizado ?: $lead->telefone);
+        $formatted_date = !empty($lead->data_cadastro) ? wp_date('d/m/Y \à\s H:i', strtotime($lead->data_cadastro)) : '';
+
         wp_send_json_success([
-            'lead_id'         => $lead->id,
-            'lead_nome'       => $lead->nome ?: 'Lead #' . $lead->id,
-            'lead_telefone'   => PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado),
-            'ad_id'           => $ad_id,
-            'headline'        => $headline,
-            'body_text'       => $body_text,
-            'media_type'      => $media_type,
-            'image_url'       => $image_url,
-            'video_url'       => $video_url,
-            'source_url'      => $source_url,
-            'ads_manager_url' => $ads_manager_url,
-            'campaign_name'   => $lead->campaign_name,
-            'adset_name'      => $lead->adset_name,
-            'ad_name'         => $lead->ad_name,
-            'first_message'   => $raw_msg ? $raw_msg->conteudo : '',
+            'lead_id'           => $lead->id,
+            'lead_nome'         => $lead->nome ?: 'Lead #' . $lead->id,
+            'lead_telefone'     => PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado),
+            'lead_telefone_raw' => $clean_phone,
+            'lead_data'         => $formatted_date,
+            'lead_polo'         => !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : ''),
+            'lead_curso'        => !empty($lead->tipo_curso) ? $lead->tipo_curso : (!empty($lead->area_interesse) ? $lead->area_interesse : ''),
+            'ad_id'             => $ad_id,
+            'headline'          => $headline,
+            'body_text'         => $body_text,
+            'media_type'        => $media_type,
+            'image_url'         => $image_url,
+            'video_url'         => $video_url,
+            'source_url'        => $source_url,
+            'ads_manager_url'   => $ads_manager_url,
+            'campaign_name'     => $lead->campaign_name,
+            'adset_name'        => $lead->adset_name,
+            'ad_name'           => $lead->ad_name,
+            'first_message'     => $raw_msg ? $raw_msg->conteudo : '',
         ]);
     }
 
@@ -852,8 +859,7 @@ class MetaAdsController {
             var metaNonce = '<?php echo esc_js(wp_create_nonce('li_meta_ads_nonce')); ?>';
             var ajaxNonce = '<?php echo esc_js(wp_create_nonce('li_ajax_nonce')); ?>';
 
-            // Sincronizar todos os anúncios da Meta
-                        // Abrir Modal de Criativo
+            // Abrir Modal de Criativo de Alta Fidelidade (2 Colunas)
             $(document).on('click', '.li-btn-open-creative-modal', function(e) {
                 e.preventDefault();
                 var leadId = $(this).data('lead-id');
@@ -862,7 +868,7 @@ class MetaAdsController {
                 var $links = $('#li-modal-action-links');
 
                 $modal.css('display', 'flex');
-                $body.html('<div style="text-align:center; padding: 40px; color: #64748b;"><span class="dashicons dashicons-update" style="animation: rotation 1.5s infinite linear; font-size: 24px; width: 24px; height: 24px;"></span><div style="margin-top: 10px; font-weight: 600;">Carregando detalhes do anúncio...</div></div>');
+                $body.html('<div style="text-align:center; padding: 60px 20px; color: #64748b;"><span class="dashicons dashicons-update" style="animation: rotation 1.5s infinite linear; font-size: 32px; width: 32px; height: 32px; color: #0284c7;"></span><div style="margin-top: 14px; font-weight: 600; font-size: 14px; color: #0f172a;">Carregando criativo e dados da campanha...</div><div style="font-size: 12px; color: #64748b; margin-top: 4px;">Consultando histórico do anúncio e da conversa</div></div>');
                 $links.empty();
 
                 $.post(ajaxurl, {
@@ -872,86 +878,190 @@ class MetaAdsController {
                 }, function(res) {
                     if (res && res.success && res.data) {
                         var d = res.data;
-                        $('#li-modal-lead-title').text('Criativo do Lead: ' + d.lead_nome);
-                        $('#li-modal-lead-sub').text('WhatsApp: ' + d.lead_telefone + (d.ad_id ? ' • Ad ID: ' + d.ad_id : ''));
+                        $('#li-modal-lead-title').text(d.lead_nome);
+                        var subText = (d.lead_telefone ? d.lead_telefone : '') + (d.lead_data ? ' • Chegou em ' + d.lead_data : '') + (d.ad_id ? ' • Ad ID: ' + d.ad_id : '');
+                        $('#li-modal-lead-sub').text(subText);
 
                         var html = '';
+                        html += '<div id="li-modal-creative-grid" style="display: grid; grid-template-columns: minmax(320px, 420px) 1fr; gap: 24px; align-items: start;">';
 
-                        // Card Mockup estilo Instagram/Facebook Ad
-                        html += '<div style="border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">';
-                        
-                        // Header
-                        html += '<div style="padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9;">';
-                        html += '  <div style="display: flex; align-items: center; gap: 10px;">';
-                        html += '    <div style="width: 36px; height: 36px; border-radius: 50%; background: #0081fb; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;">F</div>';
-                        html += '    <div>';
-                        html += '      <div style="font-size: 13px; font-weight: 700; color: #0f172a;">Matrículas FAVENI</div>';
-                        html += '      <div style="font-size: 11px; color: #64748b;">Patrocinado &bull; 🌐</div>';
+                        // ================= COLUNA 1: FEED MOCKUP (META ADS / INSTAGRAM / FACEBOOK) =================
+                        html += '  <div style="display: flex; flex-direction: column; gap: 12px;">';
+                        html += '    <div style="font-size: 12px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: space-between;">';
+                        html += '      <span>📱 Mockup do Anúncio (Feed)</span>';
+                        html += '      <span style="background: #e0f2fe; color: #0369a1; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700;">Click-to-WhatsApp</span>';
                         html += '    </div>';
-                        html += '  </div>';
-                        html += '</div>';
 
-                        // Texto / Copy do Anúncio
-                        if (d.body_text) {
-                            html += '<div style="padding: 12px 14px; font-size: 13px; color: #1e293b; line-height: 1.5; white-space: pre-wrap; background: #ffffff;">' + $('<div>').text(d.body_text).html() + '</div>';
-                        }
+                        html += '    <div style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 16px -2px rgba(15,23,42,0.06);">';
+                        
+                        // Header do Anúncio
+                        html += '      <div style="padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9;">';
+                        html += '        <div style="display: flex; align-items: center; gap: 10px;">';
+                        html += '          <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #0081fb, #0056b3); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; box-shadow: 0 2px 4px rgba(0,129,251,0.2);">F</div>';
+                        html += '          <div>';
+                        html += '            <div style="font-size: 13px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 4px;">Matrículas FAVENI <span style="color: #0081fb; font-size: 12px;" title="Verificado">✔</span></div>';
+                        html += '            <div style="font-size: 11px; color: #64748b;">Patrocinado &bull; 🌐</div>';
+                        html += '          </div>';
+                        html += '        </div>';
+                        html += '        <div style="color: #94a3b8; font-size: 16px; cursor: default;">•••</div>';
+                        html += '      </div>';
 
-                        // Imagem / Vídeo do Criativo
+                        // Mídia do Criativo (Imagem ou Vídeo)
                         if (d.image_url) {
-                            html += '<div style="background: #000; text-align: center; max-height: 320px; overflow: hidden;">';
-                            html += '  <img src="' + d.image_url + '" style="max-width: 100%; max-height: 320px; display: block; margin: 0 auto; object-fit: contain;" alt="Criativo do Anúncio">';
-                            html += '</div>';
-                        } else if (d.media_type) {
-                            html += '<div style="background: #f1f5f9; padding: 25px; text-align: center; color: #64748b;">';
-                            html += '  <span style="font-size: 32px;">🎬</span><div style="margin-top: 6px; font-weight: 600;">Criativo em formato: ' + d.media_type + '</div>';
-                            html += '</div>';
+                            html += '      <div style="background: #f8fafc; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9; text-align: center; position: relative;">';
+                            html += '        <img src="' + d.image_url + '" style="width: 100%; max-height: 440px; display: block; margin: 0 auto; object-fit: contain;" alt="Criativo do Anúncio">';
+                            html += '      </div>';
+                        } else if (d.video_url) {
+                            html += '      <div style="background: #0f172a; text-align: center;">';
+                            html += '        <video src="' + d.video_url + '" controls style="width: 100%; max-height: 440px; display: block;"></video>';
+                            html += '      </div>';
+                        } else {
+                            html += '      <div style="background: #f8fafc; padding: 40px 20px; text-align: center; color: #64748b; border-top: 1px solid #f1f5f9; border-bottom: 1px solid #f1f5f9;">';
+                            html += '        <span style="font-size: 40px;">📢</span>';
+                            html += '        <div style="margin-top: 8px; font-weight: 700; color: #0f172a;">' + (d.media_type ? 'Formato: ' + d.media_type : 'Anúncio de Mensagem') + '</div>';
+                            html += '        <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Mídia nativa Click-to-WhatsApp</div>';
+                            html += '      </div>';
                         }
 
-                        // CTA Bar (Click-to-WhatsApp)
-                        html += '<div style="padding: 10px 14px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">';
-                        html += '  <div>';
-                        html += '    <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 600;">WHATSAPP</div>';
-                        html += '    <div style="font-size: 13px; font-weight: 700; color: #0f172a;">' + $('<div>').text(d.headline || 'Converse conosco').html() + '</div>';
-                        html += '  </div>';
-                        html += '  <div style="background: #25d366; color: #ffffff; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px;">💬 Enviar mensagem</div>';
-                        html += '</div>';
+                        // CTA Bar do WhatsApp
+                        html += '      <div style="padding: 12px 14px; background: #ffffff; display: flex; justify-content: space-between; align-items: center; gap: 10px;">';
+                        html += '        <div style="min-width: 0; flex: 1;">';
+                        html += '          <div style="font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">WHATSAPP</div>';
+                        html += '          <div style="font-size: 13px; font-weight: 700; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + $('<div>').text(d.headline || 'Converse conosco').html() + '</div>';
+                        html += '        </div>';
+                        html += '        <div style="background: #25d366; color: #ffffff; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 4px rgba(37,211,102,0.25); white-space: nowrap;">💬 Enviar mensagem</div>';
+                        html += '      </div>';
 
-                        html += '</div>'; // fim do card
+                        html += '    </div>'; // fim do feed card
 
-                        // Bloco de Dados Técnicos
-                        html += '<div style="margin-top: 16px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px;">';
-                        html += '  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">';
-                        html += '    <div><strong>🆔 Ad ID na Meta:</strong> <code id="li-ad-id-val">' + (d.ad_id || 'N/D') + '</code></div>';
+                        if (d.image_url) {
+                            html += '    <div style="text-align: right;">';
+                            html += '      <a href="' + d.image_url + '" target="_blank" style="font-size: 11px; color: #0284c7; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;">';
+                            html += '        <span>🔍 Abrir imagem em alta resolução</span> <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span>';
+                            html += '      </a>';
+                            html += '    </div>';
+                        }
+
+                        html += '  </div>'; // fim da coluna 1
+
+                        // ================= COLUNA 2: INTELIGÊNCIA DO LEAD & ESTRUTURA DO ANÚNCIO =================
+                        html += '  <div style="display: flex; flex-direction: column; gap: 16px;">';
+
+                        // 1. Perfil do Lead que Clicou
+                        html += '    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);">';
+                        html += '      <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between;">';
+                        html += '        <span>👤 Lead que Clicou no Anúncio</span>';
+                        if (d.lead_data) {
+                            html += '        <span style="font-weight: 500; text-transform: none; color: #64748b;">📅 ' + d.lead_data + '</span>';
+                        }
+                        html += '      </div>';
+
+                        html += '      <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">';
+                        html += '        <div>';
+                        html += '          <div style="font-size: 16px; font-weight: 700; color: #0f172a;">' + $('<div>').text(d.lead_nome).html() + '</div>';
+                        html += '          <div style="font-size: 13px; color: #334155; margin-top: 2px;">' + (d.lead_telefone || 'Sem telefone') + '</div>';
+                        if (d.lead_polo) {
+                            html += '          <div style="margin-top: 6px;"><span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 11px; padding: 2px 7px; border-radius: 4px;">🏛️ Polo/Instância: ' + $('<div>').text(d.lead_polo).html() + '</span></div>';
+                        }
+                        html += '        </div>';
+
+                        if (d.lead_telefone_raw) {
+                            html += '        <div>';
+                            html += '          <a href="https://wa.me/' + d.lead_telefone_raw + '" target="_blank" class="button" style="background: #25d366; color: #ffffff; border: none; font-weight: 700; font-size: 12px; height: 34px; line-height: 34px; padding: 0 14px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; text-decoration: none; box-shadow: 0 2px 4px rgba(37,211,102,0.3);">';
+                            html += '            <span>💬 Conversar no WhatsApp</span>';
+                            html += '          </a>';
+                            html += '        </div>';
+                        }
+                        html += '      </div>';
+
+                        // Balão de Mensagem Inicial do Lead
+                        if (d.first_message) {
+                            html += '      <div style="margin-top: 14px; padding: 10px 12px; background: #f0fdf4; border-left: 3px solid #22c55e; border-radius: 0 8px 8px 0; font-size: 12px; color: #166534;">';
+                            html += '        <div style="font-weight: 700; margin-bottom: 2px;">💬 Mensagem enviada pelo Lead ao entrar no WhatsApp:</div>';
+                            html += '        <div style="font-style: italic;">"' + $('<div>').text(d.first_message).html() + '"</div>';
+                            html += '      </div>';
+                        }
+                        html += '    </div>';
+
+                        // 2. Texto / Copy do Anúncio (com botão Copiar)
+                        if (d.body_text) {
+                            html += '    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);">';
+                            html += '      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">';
+                            html += '        <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px;">📝 Texto / Copy do Anúncio</div>';
+                            html += '        <button type="button" class="button button-small" id="li-btn-copy-body-copy" style="font-size: 11px; display: inline-flex; align-items: center; gap: 4px;">📋 Copiar Texto da Copy</button>';
+                            html += '      </div>';
+                            html += '      <div id="li-body-copy-text" style="font-size: 13px; color: #1e293b; line-height: 1.6; white-space: pre-wrap; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; max-height: 180px; overflow-y: auto;">' + $('<div>').text(d.body_text).html() + '</div>';
+                            html += '    </div>';
+                        }
+
+                        // 3. Estrutura de Tráfego Pago (Meta Marketing Hierarchy)
+                        html += '    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; box-shadow: 0 1px 3px rgba(15,23,42,0.04);">';
+                        html += '      <div style="font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px;">📊 Arquitetura de Tráfego Pago (Meta Ads)</div>';
+                        
+                        html += '      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">';
+                        
+                        // Campanha
+                        html += '        <div style="padding: 8px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">';
+                        html += '          <div style="font-size: 10px; font-weight: 700; color: #15803d; text-transform: uppercase;">📂 Campanha:</div>';
+                        html += '          <div style="font-weight: 600; color: #166534; word-break: break-word;">' + $('<div>').text(d.campaign_name || 'Campanha não identificada').html() + '</div>';
+                        html += '        </div>';
+
+                        // Conjunto
+                        html += '        <div style="padding: 8px 10px; background: #fefce8; border: 1px solid #fef08a; border-radius: 6px;">';
+                        html += '          <div style="font-size: 10px; font-weight: 700; color: #a16207; text-transform: uppercase;">🎯 Conjunto de Anúncios:</div>';
+                        html += '          <div style="font-weight: 600; color: #854d0e; word-break: break-word;">' + $('<div>').text(d.adset_name || 'Conjunto não identificado').html() + '</div>';
+                        html += '        </div>';
+
+                        // Anúncio
+                        html += '        <div style="padding: 8px 10px; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px;">';
+                        html += '          <div style="font-size: 10px; font-weight: 700; color: #1d4ed8; text-transform: uppercase;">📢 Anúncio:</div>';
+                        html += '          <div style="font-weight: 600; color: #1e40af; word-break: break-word;">' + $('<div>').text(d.ad_name || 'Anúncio sem nome').html() + '</div>';
+                        html += '        </div>';
+
+                        // Ad ID
+                        html += '        <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">';
+                        html += '          <div><span style="font-weight: 700; color: #475569;">🆔 Ad ID Meta:</span> <code style="font-weight: 700; color: #0f172a; font-size: 12px;">' + (d.ad_id || 'N/D') + '</code></div>';
                         if (d.ad_id) {
-                            html += '    <button type="button" class="button button-small" id="li-copy-ad-id-btn" style="font-size: 11px;">📋 Copiar Ad ID</button>';
+                            html += '          <button type="button" class="button button-small" id="li-copy-ad-id-btn" style="font-size: 11px;">📋 Copiar ID</button>';
                         }
-                        html += '  </div>';
-                        if (d.campaign_name) html += '<div style="margin-bottom: 4px;"><strong>📂 Campanha:</strong> ' + $('<div>').text(d.campaign_name).html() + '</div>';
-                        if (d.adset_name)    html += '<div style="margin-bottom: 4px;"><strong>🎯 Conjunto:</strong> ' + $('<div>').text(d.adset_name).html() + '</div>';
-                        if (d.first_message) html += '<div><strong>💬 Mensagem enviada pelo lead:</strong> <em>"' + $('<div>').text(d.first_message).html() + '"</em></div>';
-                        html += '</div>';
+                        html += '        </div>';
+
+                        html += '      </div>';
+                        html += '    </div>';
+
+                        html += '  </div>'; // fim da coluna 2
+
+                        html += '</div>'; // fim do grid
 
                         $body.html(html);
 
-                        // Botão Copiar Ad ID
+                        // Ações de Cópia
                         $('#li-copy-ad-id-btn').on('click', function() {
                             navigator.clipboard.writeText(d.ad_id).then(function() {
-                                alert('Ad ID ' + d.ad_id + ' copiado com sucesso! Você pode colar na barra de busca do Gerenciador de Anúncios.');
+                                alert('Ad ID ' + d.ad_id + ' copiado com sucesso! Você pode colar no campo de busca do Gerenciador de Anúncios.');
                             });
                         });
 
-                        // Botões de ação externa
+                        $('#li-btn-copy-body-copy').on('click', function() {
+                            if (d.body_text) {
+                                navigator.clipboard.writeText(d.body_text).then(function() {
+                                    alert('Texto da copy copiado com sucesso!');
+                                });
+                            }
+                        });
+
+                        // Botões de Ação no Rodapé
                         if (d.source_url) {
-                            $links.append('<a href="' + d.source_url + '" target="_blank" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 4px;">🔗 Link Direto do Post <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
+                            $links.append('<a href="' + d.source_url + '" target="_blank" class="button button-secondary" style="display: inline-flex; align-items: center; gap: 4px; font-weight: 600;">🔗 Link Direto do Post <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
                         }
                         if (d.ads_manager_url) {
-                            $links.append('<a href="' + d.ads_manager_url + '" target="_blank" class="button button-primary" style="display: inline-flex; align-items: center; gap: 4px;">📊 Abrir no Gerenciador <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
+                            $links.append('<a href="' + d.ads_manager_url + '" target="_blank" class="button button-primary" style="display: inline-flex; align-items: center; gap: 5px; font-weight: 700; background: #0081fb; border-color: #0070da;">📊 Abrir no Gerenciador de Anúncios <span class="dashicons dashicons-external" style="font-size:11px; width:11px; height:11px;"></span></a>');
                         }
                     } else {
-                        $body.html('<div style="padding: 20px; color: #b91c1c; text-align: center;">Não foi possível carregar os detalhes deste anúncio.</div>');
+                        $body.html('<div style="padding: 40px; color: #b91c1c; text-align: center; font-weight: 600;">Não foi possível carregar os detalhes deste anúncio. Verifique se o lead possui Ad ID associado.</div>');
                     }
                 }).fail(function() {
-                    $body.html('<div style="padding: 20px; color: #b91c1c; text-align: center;">Erro de rede ao buscar o anúncio.</div>');
+                    $body.html('<div style="padding: 40px; color: #b91c1c; text-align: center; font-weight: 600;">Erro de rede ao conectar à Meta API.</div>');
                 });
             });
 
@@ -1087,30 +1197,39 @@ class MetaAdsController {
         });
         </script>
     
-    <!-- MODAL DE PRÉVIA DO CRIATIVO META ADS -->
-    <div id="li-creative-modal" style="display: none; position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
-        <div style="background: #ffffff; width: 92%; max-width: 520px; border-radius: 12px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+    <!-- MODAL DE PRÉVIA DO CRIATIVO META ADS DE ALTA FIDELIDADE (2 COLUNAS) -->
+    <style>
+    @media (max-width: 860px) {
+        #li-modal-creative-grid {
+            grid-template-columns: 1fr !important;
+        }
+    }
+    </style>
+    <div id="li-creative-modal" style="display: none; position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
+        <div style="background: #ffffff; width: 94%; max-width: 960px; border-radius: 16px; box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.45); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
             <!-- Modal Header -->
-            <div style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
-                <div style="display: flex; align-items: center; gap: 8px;">
-                    <span style="font-size: 20px;">🎨</span>
+            <div style="padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #ffffff;">
+                <div style="display: flex; align-items: center; gap: 12px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0081fb, #25d366); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 6px rgba(0,129,251,0.25);">
+                        🎨
+                    </div>
                     <div>
-                        <h4 style="margin: 0; font-size: 15px; font-weight: 700; color: #0f172a;" id="li-modal-lead-title">Criativo do Anúncio</h4>
-                        <p style="margin: 0; font-size: 11px; color: #64748b;" id="li-modal-lead-sub">Meta Ads &bull; Click-to-WhatsApp</p>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;" id="li-modal-lead-title">Criativo do Anúncio & Detalhes do Lead</h4>
+                        <p style="margin: 2px 0 0; font-size: 11px; color: #64748b;" id="li-modal-lead-sub">Meta Ads &bull; Click-to-WhatsApp</p>
                     </div>
                 </div>
-                <button type="button" id="li-close-creative-modal" style="border: none; background: none; font-size: 22px; cursor: pointer; color: #94a3b8; line-height: 1;">&times;</button>
+                <button type="button" id="li-close-creative-modal" style="border: none; background: #f1f5f9; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; color: #64748b; line-height: 32px; text-align: center; transition: all 0.2s;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a';" onmouseout="this.style.background='#f1f5f9'; this.style.color='#64748b;'>&times;</button>
             </div>
             
-            <!-- Modal Body (Preview Mockup) -->
-            <div style="padding: 20px; overflow-y: auto; flex: 1;" id="li-modal-creative-body">
-                <div style="text-align: center; padding: 30px; color: #64748b;">Carregando criativo...</div>
+            <!-- Modal Body (Preview Mockup + Detalhes em 2 Colunas) -->
+            <div style="padding: 20px 24px; overflow-y: auto; flex: 1; background: #f8fafc;" id="li-modal-creative-body">
+                <div style="text-align: center; padding: 40px; color: #64748b;">Carregando criativo...</div>
             </div>
 
             <!-- Modal Footer -->
-            <div style="padding: 14px 20px; border-top: 1px solid #e2e8f0; background: #f8fafc; display: flex; justify-content: space-between; align-items: center; gap: 10px;" id="li-modal-creative-footer">
-                <button type="button" class="button button-secondary" id="li-modal-btn-close">Fechar</button>
-                <div style="display: flex; gap: 8px;" id="li-modal-action-links"></div>
+            <div style="padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;" id="li-modal-creative-footer">
+                <button type="button" class="button button-secondary" id="li-modal-btn-close" style="font-weight: 600;">Fechar</button>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="li-modal-action-links"></div>
             </div>
         </div>
     </div>
