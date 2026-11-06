@@ -647,8 +647,122 @@ class Settings {
         // Se o usuário clicou em Novo ou Editar Polo
         if ($action === 'new' || $action === 'edit'):
             $edit_polo = ($action === 'edit' && !empty($id)) ? PoloRepository::get_by_id($id) : null;
+            $curr_settings = self::get_settings();
+            $verify_tok = $curr_settings['meta_verify_token'] ?? '2QcW***';
         ?>
-            <div class="li-card" style="max-width: 800px;">
+            <!-- INFORMATIVO TÉCNICO PROFISSIONAL: GUIA COMPLETO DE CONFIGURAÇÃO NA META -->
+            <div class="li-card" style="margin-bottom: 24px; border-left: 4px solid #4f46e5; background: #ffffff; padding: 24px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px; margin-bottom: 18px; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px;">
+                    <div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 24px;">📘</span>
+                            <h3 style="margin: 0; font-size: 17px; font-weight: 700; color: #1e1b4b;">
+                                Manual de Configuração: Conectando o 2º Aplicativo da Meta (Zero Conflito com CRM/InterageZap)
+                            </h3>
+                        </div>
+                        <p style="margin: 4px 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
+                            Como a sua empresa já possui o WhatsApp conectado ao aplicativo principal (InterageZap), este <strong>segundo aplicativo</strong> operará em paralelo oficial via Meta Graph API v26.0. Siga os 4 passos obrigatórios abaixo para que os leads e nomes de anúncios cheguem 100% completos:
+                        </p>
+                    </div>
+                    <span class="li-badge" style="background: #e0e7ff; color: #4338ca; font-weight: 700; font-size: 11px; padding: 5px 10px; border-radius: 6px;">
+                        🛡️ Multi-App Oficial Meta (Inscrição Simultânea)
+                    </span>
+                </div>
+
+                <!-- GRADE DE 4 ETAPAS -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                    
+                    <!-- PASSO 1 -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">1</span>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Atribuir Ativos no Business</h4>
+                        </div>
+                        <p style="font-size: 12px; color: #475569; margin: 0 0 8px 0; line-height: 1.4;">
+                            Em <strong>Configurações do Negócio &gt; Usuários do Sistema</strong>, selecione o usuário e adicione <strong>2 ativos obrigatórios</strong>:
+                        </p>
+                        <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #334155; line-height: 1.5;">
+                            <li>📌 <strong>Conta do WhatsApp (WABA)</strong>: Controle total.</li>
+                            <li>📌 <strong>Conta de Anúncios</strong>: Marcar <em>"Ver desempenho"</em> (essencial para ler nomes de campanhas!).</li>
+                        </ul>
+                    </div>
+
+                    <!-- PASSO 2 -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">2</span>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Gerar Token com 3 Permissões</h4>
+                        </div>
+                        <p style="font-size: 12px; color: #475569; margin: 0 0 8px 0; line-height: 1.4;">
+                            Clique em <strong>"Gerar novo token"</strong>, selecione o <strong>2º App</strong> (ex: <code>App Bm Ative Gv</code>) e marque:
+                        </p>
+                        <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #334155; line-height: 1.5;">
+                            <li>✅ <code>whatsapp_business_messaging</code></li>
+                            <li>✅ <code>whatsapp_business_management</code></li>
+                            <li>✅ <code>ads_read</code> <strong style="color:#b91c1c;">(Obrigatória para nomes de anúncios!)</strong></li>
+                        </ul>
+                    </div>
+
+                    <!-- PASSO 3 -->
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="background: #4f46e5; color: #fff; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">3</span>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #1e293b;">Webhook no Meta Developers</h4>
+                        </div>
+                        <p style="font-size: 12px; color: #475569; margin: 0 0 8px 0; line-height: 1.4;">
+                            No <strong>developers.facebook.com</strong> &gt; Seu 2º App &gt; <em>WhatsApp &gt; Configuração de Produção</em>:
+                        </p>
+                        <ul style="margin: 0; padding-left: 16px; font-size: 11px; color: #334155; line-height: 1.5;">
+                            <li>Cole a <strong>URL de Callback</strong> abaixo.</li>
+                            <li>Cole o <strong>Verify Token</strong> abaixo.</li>
+                            <li>Na tabela, marque a chave <strong>messages</strong> (coluna "Assinar").</li>
+                            <li>Mantenha o App no status <strong>Publicado</strong>.</li>
+                        </ul>
+                    </div>
+
+                    <!-- PASSO 4 -->
+                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px;">
+                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+                            <span style="background: #16a34a; color: #fff; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700;">4</span>
+                            <h4 style="margin: 0; font-size: 13px; font-weight: 700; color: #14532d;">Salvar e Testar no Plugin</h4>
+                        </div>
+                        <p style="font-size: 12px; color: #166534; margin: 0 0 8px 0; line-height: 1.4;">
+                            Após preencher os campos do formulário abaixo e clicar em <strong>Salvar</strong>:
+                        </p>
+                        <div style="font-size: 11px; color: #15803d; line-height: 1.5;">
+                            ✔ Clique no botão <strong>"🧪 Testar"</strong> na listagem.<br>
+                            ✔ O plugin inscreve formalmente o 2º App na WABA (<code>subscribed_apps</code>).<br>
+                            ✔ A Meta passa a enviar as mensagens para os dois apps simultaneamente!
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- BOX COM DADOS DE CÓPIA RÁPIDA -->
+                <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+                    <div style="background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <div style="overflow: hidden;">
+                            <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700;">URL de Callback do Webhook</div>
+                            <code style="font-size: 11px; color: #0284c7; font-weight: 600; white-space: nowrap;"><?php echo esc_url($webhook_url); ?></code>
+                        </div>
+                        <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($webhook_url); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);">
+                            Copiar
+                        </button>
+                    </div>
+                    <div style="background: #ffffff; padding: 8px 12px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+                        <div>
+                            <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700;">Verify Token</div>
+                            <code style="font-size: 12px; color: #059669; font-weight: 700;"><?php echo esc_html($verify_tok); ?></code>
+                        </div>
+                        <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($verify_tok); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);">
+                            Copiar
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FORMULÁRIO DE CADASTRO -->
+            <div class="li-card" style="max-width: 900px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px;">
                     <div>
                         <h3 class="li-card-title" style="margin: 0;">
@@ -921,131 +1035,6 @@ class Settings {
                     </tbody>
                 </table>
             </div>
-            <!-- GUIA PROFISSIONAL: MANUAL DE INTEGRAÇÃO & ENVIO SIMULTÂNEO -->
-            <div class="li-card" style="margin-top: 25px; border-top: 4px solid #6366f1; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 24px;">
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px;">
-                    <div>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span style="font-size: 22px;">📘</span>
-                            <h3 style="margin: 0; font-size: 18px; font-weight: 700; color: #1e1b4b;">
-                                Manual Oficial de Integração: Como Configurar e Ativar Qualquer Número no WhatsApp Cloud API
-                            </h3>
-                        </div>
-                        <p style="margin: 4px 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">
-                            Siga este procedimento passo a passo para conectar novos números de WhatsApp ou ativar o <strong>envio simultâneo (Multi-App)</strong> sem interferir no seu sistema atual (ex: InterageZap).
-                        </p>
-                    </div>
-                    <div>
-                        <span class="li-badge" style="background: #e0e7ff; color: #4338ca; font-weight: 700; font-size: 12px; padding: 6px 12px; border-radius: 6px;">
-                            🚀 Multi-App Habilitado (Zero Conflitos)
-                        </span>
-                    </div>
-                </div>
-
-                <!-- CARDS DE ETAPAS INTERATIVAS -->
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 24px;">
-                    
-                    <!-- ETAPA 1 -->
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; display: flex; flex-direction: column;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                            <span style="background: #4f46e5; color: #fff; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">1</span>
-                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #1e293b;">Obter Dados no Meta Business</h4>
-                        </div>
-                        <p style="font-size: 12px; color: #475569; margin: 0 0 12px 0; line-height: 1.5; flex: 1;">
-                            No <strong>Business Manager</strong> &gt; <em>Contas do WhatsApp</em> &gt; selecione sua WABA:
-                        </p>
-                        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #334155; line-height: 1.6;">
-                            <li><strong>Phone Number ID</strong>: ID de 15 dígitos do chip.</li>
-                            <li><strong>WABA ID</strong>: Identificador da conta WhatsApp.</li>
-                            <li><strong>Token do Usuário do Sistema</strong> com permissões:
-                                <code style="background:#e2e8f0; font-size:10px;">whatsapp_business_messaging</code>, 
-                                <code style="background:#e2e8f0; font-size:10px;">whatsapp_business_management</code> e 
-                                <code style="background:#e2e8f0; font-size:10px;">ads_read</code>.
-                            </li>
-                        </ul>
-                    </div>
-
-                    <!-- ETAPA 2 -->
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; display: flex; flex-direction: column;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                            <span style="background: #4f46e5; color: #fff; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">2</span>
-                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #1e293b;">Cadastrar no Plugin</h4>
-                        </div>
-                        <p style="font-size: 12px; color: #475569; margin: 0 0 12px 0; line-height: 1.5; flex: 1;">
-                            Clique no botão verde <strong>"+ Cadastrar Novo Número"</strong> acima e insira:
-                        </p>
-                        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #334155; line-height: 1.6;">
-                            <li>Nome da Unidade / Polo (ex: <code>Polo VNI</code>).</li>
-                            <li>Telefone formatado com DDD.</li>
-                            <li>Phone Number ID e WABA ID obtidos.</li>
-                            <li>Token permanente do Usuário do Sistema.</li>
-                            <li>Deixe o status como <strong>🟢 Ativo</strong>.</li>
-                        </ul>
-                    </div>
-
-                    <!-- ETAPA 3 -->
-                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; display: flex; flex-direction: column;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                            <span style="background: #4f46e5; color: #fff; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">3</span>
-                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #1e293b;">Apontar o Webhook no App</h4>
-                        </div>
-                        <p style="font-size: 12px; color: #475569; margin: 0 0 12px 0; line-height: 1.5; flex: 1;">
-                            No <strong>developers.facebook.com</strong> &gt; Seu App &gt; <em>Webhooks</em> &gt; <code>Whatsapp Business Account</code>:
-                        </p>
-                        <ul style="margin: 0; padding-left: 18px; font-size: 12px; color: #334155; line-height: 1.6;">
-                            <li>Cole a <strong>URL de Callback</strong> abaixo.</li>
-                            <li>Cole o <strong>Verify Token</strong>.</li>
-                            <li>Na lista de campos, assine <strong>messages</strong>.</li>
-                            <li>Coloque o App em modo <strong>Ao Vivo (Live)</strong>.</li>
-                        </ul>
-                    </div>
-
-                    <!-- ETAPA 4 -->
-                    <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 18px; display: flex; flex-direction: column;">
-                        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                            <span style="background: #16a34a; color: #fff; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700;">4</span>
-                            <h4 style="margin: 0; font-size: 14px; font-weight: 700; color: #14532d;">Ativar Envio Simultâneo</h4>
-                        </div>
-                        <p style="font-size: 12px; color: #166534; margin: 0 0 12px 0; line-height: 1.5; flex: 1;">
-                            Na lista acima, clique no botão <strong>"🧪 Testar"</strong> ao lado do seu número:
-                        </p>
-                        <div style="font-size: 12px; color: #15803d; line-height: 1.5;">
-                            ✔ O plugin valida a conexão com a Meta.<br>
-                            ✔ Inscreve automaticamente o App na WABA (<code>subscribed_apps</code>).<br>
-                            ✔ A Meta passa a enviar para <strong>ambos os sistemas ao mesmo tempo</strong>!
-                        </div>
-                    </div>
-
-                </div>
-
-                <!-- DADOS RÁPIDOS PARA CÓPIA (WEBHOOK & TOKEN) -->
-                <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px 20px;">
-                    <div style="font-size: 12px; font-weight: 700; color: #334155; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; gap: 6px;">
-                        <span>📋</span> Dados de Conexão Rápida para o Portal da Meta (developers.facebook.com)
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px;">
-                        <div style="background: #ffffff; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                            <div style="overflow: hidden;">
-                                <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700;">URL de Callback do Webhook</div>
-                                <code style="font-size: 12px; color: #0284c7; font-weight: 600; white-space: nowrap;"><?php echo esc_url($webhook_url); ?></code>
-                            </div>
-                            <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($webhook_url); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);">
-                                Copiar
-                            </button>
-                        </div>
-                        <div style="background: #ffffff; padding: 10px 14px; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
-                            <div>
-                                <div style="font-size: 10px; text-transform: uppercase; color: #64748b; font-weight: 700;">Verify Token (Token de Verificação)</div>
-                                <code style="font-size: 13px; color: #059669; font-weight: 700;"><?php echo esc_html($settings_current['meta_verify_token']); ?></code>
-                            </div>
-                            <button type="button" class="button button-small" onclick="navigator.clipboard.writeText('<?php echo esc_js($settings_current['meta_verify_token']); ?>'); this.innerText='Copiado!'; setTimeout(()=>{this.innerText='Copiar'}, 2000);">
-                                Copiar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <!-- GUIA PROFISSIONAL: MANUAL DE INTEGRAÇÃO & ENVIO SIMULTÂNEO -->
             <div class="li-card" style="margin-top: 25px; border-top: 4px solid #6366f1; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 24px;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px; margin-bottom: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 16px;">
