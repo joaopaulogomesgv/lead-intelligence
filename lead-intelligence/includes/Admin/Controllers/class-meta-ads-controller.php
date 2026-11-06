@@ -764,26 +764,35 @@ class MetaAdsController {
                                             $has_generic_ad = (!empty($lead->ad_name) && in_array(strtolower(trim($lead->ad_name)), ['converse conosco', 'converse conosco!', 'click-to-whatsapp', 'whatsapp cloud inbound']));
                                             $show_sync_btn = !empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', $lead->ad_id);
                                             ?>
+                                            <?php if (!empty($lead->campaign_name)): ?>
+                                                <div title="Campanha Meta: <?php echo esc_attr($lead->campaign_name); ?>">
+                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;" title="Campanha: <?php echo esc_attr($lead->campaign_name); ?>">
+                                                        📂 <strong>Campanha:</strong> <?php echo esc_html($lead->campaign_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
+
+                                            <?php if (!empty($lead->adset_name)): ?>
+                                                <div title="Conjunto de Anúncios: <?php echo esc_attr($lead->adset_name); ?>">
+                                                    <code style="background: #fefce8; color: #854d0e; border: 1px solid #fef08a; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Conjunto: <?php echo esc_attr($lead->adset_name); ?>">
+                                                        🎯 <strong>Conjunto:</strong> <?php echo esc_html($lead->adset_name); ?>
+                                                    </code>
+                                                </div>
+                                            <?php endif; ?>
+
                                             <?php if (!empty($lead->ad_name) && !$has_generic_ad): ?>
-                                                <div title="Nome do Anúncio Meta: <?php echo esc_attr($lead->ad_name); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
-                                                        📢 <?php echo esc_html($lead->ad_name); ?>
+                                                <div title="Nome do Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;" title="Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
+                                                        📢 <strong>Anúncio:</strong> <?php echo esc_html($lead->ad_name); ?>
                                                     </code>
                                                 </div>
                                             <?php elseif (!empty($lead->ad_id)): ?>
                                                 <div title="Ad ID do Anúncio: <?php echo esc_attr($lead->ad_id); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 175px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
+                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
                                                         📢 <?php echo $has_generic_ad ? 'Converse Conosco (Ad #' . esc_html($lead->ad_id) . ')' : 'Ad #' . esc_html($lead->ad_id); ?>
                                                         <?php if ($show_sync_btn): ?>
                                                             <button type="button" class="li-btn-sync-single-ad" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="border:none; background:none; cursor:pointer; padding:0; font-size:12px; line-height:1;" title="Buscar nome do anúncio na Meta Marketing API">🔄</button>
                                                         <?php endif; ?>
-                                                    </code>
-                                                </div>
-                                            <?php endif; ?>
-                                            <?php if (!empty($lead->campaign_name) && strcasecmp(trim($lead->campaign_name), trim($lead->ad_name ?? '')) !== 0): ?>
-                                                <div title="Campanha Meta: <?php echo esc_attr($lead->campaign_name); ?>">
-                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 10px; padding: 1px 5px; border-radius: 3px; display: inline-block; max-width: 165px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                                        📂 <?php echo esc_html($lead->campaign_name); ?>
                                                     </code>
                                                 </div>
                                             <?php endif; ?>
