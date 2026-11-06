@@ -1199,35 +1199,90 @@ class MetaAdsController {
     
     <!-- MODAL DE PRÉVIA DO CRIATIVO META ADS DE ALTA FIDELIDADE (2 COLUNAS) -->
     <style>
+    #li-creative-modal {
+        box-sizing: border-box;
+    }
+    #li-creative-modal * {
+        box-sizing: border-box;
+    }
+    #li-creative-modal-dialog {
+        width: 95vw;
+        max-width: 980px;
+        height: 86vh;
+        max-height: 860px;
+        min-height: 520px;
+        display: flex;
+        flex-direction: column;
+        background: #ffffff;
+        border-radius: 16px;
+        box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.55);
+        overflow: hidden;
+        position: relative;
+    }
+    #li-modal-creative-header {
+        flex-shrink: 0;
+        padding: 16px 24px;
+        border-bottom: 1px solid #e2e8f0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #ffffff;
+    }
+    #li-modal-creative-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        height: 100%;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 24px;
+        background: #f8fafc;
+        width: 100%;
+    }
+    #li-modal-creative-footer {
+        flex-shrink: 0;
+        padding: 14px 24px;
+        border-top: 1px solid #e2e8f0;
+        background: #ffffff;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
     @media (max-width: 860px) {
+        #li-creative-modal-dialog {
+            width: 98vw;
+            height: 94vh;
+            max-height: 94vh;
+        }
         #li-modal-creative-grid {
             grid-template-columns: 1fr !important;
         }
     }
     </style>
     <div id="li-creative-modal" style="display: none; position: fixed; z-index: 100000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(4px); align-items: center; justify-content: center;">
-        <div style="background: #ffffff; width: 94%; max-width: 960px; border-radius: 16px; box-shadow: 0 25px 60px -15px rgba(15, 23, 42, 0.45); overflow: hidden; display: flex; flex-direction: column; max-height: 90vh;">
+        <div id="li-creative-modal-dialog">
             <!-- Modal Header -->
-            <div style="padding: 16px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #ffffff;">
+            <div id="li-modal-creative-header">
                 <div style="display: flex; align-items: center; gap: 12px;">
-                    <div style="width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #0081fb, #25d366); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 2px 6px rgba(0,129,251,0.25);">
+                    <div style="width: 40px; height: 40px; border-radius: 10px; background: linear-gradient(135deg, #0081fb, #25d366); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: 0 2px 6px rgba(0,129,251,0.25); flex-shrink: 0;">
                         🎨
                     </div>
                     <div>
-                        <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a;" id="li-modal-lead-title">Criativo do Anúncio & Detalhes do Lead</h4>
-                        <p style="margin: 2px 0 0; font-size: 11px; color: #64748b;" id="li-modal-lead-sub">Meta Ads &bull; Click-to-WhatsApp</p>
+                        <h4 style="margin: 0; font-size: 16px; font-weight: 700; color: #0f172a; line-height: 1.3;" id="li-modal-lead-title">Criativo do Anúncio & Detalhes do Lead</h4>
+                        <p style="margin: 3px 0 0; font-size: 11px; color: #64748b; line-height: 1.3;" id="li-modal-lead-sub">Meta Ads &bull; Click-to-WhatsApp</p>
                     </div>
                 </div>
-                <button type="button" id="li-close-creative-modal" style="border: none; background: #f1f5f9; width: 32px; height: 32px; border-radius: 50%; font-size: 18px; cursor: pointer; color: #64748b; line-height: 32px; text-align: center; transition: all 0.2s;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a';" onmouseout="this.style.background='#f1f5f9'; this.style.color='#64748b;'>&times;</button>
+                <button type="button" id="li-close-creative-modal" style="border: none; background: #f1f5f9; width: 34px; height: 34px; border-radius: 50%; font-size: 18px; font-weight: 700; cursor: pointer; color: #475569; display: flex; align-items: center; justify-content: center; padding: 0; transition: all 0.2s;" onmouseover="this.style.background='#e2e8f0'; this.style.color='#0f172a';" onmouseout="this.style.background='#f1f5f9'; this.style.color='#475569;'">&times;</button>
             </div>
             
             <!-- Modal Body (Preview Mockup + Detalhes em 2 Colunas) -->
-            <div style="padding: 20px 24px; overflow-y: auto; flex: 1; background: #f8fafc;" id="li-modal-creative-body">
+            <div id="li-modal-creative-body">
                 <div style="text-align: center; padding: 40px; color: #64748b;">Carregando criativo...</div>
             </div>
 
             <!-- Modal Footer -->
-            <div style="padding: 14px 24px; border-top: 1px solid #e2e8f0; background: #ffffff; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;" id="li-modal-creative-footer">
+            <div id="li-modal-creative-footer">
                 <button type="button" class="button button-secondary" id="li-modal-btn-close" style="font-weight: 600;">Fechar</button>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="li-modal-action-links"></div>
             </div>
