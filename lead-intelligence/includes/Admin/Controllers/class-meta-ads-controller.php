@@ -737,27 +737,26 @@ class MetaAdsController {
                     </div>
                 </div>
 
-                <table class="wp-list-table widefat fixed striped li-table">
+                <table class="wp-list-table widefat striped li-table" style="border-collapse: separate; border-spacing: 0; width: 100%;">
                     <thead>
                         <tr>
-                            <th style="width: 55px;">ID</th>
-                            <th style="width: 95px;">Lead ID</th>
-                            <th style="width: 105px;">Data</th>
-                            <th>Nome / Lead</th>
-                            <th style="width: 140px;">Telefone / WhatsApp</th>
-                            <th style="width: 130px;">Instância</th>
-                            <th style="width: 175px;">Origem &amp; Anúncio Meta</th>
-                            <th>Curso / Interesse</th>
-                            <th style="width: 110px;">UTM</th>
-                            <th style="width: 120px; text-align: center;">Etapa do Funil</th>
-                            <th style="width: 100px; text-align: center;">Status</th>
-                            <th style="width: 240px; text-align: center;">Qualificação &amp; Meta CAPI</th>
+                            <th style="width: 80px; min-width: 75px; white-space: nowrap;">ID</th>
+                            <th style="width: 100px; min-width: 95px; white-space: nowrap;">Data</th>
+                            <th style="min-width: 150px;">Nome / Lead</th>
+                            <th style="width: 160px; min-width: 150px; white-space: nowrap;">Telefone / WhatsApp</th>
+                            <th style="width: 135px; min-width: 130px; white-space: nowrap;">Instância</th>
+                            <th style="width: 310px; min-width: 290px;">Origem &amp; Anúncio Meta</th>
+                            <th style="min-width: 140px;">Curso / Interesse</th>
+                            <th style="width: 105px; white-space: nowrap;">UTM</th>
+                            <th style="width: 115px; text-align: center; white-space: nowrap;">Etapa do Funil</th>
+                            <th style="width: 95px; text-align: center; white-space: nowrap;">Status</th>
+                            <th style="width: 230px; text-align: center; white-space: nowrap;">Qualificação &amp; Meta CAPI</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($leads)): ?>
                             <tr>
-                                <td colspan="12" style="text-align: center; padding: 35px; color: #64748b;">
+                                <td colspan="11" style="text-align: center; padding: 40px; color: #64748b; font-size: 14px;">
                                     Nenhum lead Meta encontrado no período selecionado.
                                 </td>
                             </tr>
@@ -780,95 +779,89 @@ class MetaAdsController {
                                 // Identifica se é WhatsApp ou Anúncio tradicional
                                 $is_wa = (!empty($lead->whatsapp_status) || !empty($lead->conversation_id) || stripos($lead->formulario_nome ?? '', 'whatsapp') !== false || !empty($lead->phone_number_id));
                             ?>
-                                <tr id="li-lead-row-<?php echo esc_attr($lead->id); ?>">
-                                    <td><strong>#<?php echo esc_html($lead->id); ?></strong></td>
-                                    <td>
+                                <tr id="li-lead-row-<?php echo esc_attr($lead->id); ?>" style="transition: background 0.15s ease;">
+                                    <td style="white-space: nowrap; font-variant-numeric: tabular-nums; vertical-align: top; padding: 12px 14px;">
+                                        <div style="font-size: 13px; font-weight: 800; color: #0f172a;">#<?php echo esc_html($lead->id); ?></div>
                                         <?php if (!empty($lead->leadid)): ?>
-                                            <code style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 700; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-block; white-space: nowrap;" title="Lead ID da Planilha: <?php echo esc_attr($lead->leadid); ?>">
-                                                #<?php echo esc_html($lead->leadid); ?>
-                                            </code>
-                                        <?php else: ?>
-                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                            <div style="font-size: 10px; color: #64748b; font-weight: 600; margin-top: 2px;" title="Lead ID da Planilha / Meta Form: <?php echo esc_attr($lead->leadid); ?>">
+                                                LID: <?php echo esc_html($lead->leadid); ?>
+                                            </div>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
-                                        <div style="font-size: 12px; font-weight: 600;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
-                                        <div style="font-size: 11px; color: #64748b;"><?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
+                                    <td style="white-space: nowrap; vertical-align: top; padding: 12px 14px;">
+                                        <div style="font-size: 12px; font-weight: 700; color: #1e293b;"><?php echo esc_html(date_i18n('d/m/Y', strtotime($lead->data_cadastro))); ?></div>
+                                        <div style="font-size: 11px; color: #64748b; margin-top: 2px; font-weight: 500;">🕒 <?php echo esc_html(date_i18n('H:i', strtotime($lead->data_cadastro))); ?></div>
                                     </td>
-                                    <td>
-                                        <strong><?php echo !empty($lead->nome) ? esc_html($lead->nome) : '<span style="color:#94a3b8">Sem nome</span>'; ?></strong>
+                                    <td style="vertical-align: top; padding: 12px 14px;">
+                                        <div style="font-size: 13px; font-weight: 700; color: #0f172a; word-break: break-word;">
+                                            <?php echo !empty($lead->nome) ? esc_html($lead->nome) : '<span style="color:#94a3b8; font-style:italic;">Sem nome</span>'; ?>
+                                        </div>
                                         <?php if (!empty($lead->email)): ?>
-                                            <div style="font-size: 11px; color: #64748b;"><?php echo esc_html($lead->email); ?></div>
+                                            <div style="font-size: 11px; color: #64748b; word-break: break-all; margin-top: 2px;"><?php echo esc_html($lead->email); ?></div>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td style="white-space: nowrap; vertical-align: top; padding: 12px 14px;">
                                         <?php if (!empty($lead_phone_clean)): ?>
-                                            <a href="https://wa.me/<?php echo esc_attr($lead_phone_clean); ?>" target="_blank" style="color: #059669; font-weight: 600; text-decoration: none;">
-                                                💬 <?php echo esc_html(PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado)); ?>
+                                            <a href="https://wa.me/<?php echo esc_attr($lead_phone_clean); ?>" target="_blank" style="display: inline-flex; align-items: center; gap: 5px; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 3px 8px; border-radius: 6px; font-weight: 700; font-size: 12px; text-decoration: none; transition: all 0.2s;" onmouseover="this.style.background='#dcfce7'; this.style.borderColor='#86efac';" onmouseout="this.style.background='#f0fdf4'; this.style.borderColor='#bbf7d0;'" title="Clique para abrir a conversa no WhatsApp Web / App">
+                                                <span>💬</span> <?php echo esc_html(PhoneNormalizer::format_display($lead->telefone ?: $lead->telefone_normalizado)); ?>
                                             </a>
                                         <?php else: ?>
-                                            <span style="color: #94a3b8;">-</span>
+                                            <span style="color: #94a3b8; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td style="white-space: nowrap; vertical-align: top; padding: 12px 14px;">
                                         <?php 
                                         $inst_val = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : '');
                                         ?>
                                         <?php if (!empty($inst_val)): ?>
-                                            <span class="li-badge" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-weight: 600; font-size: 11px; padding: 2px 7px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
+                                            <span class="li-badge" style="background: #f8fafc; color: #334155; border: 1px solid #cbd5e1; font-weight: 600; font-size: 11px; padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; text-transform: capitalize;" title="Instância: <?php echo esc_attr($inst_val); ?>">
                                                 <span>🏛️</span> <?php echo esc_html($inst_val); ?>
                                             </span>
                                         <?php else: ?>
                                             <span style="color: #cbd5e1; font-size: 12px;">—</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td>
-                                        <div style="display: flex; flex-direction: column; gap: 3px;">
-                                            <div>
+                                    <td style="vertical-align: top; padding: 12px 14px;">
+                                        <div style="display: flex; flex-direction: column; gap: 4px; width: 100%; max-width: 310px;">
+                                            <div style="display: flex; justify-content: space-between; align-items: center;">
                                                 <?php if ($is_wa): ?>
-                                                    <span class="li-badge" style="background: rgba(21, 128, 61, 0.12); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25);" title="Contato recebido via WhatsApp Cloud API / Click-to-WhatsApp">
-                                                        💬 WhatsApp
+                                                    <span class="li-badge" style="background: rgba(21, 128, 61, 0.1); color: #15803d; font-weight: 700; border: 1px solid rgba(21, 128, 61, 0.25); font-size: 10px; padding: 1px 7px;" title="Contato recebido via WhatsApp Cloud API / Click-to-WhatsApp">
+                                                        💬 WhatsApp (Meta Ads)
                                                     </span>
                                                 <?php else: ?>
-                                                    <span class="li-badge" style="background: rgba(8, 102, 255, 0.12); color: #0866ff; font-weight: 700; border: 1px solid rgba(8, 102, 255, 0.25);" title="Lead gerado via Anúncio / Formulário Meta">
+                                                    <span class="li-badge" style="background: rgba(8, 102, 255, 0.1); color: #0866ff; font-weight: 700; border: 1px solid rgba(8, 102, 255, 0.25); font-size: 10px; padding: 1px 7px;" title="Lead gerado via Anúncio / Formulário Meta">
                                                         🔵 Anúncio / Form
                                                     </span>
                                                 <?php endif; ?>
+
+                                                <?php 
+                                                $has_generic_ad = (!empty($lead->ad_name) && in_array(strtolower(trim($lead->ad_name)), ['converse conosco', 'converse conosco!', 'click-to-whatsapp', 'whatsapp cloud inbound']));
+                                                $show_sync_btn = !empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', $lead->ad_id);
+                                                ?>
+                                                <?php if ($show_sync_btn): ?>
+                                                    <button type="button" class="li-btn-sync-single-ad" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="border:none; background:none; cursor:pointer; padding:0; font-size:12px; line-height:1;" title="Sincronizar dados deste anúncio com a Meta Marketing API">🔄</button>
+                                                <?php endif; ?>
                                             </div>
-                                            <?php 
-                                            $has_generic_ad = (!empty($lead->ad_name) && in_array(strtolower(trim($lead->ad_name)), ['converse conosco', 'converse conosco!', 'click-to-whatsapp', 'whatsapp cloud inbound']));
-                                            $show_sync_btn = !empty($lead->ad_id) && preg_match('/^[0-9]{8,25}$/', $lead->ad_id);
-                                            ?>
+
                                             <?php if (!empty($lead->campaign_name)): ?>
-                                                <div title="Campanha Meta: <?php echo esc_attr($lead->campaign_name); ?>">
-                                                    <code style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;" title="Campanha: <?php echo esc_attr($lead->campaign_name); ?>">
-                                                        📂 <strong>Campanha:</strong> <?php echo esc_html($lead->campaign_name); ?>
-                                                    </code>
+                                                <div style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Campanha: <?php echo esc_attr($lead->campaign_name); ?>">
+                                                    📂 <strong>Campanha:</strong> <?php echo esc_html($lead->campaign_name); ?>
                                                 </div>
                                             <?php endif; ?>
 
                                             <?php if (!empty($lead->adset_name)): ?>
-                                                <div title="Conjunto de Anúncios: <?php echo esc_attr($lead->adset_name); ?>">
-                                                    <code style="background: #fefce8; color: #854d0e; border: 1px solid #fef08a; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="Conjunto: <?php echo esc_attr($lead->adset_name); ?>">
-                                                        🎯 <strong>Conjunto:</strong> <?php echo esc_html($lead->adset_name); ?>
-                                                    </code>
+                                                <div style="background: #fefce8; color: #854d0e; border: 1px solid #fef08a; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Conjunto: <?php echo esc_attr($lead->adset_name); ?>">
+                                                    🎯 <strong>Conjunto:</strong> <?php echo esc_html($lead->adset_name); ?>
                                                 </div>
                                             <?php endif; ?>
 
                                             <?php if (!empty($lead->ad_name) && !$has_generic_ad): ?>
-                                                <div title="Nome do Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;" title="Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
-                                                        📢 <strong>Anúncio:</strong> <?php echo esc_html($lead->ad_name); ?>
-                                                    </code>
+                                                <div style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="Anúncio: <?php echo esc_attr($lead->ad_name); ?>">
+                                                    📢 <strong>Anúncio:</strong> <?php echo esc_html($lead->ad_name); ?>
                                                 </div>
                                             <?php elseif (!empty($lead->ad_id)): ?>
-                                                <div title="Ad ID do Anúncio: <?php echo esc_attr($lead->ad_id); ?>">
-                                                    <code style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 2px 6px; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600;">
-                                                        📢 <?php echo $has_generic_ad ? 'Converse Conosco (Ad #' . esc_html($lead->ad_id) . ')' : 'Ad #' . esc_html($lead->ad_id); ?>
-                                                        <?php if ($show_sync_btn): ?>
-                                                            <button type="button" class="li-btn-sync-single-ad" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="border:none; background:none; cursor:pointer; padding:0; font-size:12px; line-height:1;" title="Buscar nome do anúncio na Meta Marketing API">🔄</button>
-                                                        <?php endif; ?>
-                                                    </code>
+                                                <div style="background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; font-size: 11px; padding: 3px 7px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                                    📢 <?php echo $has_generic_ad ? 'Converse Conosco (Ad #' . esc_html($lead->ad_id) . ')' : 'Ad #' . esc_html($lead->ad_id); ?>
                                                 </div>
                                             <?php endif; ?>
 
@@ -882,21 +875,28 @@ class MetaAdsController {
                                             }
                                             ?>
                                             <?php if (!empty($creative_link)): ?>
-                                                <div style="margin-top: 3px;">
-                                                    <button type="button" class="li-btn-open-creative-modal" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 700; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#e0f2fe';" onmouseout="this.style.background='#f0f9ff';" title="Clique para ver a prévia completa do anúncio (imagem, texto e links) sem sair do WordPress">
-                                                        <span>👁️ Ver Criativo do Anúncio</span>
-                                                    </button>
-                                                </div>
+                                                <button type="button" class="li-btn-open-creative-modal button button-small" data-lead-id="<?php echo esc_attr($lead->id); ?>" style="margin-top: 2px; width: 100%; height: 26px; line-height: 24px; font-size: 11px; font-weight: 700; color: #0284c7; background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#0284c7'; this.style.color='#ffffff';" onmouseout="this.style.background='#f0f9ff'; this.style.color='#0284c7';" title="Clique para ver a prévia completa do anúncio (imagem, texto e links) sem sair do WordPress">
+                                                    <span>👁️ Ver Criativo do Anúncio</span>
+                                                </button>
                                             <?php endif; ?>
                                         </div>
                                     </td>
-                                    <td>
-                                        <span style="font-size: 12px; color: #334155;"><?php echo esc_html($lead->tipo_curso ?: ($lead->area_interesse ?: '-')); ?></span>
+                                    <td style="vertical-align: top; padding: 12px 14px;">
+                                        <?php 
+                                        $curso_txt = $lead->tipo_curso ?: ($lead->area_interesse ?: '');
+                                        ?>
+                                        <?php if (!empty($curso_txt)): ?>
+                                            <span style="font-size: 12px; font-weight: 600; color: #334155; display: inline-block; padding: 3px 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 5px; word-break: break-word;">
+                                                🎓 <?php echo esc_html($curso_txt); ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <span style="color: #cbd5e1; font-size: 12px;">—</span>
+                                        <?php endif; ?>
                                     </td>
-                                    <td>
+                                    <td style="white-space: nowrap; vertical-align: top; padding: 12px 14px;">
                                         <?php if (!empty($source_display)): ?>
                                             <a href="<?php echo esc_url(add_query_arg(['page' => 'lead-intelligence-meta', 'view' => 'leads', 'utm_source' => $source_display, 'periodo' => $periodo], admin_url('admin.php'))); ?>" style="text-decoration: none;" title="Filtrar por utm_source = '<?php echo esc_attr($source_display); ?>'">
-                                                <code style="background: #e0f2fe; color: #0369a1; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#bae6fd'; this.style.color='#0284c7';" onmouseout="this.style.background='#e0f2fe'; this.style.color='#0369a1';">
+                                                <code style="background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; padding: 3px 8px; border-radius: 5px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; transition: all 0.2s;" onmouseover="this.style.background='#bae6fd';" onmouseout="this.style.background='#e0f2fe';">
                                                     <span>🏷️</span> <?php echo esc_html($source_display); ?>
                                                 </code>
                                             </a>
@@ -904,13 +904,13 @@ class MetaAdsController {
                                             <span style="color: #94a3b8; font-size: 11px; font-style: italic;">Sem UTM</span>
                                         <?php endif; ?>
                                     </td>
-                                    <td class="li-col-etapa" style="text-align: center;">
+                                    <td class="li-col-etapa" style="text-align: center; vertical-align: top; padding: 12px 14px; white-space: nowrap;">
                                         <?php echo self::render_etapa_badge_html($lead); ?>
                                     </td>
-                                    <td class="li-col-status" style="text-align: center;">
+                                    <td class="li-col-status" style="text-align: center; vertical-align: top; padding: 12px 14px; white-space: nowrap;">
                                         <?php echo self::render_status_badge_html($lead); ?>
                                     </td>
-                                    <td class="li-col-actions" style="text-align: center;">
+                                    <td class="li-col-actions" style="text-align: center; vertical-align: top; padding: 12px 14px; white-space: nowrap;">
                                         <?php echo self::render_meta_actions_html($lead); ?>
                                     </td>
                                 </tr>
