@@ -70,8 +70,50 @@ class MetaAdsController {
 
         // Se tiver Ad ID numérico, gera o link direto do Gerenciador de Anúncios da Meta
         $ads_manager_url = '';
+        $ad_meta = [];
         if (!empty($ad_id) && preg_match('/^[0-9]{8,25}$/', $ad_id)) {
             $ads_manager_url = 'https://adsmanager.facebook.com/adsmanager/manage/ads?selected_ad_ids=' . $ad_id;
+            $ad_meta = \LeadIntelligence\WhatsApp\WabaClient::get_ad_details($ad_id);
+        }
+
+        // Identificação da Página Real do Facebook / Instagram que veicula o anúncio
+        $page_name    = !empty($ad_meta['page_name']) ? $ad_meta['page_name'] : '';
+        $page_picture = !empty($ad_meta['page_picture']) ? $ad_meta['page_picture'] : '';
+
+        // Fallback inteligente: se não encontrou a foto da Página, tenta a foto do Perfil Oficial da WABA
+        if (empty($page_picture)) {
+            $polo_info = null;
+            if (!empty($lead->instancia) || !empty($lead->polo)) {
+                $polo_query = !empty($lead->instancia) ? $lead->instancia : $lead->polo;
+                $polo_info  = \LeadIntelligence\WhatsApp\PoloRepository::find_by_name($polo_query);
+            }
+            if (!$polo_info) {
+                $polo_info = \LeadIntelligence\WhatsApp\PoloRepository::get_default();
+            }
+            if ($polo_info && !empty($polo_info['phone_number_id']) && !empty($polo_info['access_token'])) {
+                $cache_prof_key = 'li_wa_prof_pic_' . $polo_info['phone_number_id'];
+                $cached_pic = get_transient($cache_prof_key);
+                if ($cached_pic !== false) {
+                    $page_picture = $cached_pic;
+                } else {
+                    $settings = \LeadIntelligence\Admin\Settings::get_settings();
+                    $v = !empty($settings['meta_graph_version']) ? $settings['meta_graph_version'] : 'v26.0';
+                    $w_url = "https://graph.facebook.com/{$v}/{$polo_info['phone_number_id']}/whatsapp_business_profile?fields=profile_picture_url,about";
+                    $w_res = wp_remote_get($w_url, [
+                        'headers' => ['Authorization' => 'Bearer ' . $polo_info['access_token']],
+                        'timeout' => 5,
+                    ]);
+                    if (!is_wp_error($w_res) && wp_remote_retrieve_response_code($w_res) === 200) {
+                        $w_body = json_decode(wp_remote_retrieve_body($w_res), true);
+                        $page_picture = $w_body['data'][0]['profile_picture_url'] ?? '';
+                        set_transient($cache_prof_key, $page_picture, 24 * HOUR_IN_SECONDS);
+                    }
+                }
+            }
+        }
+
+        if (empty($page_name)) {
+            $page_name = !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : 'Faculdade FAVENI');
         }
 
         $clean_phone = preg_replace('/\D+/', '', $lead->telefone_normalizado ?: $lead->telefone);
@@ -85,6 +127,8 @@ class MetaAdsController {
             'lead_data'         => $formatted_date,
             'lead_polo'         => !empty($lead->instancia) ? $lead->instancia : (!empty($lead->polo) ? $lead->polo : ''),
             'lead_curso'        => !empty($lead->tipo_curso) ? $lead->tipo_curso : (!empty($lead->area_interesse) ? $lead->area_interesse : ''),
+            'page_name'         => $page_name,
+            'page_picture'      => $page_picture,
             'ad_id'             => $ad_id,
             'headline'          => $headline,
             'body_text'         => $body_text,
@@ -93,9 +137,9 @@ class MetaAdsController {
             'video_url'         => $video_url,
             'source_url'        => $source_url,
             'ads_manager_url'   => $ads_manager_url,
-            'campaign_name'     => $lead->campaign_name,
-            'adset_name'        => $lead->adset_name,
-            'ad_name'           => $lead->ad_name,
+            'campaign_name'     => !empty($lead->campaign_name) ? $lead->campaign_name : ($ad_meta['campaign_name'] ?? ''),
+            'adset_name'        => !empty($lead->adset_name) ? $lead->adset_name : ($ad_meta['adset_name'] ?? ''),
+            'ad_name'           => !empty($lead->ad_name) ? $lead->ad_name : ($ad_meta['ad_name'] ?? ''),
             'first_message'     => $raw_msg ? $raw_msg->conteudo : '',
         ]);
     }
@@ -894,12 +938,21 @@ class MetaAdsController {
 
                         html += '    <div style="border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; background: #ffffff; box-shadow: 0 4px 16px -2px rgba(15,23,42,0.06);">';
                         
-                        // Header do Anúncio
+                        // Header do Anúncio (Página Real do Facebook / Instagram)
+                        var pageTitle = d.page_name || 'Faculdade FAVENI';
+                        var pagePicHtml = '';
+                        if (d.page_picture) {
+                            pagePicHtml = '<img src="' + d.page_picture + '" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 1px solid #e2e8f0; display: block;" alt="' + $('<div>').text(pageTitle).html() + '">';
+                        } else {
+                            var initial = (pageTitle ? pageTitle.charAt(0).toUpperCase() : 'F');
+                            pagePicHtml = '<div style="width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #0081fb, #0056b3); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; box-shadow: 0 2px 4px rgba(0,129,251,0.2);">' + initial + '</div>';
+                        }
+
                         html += '      <div style="padding: 12px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f1f5f9;">';
                         html += '        <div style="display: flex; align-items: center; gap: 10px;">';
-                        html += '          <div style="width: 36px; height: 36px; border-radius: 50%; background: linear-gradient(135deg, #0081fb, #0056b3); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 15px; box-shadow: 0 2px 4px rgba(0,129,251,0.2);">F</div>';
+                        html += '          ' + pagePicHtml;
                         html += '          <div>';
-                        html += '            <div style="font-size: 13px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 4px;">Matrículas FAVENI <span style="color: #0081fb; font-size: 12px;" title="Verificado">✔</span></div>';
+                        html += '            <div style="font-size: 13px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 4px;">' + $('<div>').text(pageTitle).html() + ' <span style="color: #0081fb; font-size: 12px;" title="Verificado">✔</span></div>';
                         html += '            <div style="font-size: 11px; color: #64748b;">Patrocinado &bull; 🌐</div>';
                         html += '          </div>';
                         html += '        </div>';
@@ -1000,6 +1053,19 @@ class MetaAdsController {
                         
                         html += '      <div style="display: flex; flex-direction: column; gap: 10px; font-size: 12px;">';
                         
+                        // Página / Perfil Oficial da Meta
+                        if (d.page_name) {
+                            html += '        <div style="padding: 8px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px;">';
+                            html += '          <div style="font-size: 10px; font-weight: 700; color: #475569; text-transform: uppercase;">📄 Página / Conta Meta que Anunciou:</div>';
+                            html += '          <div style="font-weight: 700; color: #0f172a; word-break: break-word; display: flex; align-items: center; gap: 8px; margin-top: 4px;">';
+                            if (d.page_picture) {
+                                html += '            <img src="' + d.page_picture + '" style="width: 22px; height: 22px; border-radius: 50%; object-fit: cover; border: 1px solid #cbd5e1;">';
+                            }
+                            html += '            <span>' + $('<div>').text(d.page_name).html() + '</span>';
+                            html += '          </div>';
+                            html += '        </div>';
+                        }
+
                         // Campanha
                         html += '        <div style="padding: 8px 10px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px;">';
                         html += '          <div style="font-size: 10px; font-weight: 700; color: #15803d; text-transform: uppercase;">📂 Campanha:</div>';

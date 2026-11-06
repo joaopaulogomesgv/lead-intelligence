@@ -324,7 +324,7 @@ class WabaClient {
         $last_error = '';
         $endpoint   = "https://graph.facebook.com/{$version}/{$ad_id}";
         $url        = add_query_arg([
-            'fields' => 'id,name,adset_id,campaign_id,adset{id,name},campaign{id,name}',
+            'fields' => 'id,name,adset_id,campaign_id,adset{id,name},campaign{id,name},creative{id,name,actor_id,object_story_spec}',
         ], $endpoint);
 
         foreach ($tokens as $token_type => $token) {
@@ -378,6 +378,52 @@ class WabaClient {
                     }
                 }
 
+                // Extração dos dados da Página do Facebook ou Perfil do Instagram que veicula o anúncio
+                $page_id      = '';
+                $page_name    = '';
+                $page_picture = '';
+                $ig_id        = '';
+
+                if (!empty($body['creative'])) {
+                    $cr = $body['creative'];
+                    $page_id = !empty($cr['actor_id']) ? (string) $cr['actor_id'] : (!empty($cr['object_story_spec']['page_id']) ? (string) $cr['object_story_spec']['page_id'] : '');
+                    $ig_id   = !empty($cr['object_story_spec']['instagram_actor_id']) ? (string) $cr['object_story_spec']['instagram_actor_id'] : '';
+                }
+
+                if (!empty($page_id)) {
+                    $p_url = add_query_arg(['fields' => 'name,picture.type(large){url}'], "https://graph.facebook.com/{$version}/{$page_id}");
+                    $p_res = wp_remote_get($p_url, [
+                        'headers' => ['Authorization' => 'Bearer ' . $token],
+                        'timeout' => 8,
+                    ]);
+                    if (!is_wp_error($p_res) && wp_remote_retrieve_response_code($p_res) === 200) {
+                        $p_body = json_decode(wp_remote_retrieve_body($p_res), true);
+                        if (!empty($p_body['name'])) {
+                            $page_name = $p_body['name'];
+                        }
+                        if (!empty($p_body['picture']['data']['url'])) {
+                            $page_picture = $p_body['picture']['data']['url'];
+                        }
+                    }
+                }
+
+                if (!empty($ig_id) && empty($page_name)) {
+                    $ig_url = add_query_arg(['fields' => 'username,profile_picture_url'], "https://graph.facebook.com/{$version}/{$ig_id}");
+                    $ig_res = wp_remote_get($ig_url, [
+                        'headers' => ['Authorization' => 'Bearer ' . $token],
+                        'timeout' => 8,
+                    ]);
+                    if (!is_wp_error($ig_res) && wp_remote_retrieve_response_code($ig_res) === 200) {
+                        $ig_body = json_decode(wp_remote_retrieve_body($ig_res), true);
+                        if (!empty($ig_body['username'])) {
+                            $page_name = '@' . $ig_body['username'];
+                        }
+                        if (!empty($ig_body['profile_picture_url'])) {
+                            $page_picture = $ig_body['profile_picture_url'];
+                        }
+                    }
+                }
+
                 $data = [
                     'ad_id'         => $body['id'] ?? $ad_id,
                     'ad_name'       => $ad_name,
@@ -385,6 +431,9 @@ class WabaClient {
                     'adset_name'    => $adset_name,
                     'campaign_id'   => $campaign_id,
                     'campaign_name' => $campaign_name,
+                    'page_id'       => $page_id,
+                    'page_name'     => $page_name,
+                    'page_picture'  => $page_picture,
                     'token_used'    => $token_type,
                 ];
 
