@@ -57,19 +57,19 @@ class CapiService {
     /**
      * Alias de conveniência e compatibilidade para disparo de evento
      */
-    public static function send_event($event_name, $lead, $action_source = 'website', $extra_custom_data = []) {
-        return self::dispatch_event($event_name, $lead, $action_source, $extra_custom_data);
+    public static function send_event($event_name, $lead, $action_source = 'website', $extra_custom_data = [], $override_test_code = null) {
+        return self::dispatch_event($event_name, $lead, $action_source, $extra_custom_data, $override_test_code);
     }
 
     /**
      * Prepara payload e despacha para a Graph API da Meta
      */
-    public static function dispatch_event($event_name, $lead, $action_source = 'website', $extra_custom_data = []) {
+    public static function dispatch_event($event_name, $lead, $action_source = 'website', $extra_custom_data = [], $override_test_code = null) {
         $settings = Settings::get_settings();
 
         $pixel_id  = $settings['capi_pixel_id'];
         $token     = $settings['capi_access_token'];
-        $test_code = $settings['capi_test_event_code'];
+        $test_code = ($override_test_code !== null) ? $override_test_code : $settings['capi_test_event_code'];
         $version   = $settings['meta_graph_version'] ?: 'v26.0';
 
         if (empty($pixel_id) || empty($token)) {

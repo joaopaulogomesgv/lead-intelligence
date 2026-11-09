@@ -448,6 +448,12 @@ class Settings {
         // Teste CAPI Meta (se disparado)
         $capi_test_result = null;
         if (isset($_POST['li_test_capi_fire']) && check_admin_referer('li_capi_test_verify', 'li_nonce')) {
+            $inline_test_code = isset($_POST['test_event_code_inline']) ? sanitize_text_field(wp_unslash($_POST['test_event_code_inline'])) : null;
+            if (!empty($inline_test_code)) {
+                $current_sets = Settings::get_settings();
+                $current_sets['capi_test_event_code'] = $inline_test_code;
+                update_option('lead_intelligence_settings', $current_sets);
+            }
             $dummy_lead = (object) [
                 'id'                   => 999999,
                 'uuid'                 => wp_generate_uuid4(),
@@ -462,7 +468,7 @@ class Settings {
                 'score'                => 100,
                 'qualificacao_origem'  => 'teste_painel',
             ];
-            $capi_test_result = CapiService::dispatch_event('Lead', $dummy_lead);
+            $capi_test_result = CapiService::dispatch_event('Lead', $dummy_lead, 'website', [], $inline_test_code);
         }
 
         // Teste OpenAI CAPI (se disparado com validate_only)
@@ -1663,11 +1669,17 @@ class Settings {
                 <h3 class="li-card-title">🧪 Disparo de Teste CAPI em Tempo Real</h3>
                 <p class="li-card-desc">Envie um evento de teste agora mesmo para validar a conexão direta do seu servidor com os servidores da Meta.</p>
 
-                <form method="post" action="">
+                <form method="post" action="" style="display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-top: 12px;">
                     <?php wp_nonce_field('li_capi_test_verify', 'li_nonce'); ?>
-                    <button type="submit" name="li_test_capi_fire" class="button button-secondary">
-                        🚀 Disparar Evento 'Lead' de Teste Agora
-                    </button>
+                    <div>
+                        <label style="display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px;">Código de Teste da Meta</label>
+                        <input type="text" name="test_event_code_inline" value="<?php echo esc_attr($settings['capi_test_event_code']); ?>" placeholder="Ex: TEST64037" class="regular-text" style="width: 170px;">
+                    </div>
+                    <div>
+                        <button type="submit" name="li_test_capi_fire" class="button button-primary">
+                            🚀 Disparar Evento 'Lead' de Teste Agora
+                        </button>
+                    </div>
                 </form>
             </div>
         <?php endif; ?>
