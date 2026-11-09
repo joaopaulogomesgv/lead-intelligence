@@ -123,6 +123,12 @@ class CapiService {
 
         $event_id = 'li_' . strtolower($event_name) . '_' . $lead->id . '_' . time();
 
+        // Determina action_source automaticamente com base na origem real do lead
+        $effective_action_source = $action_source;
+        if (empty($effective_action_source) || $effective_action_source === 'system_generated') {
+            $effective_action_source = self::detect_action_source($lead);
+        }
+
         // 1. Dados do Usuário com anonimização SHA-256 estrita
         $user_data = self::prepare_user_data($lead);
 
@@ -156,7 +162,7 @@ class CapiService {
             'event_name'       => $event_name,
             'event_time'       => time(),
             'event_id'         => $event_id,
-            'action_source'    => $action_source,
+            'action_source'    => $effective_action_source,
             'event_source_url' => !empty($lead->pagina_origem) && filter_var($lead->pagina_origem, FILTER_VALIDATE_URL) ? $lead->pagina_origem : home_url(),
             'user_data'        => $user_data,
             'custom_data'      => $custom_data,
@@ -220,6 +226,22 @@ class CapiService {
     }
 
     /**
+     * Detecta o action_source mais adequado conforme a origem real do lead
+     *
+     * @param object $lead
+     * @return string 'chat' | 'website'
+     */
+    public static function detect_action_source($lead) {
+        if (!empty($lead->phone_number_id) 
+            || (!empty($lead->formulario_nome) && stripos($lead->formulario_nome, 'whatsapp') !== false)
+            || (!empty($lead->origem) && stripos($lead->origem, 'whatsapp') !== false)
+            || (!empty($lead->utm_medium) && stripos($lead->utm_medium, 'whatsapp') !== false)) {
+            return 'chat';
+        }
+        return 'website';
+    }
+
+    /**
      * Formata e anonimiza os dados do usuário conforme as diretrizes oficiais da Meta
      */
     public static function prepare_user_data($lead) {
@@ -252,9 +274,20 @@ class CapiService {
             }
         }
 
+        // External ID (Identificador exclusivo e imutável do lead - SHA-256)
+        if (!empty($lead->uuid)) {
+            $user_data['external_id'] = [hash('sha256', (string) $lead->uuid)];
+        } elseif (!empty($lead->id)) {
+            $user_data['external_id'] = [hash('sha256', 'li_lead_' . $lead->id)];
+        }
+
         // Cookies Meta nativos (não devem ser hasheados)
         if (!empty($lead->fbc)) {
             $user_data['fbc'] = $lead->fbc;
+        } elseif (!empty($lead->fbclid)) {
+            // Reconstrói parâmetro oficial fbc a partir de fbclid / ctwa_clid (formato fb.1.{timestamp}.{fbclid})
+            $creation_time = !empty($lead->created_at) && $lead->created_at !== '0000-00-00 00:00:00' ? (strtotime($lead->created_at) * 1000) : (time() * 1000);
+            $user_data['fbc'] = 'fb.1.' . $creation_time . '.' . $lead->fbclid;
         } elseif (!empty($_COOKIE['_fbc'])) {
             $user_data['fbc'] = sanitize_text_field(wp_unslash($_COOKIE['_fbc']));
         }
