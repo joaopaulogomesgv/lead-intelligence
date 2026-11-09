@@ -40,17 +40,58 @@ class CapiService {
      * Envia o evento oficial 'Purchase' (Venda / Matrícula) para a Meta Conversions API
      *
      * @param object $lead Objeto do lead vindo de wp_li_leads
-     * @param float $value Valor da conversão (padrão 100.00 se não definido)
+     * @param float|null $value Valor da conversão (se nulo, usa o valor do lead ou o padrão das configurações)
      * @param string $currency Moeda (padrão BRL)
      * @return array ['success' => bool, 'message' => string, 'response' => array]
      */
-    public static function send_purchase_event($lead, $value = 100.00, $currency = 'BRL') {
-        $val = (float) (!empty($value) && $value > 0 ? $value : (!empty($lead->valor_venda) ? $lead->valor_venda : 100.00));
+    public static function send_purchase_event($lead, $value = null, $currency = 'BRL') {
+        $settings = Settings::get_settings();
+
+        if (isset($settings['enable_capi_purchase']) && empty($settings['enable_capi_purchase'])) {
+            return [
+                'success' => false,
+                'message' => 'Envio de evento Purchase desativado nas configurações.',
+                'response' => [],
+            ];
+        }
+
+        $default_val = !empty($settings['capi_default_purchase_value']) ? (float) $settings['capi_default_purchase_value'] : 100.00;
+        $val = (float) (!empty($value) && $value > 0 
+            ? $value 
+            : (!empty($lead->valor_venda) && (float) $lead->valor_venda > 0 ? $lead->valor_venda : $default_val));
+
         return self::dispatch_event('Purchase', $lead, 'system_generated', [
             'value'        => $val,
             'currency'     => $currency,
             'content_type' => 'product',
             'content_name' => !empty($lead->tipo_curso) ? $lead->tipo_curso : (!empty($lead->area_interesse) ? $lead->area_interesse : 'Matrícula Faveni'),
+        ]);
+    }
+
+    /**
+     * Envia evento de desqualificação negativa para a Meta Conversions API
+     * Sinaliza ao algoritmo que o lead não tem perfil para compra/matrícula
+     *
+     * @param object $lead
+     * @return array
+     */
+    public static function send_lead_disqualified_event($lead) {
+        $settings = Settings::get_settings();
+
+        if (empty($settings['enable_capi_disqualified'])) {
+            return [
+                'success' => false,
+                'message' => 'Envio de LeadDisqualified desativado nas configurações.',
+                'response' => [],
+            ];
+        }
+
+        return self::dispatch_event('LeadDisqualified', $lead, 'system_generated', [
+            'qualification_status' => 'nao_qualificado',
+            'lead_quality'         => 'disqualified',
+            'score'                => 0,
+            'is_negative_signal'   => true,
+            'reason'               => 'perfil_invalido',
         ]);
     }
 

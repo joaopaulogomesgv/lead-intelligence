@@ -312,11 +312,16 @@ class MetaAdsController {
     }
 
     public static function render_meta_actions_html($lead) {
+        $settings = \LeadIntelligence\Admin\Settings::get_settings();
+        $default_val = !empty($settings['capi_default_purchase_value']) ? $settings['capi_default_purchase_value'] : '100.00';
+        $current_val = (!empty($lead->valor_venda) && (float) $lead->valor_venda > 0) ? number_format((float) $lead->valor_venda, 2, '.', '') : $default_val;
+
         $is_qual = ($lead->qualificacao_status === 'qualificado');
         $is_desq = ($lead->qualificacao_status === 'nao_qualificado');
         $is_sale = !empty($lead->capi_purchase_sent) || stripos($lead->etapa_funil ?? '', 'venda') !== false || stripos($lead->etapa_funil ?? '', 'matr') !== false;
 
         $has_capi_purchase = !empty($lead->capi_purchase_sent);
+        $has_capi_disq     = !empty($lead->capi_disqualified_sent);
         $has_capi_qual     = !empty($lead->capi_qualified_sent);
         $has_capi_lead     = !empty($lead->capi_lead_sent);
 
@@ -334,11 +339,11 @@ class MetaAdsController {
                     <?php echo $is_qual ? '✔ Qualificado' : 'Qualificar'; ?>
                 </button>
 
-                <!-- BOTÃO NÃO QUALIFICADO -->
+                <!-- BOTÃO NÃO QUALIFICADO (DESQUALIFICAR / OTIMIZAÇÃO NEGATIVA META) -->
                 <button type="button" 
                         class="button button-small li-action-btn li-btn-desqualificar <?php echo $is_desq ? 'active is-active-desq' : ''; ?>" 
                         data-action="<?php echo $is_desq ? 'pendente' : 'desqualificar'; ?>"
-                        title="<?php echo $is_desq ? 'Clique para desmarcar (voltar para pendente)' : 'Marcar como Não Qualificado'; ?>"
+                        title="<?php echo $is_desq ? 'Clique para desmarcar (voltar para pendente)' : 'Marcar como Não Qualificado e enviar LeadDisqualified à Meta CAPI (otimização negativa)'; ?>"
                         style="<?php echo $is_desq ? 'background: #ef4444; color: #fff; border-color: #dc2626; font-weight: 700;' : 'background: #f8fafc; color: #64748b; border-color: #cbd5e1;'; ?> padding: 0 6px; height: 26px; line-height: 24px; font-size: 11px; cursor: pointer;">
                     <?php echo $is_desq ? '✖ Não Qualif.' : '✖'; ?>
                 </button>
@@ -347,6 +352,7 @@ class MetaAdsController {
                 <button type="button" 
                         class="button button-small li-action-btn li-btn-venda <?php echo $is_sale ? 'active is-active-venda' : ''; ?>" 
                         data-action="<?php echo $is_sale ? 'remover_venda' : 'venda'; ?>"
+                        data-default-value="<?php echo esc_attr($current_val); ?>"
                         title="<?php echo $is_sale ? 'Clique para desmarcar venda' : 'Marcar como Venda e despachar evento Purchase para a Meta CAPI'; ?>"
                         style="<?php echo $is_sale ? 'background: #d97706; color: #fff; border-color: #b45309; font-weight: 700; box-shadow: 0 0 6px rgba(217,119,6,0.35);' : 'background: #fff; color: #047857; border-color: #10b981; font-weight: 600;'; ?> padding: 0 8px; height: 26px; line-height: 24px; font-size: 11px; cursor: pointer;">
                     <?php echo $is_sale ? '💰 Venda ✔' : '💰 Venda'; ?>
@@ -357,7 +363,11 @@ class MetaAdsController {
             <div class="li-meta-sync-status" style="font-size: 10px; line-height: 1.3; display: flex; flex-direction: column; gap: 2px; align-items: center;">
                 <?php if ($has_capi_purchase): ?>
                     <span class="li-capi-pill" style="display: inline-block; background: #dcfce7; color: #15803d; border: 1px solid #86efac; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento Purchase confirmado pela Meta">
-                        🔵 Meta: Venda Enviada
+                        🔵 Meta: Venda <?php echo !empty($lead->valor_venda) ? '(R$ ' . number_format_i18n((float) $lead->valor_venda, 2) . ')' : ''; ?>
+                    </span>
+                <?php elseif ($has_capi_disq): ?>
+                    <span class="li-capi-pill" style="display: inline-block; background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento LeadDisqualified enviado à Meta (otimização negativa ativa)">
+                        🔴 Meta: Desqualificado
                     </span>
                 <?php elseif ($has_capi_qual): ?>
                     <span class="li-capi-pill" style="display: inline-block; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; border-radius: 10px; padding: 1px 7px; font-weight: 600;" title="Evento LeadQualified confirmado pela Meta">
@@ -1537,6 +1547,18 @@ class MetaAdsController {
 
                 if (!leadId || !actionType) return;
 
+                var valorVenda = null;
+                if (actionType === 'venda') {
+                    var defVal = $btn.data('default-value') || '100.00';
+                    var inputVal = prompt('Confirmar Matrícula / Venda:\nInforme o valor em R$ que será registrado e enviado à Meta CAPI (Purchase):', defVal);
+                    if (inputVal === null) {
+                        return; // Usuário cancelou
+                    }
+                    var cleanInput = inputVal.replace(',', '.').trim();
+                    var parsed = parseFloat(cleanInput);
+                    valorVenda = (!isNaN(parsed) && parsed > 0) ? parsed : parseFloat(defVal);
+                }
+
                 var originalHtml = $btn.html();
                 $container.find('.li-action-btn').prop('disabled', true).css('opacity', '0.6');
                 $btn.html('⏳ ...');
@@ -1549,6 +1571,7 @@ class MetaAdsController {
                         action: 'li_meta_ads_update_lead',
                         lead_id: leadId,
                         action_type: actionType,
+                        valor: valorVenda,
                         nonce: metaNonce
                     },
                     success: function(res) {

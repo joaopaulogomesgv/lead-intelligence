@@ -1676,23 +1676,26 @@ class LeadRepository {
                 $updates['qualificacao_data']   = $now;
                 $updates['qualificacao_origem'] = 'manual_meta_ads';
                 $updates['capi_purchase_sent']  = 0;
+                $meta_event_to_send = 'LeadDisqualified';
                 break;
 
             case 'pendente':
                 $new_status = 'pendente';
                 $new_etapa  = 'Formulário Enviado';
-                $updates['qualificacao_status'] = $new_status;
-                $updates['etapa_funil']         = $new_etapa;
-                $updates['capi_purchase_sent']  = 0;
+                $updates['qualificacao_status']    = $new_status;
+                $updates['etapa_funil']            = $new_etapa;
+                $updates['capi_purchase_sent']     = 0;
+                $updates['capi_disqualified_sent'] = 0;
                 break;
 
             case 'venda':
                 $new_status = 'qualificado';
                 $new_etapa  = 'Matrícula Realizada';
-                $updates['qualificacao_status'] = $new_status;
-                $updates['etapa_funil']         = $new_etapa;
-                $updates['qualificacao_data']   = $now;
-                $updates['qualificacao_origem'] = 'manual_meta_ads';
+                $updates['qualificacao_status']    = $new_status;
+                $updates['etapa_funil']            = $new_etapa;
+                $updates['qualificacao_data']      = $now;
+                $updates['qualificacao_origem']    = 'manual_meta_ads';
+                $updates['capi_disqualified_sent'] = 0;
                 if ($valor_venda !== null && (float) $valor_venda > 0) {
                     $updates['valor_venda'] = (float) $valor_venda;
                 }
@@ -1786,6 +1789,17 @@ class LeadRepository {
 
             // Disparo na OpenAI CAPI (evento order_created)
             \LeadIntelligence\OpenAiCapi\OpenAiCapiQueue::enqueue_purchase($lead_id, $valor_venda);
+        } elseif ($meta_event_to_send === 'LeadDisqualified') {
+            $capi_result = \LeadIntelligence\MetaCapi\CapiService::send_lead_disqualified_event($updated_lead);
+            if (!empty($capi_result['success'])) {
+                $wpdb->update($table, [
+                    'capi_disqualified_sent' => 1,
+                    'capi_disqualified_time' => $now,
+                    'capi_event_id'          => $capi_result['event_id'] ?? '',
+                ], ['id' => $lead_id]);
+                $updated_lead->capi_disqualified_sent = 1;
+                $updated_lead->capi_disqualified_time = $now;
+            }
         }
 
         Logger::info('Leads', "Lead #{$lead_id} teve status atualizado para '{$action}' via Painel Meta Ads.", [

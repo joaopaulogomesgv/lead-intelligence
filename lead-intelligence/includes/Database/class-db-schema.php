@@ -112,6 +112,8 @@ class DbSchema {
             capi_qualified_time datetime DEFAULT NULL,
             capi_purchase_sent tinyint(1) DEFAULT 0,
             capi_purchase_time datetime DEFAULT NULL,
+            capi_disqualified_sent tinyint(1) DEFAULT 0,
+            capi_disqualified_time datetime DEFAULT NULL,
             valor_venda decimal(10,2) DEFAULT NULL,
             capi_event_id varchar(100) DEFAULT '',
             oppref varchar(255) DEFAULT '',

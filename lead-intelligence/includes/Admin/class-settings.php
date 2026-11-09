@@ -47,6 +47,9 @@ class Settings {
             'capi_test_event_code'     => '',
             'enable_capi_lead'         => 0,
             'enable_capi_qualified'    => 0,
+            'enable_capi_purchase'     => 1,
+            'capi_default_purchase_value' => '100.00',
+            'enable_capi_disqualified' => 1,
             'logo_dark'                => '',
             'logo_light'               => '',
             'logo_compact'             => '',
@@ -310,6 +313,9 @@ class Settings {
         $capi_test_event_code = sanitize_text_field($_POST['capi_test_event_code'] ?? $current['capi_test_event_code']);
         $enable_capi_lead     = isset($_POST['enable_capi_lead']) ? 1 : (isset($_POST['has_capi_form']) ? 0 : $current['enable_capi_lead']);
         $enable_capi_qual     = isset($_POST['enable_capi_qualified']) ? 1 : (isset($_POST['has_capi_form']) ? 0 : $current['enable_capi_qualified']);
+        $enable_capi_purch    = isset($_POST['enable_capi_purchase']) ? 1 : (isset($_POST['has_capi_form']) ? 0 : ($current['enable_capi_purchase'] ?? 1));
+        $capi_default_val     = isset($_POST['capi_default_purchase_value']) ? (float) str_replace(',', '.', sanitize_text_field($_POST['capi_default_purchase_value'])) : ($current['capi_default_purchase_value'] ?? 100.00);
+        $enable_capi_disq     = isset($_POST['enable_capi_disqualified']) ? 1 : (isset($_POST['has_capi_form']) ? 0 : ($current['enable_capi_disqualified'] ?? 1));
 
         $capi_access_token    = sanitize_text_field($_POST['capi_access_token'] ?? '');
         if (strpos($capi_access_token, '••••') !== false || empty($capi_access_token)) {
@@ -391,6 +397,9 @@ class Settings {
             'capi_test_event_code'     => $capi_test_event_code,
             'enable_capi_lead'         => $enable_capi_lead,
             'enable_capi_qualified'    => $enable_capi_qual,
+            'enable_capi_purchase'     => $enable_capi_purch,
+            'capi_default_purchase_value' => number_format((float) $capi_default_val, 2, '.', ''),
+            'enable_capi_disqualified' => $enable_capi_disq,
             'openai_capi_enabled'          => $openai_capi_enabled,
             'openai_pixel_id'              => $openai_pixel_id,
             'openai_api_key'               => $openai_api_key,
@@ -1632,6 +1641,36 @@ class Settings {
                                 <span class="li-slider"></span>
                             </label>
                             <p class="description">Dispara <code>LeadQualified</code> quando o lead for marcado como qualificado ou matrícula confirmada.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Disparar Evento 'Purchase' (Venda)</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="enable_capi_purchase" value="1" <?php checked(!empty($settings['enable_capi_purchase'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Dispara <code>Purchase</code> para a Meta quando o lead for marcado como Venda/Matrícula.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><label for="capi_default_purchase_value">Valor Padrão da Venda (R$)</label></th>
+                        <td>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <span style="font-weight: 700; color: #475569;">R$</span>
+                                <input type="number" step="0.01" min="0" id="capi_default_purchase_value" name="capi_default_purchase_value" value="<?php echo esc_attr($settings['capi_default_purchase_value'] ?? '100.00'); ?>" class="small-text" style="width: 120px; font-weight: 700;">
+                            </div>
+                            <p class="description">Valor em Reais (BRL) enviado à Meta caso a planilha ou lead não informe um valor específico de venda.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Disparar 'LeadDisqualified' (Otimização Negativa)</th>
+                        <td>
+                            <label class="li-switch">
+                                <input type="checkbox" name="enable_capi_disqualified" value="1" <?php checked(!empty($settings['enable_capi_disqualified'])); ?>>
+                                <span class="li-slider"></span>
+                            </label>
+                            <p class="description">Sinaliza à Meta que o lead é ruim (<code>score: 0</code> e desqualificado). Ajuda a inteligência dos anúncios a <strong>não gastar orçamento</strong> buscando pessoas com o mesmo padrão.</p>
                         </td>
                     </tr>
                     <tr>
