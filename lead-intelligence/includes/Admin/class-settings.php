@@ -449,13 +449,20 @@ class Settings {
         $capi_test_result = null;
         if (isset($_POST['li_test_capi_fire']) && check_admin_referer('li_capi_test_verify', 'li_nonce')) {
             $dummy_lead = (object) [
-                'id'       => 999999,
-                'email'    => 'teste_capi@faveni.edu.br',
-                'telefone' => '5533999999999',
-                'nome'     => 'Lead Teste Conversions API',
-                'tipo_curso' => 'Pós-Graduação',
+                'id'                   => 999999,
+                'uuid'                 => wp_generate_uuid4(),
+                'email'                => 'teste_capi@faveni.edu.br',
+                'telefone'             => '5533999999999',
+                'telefone_normalizado' => '5533999999999',
+                'nome'                 => 'Lead Teste Conversions API',
+                'tipo_curso'           => 'Pós-Graduação',
+                'area_interesse'       => 'Educação',
+                'pagina_origem'        => home_url(),
+                'qualificacao_status'  => 'qualificado',
+                'score'                => 100,
+                'qualificacao_origem'  => 'teste_painel',
             ];
-            $capi_test_result = CapiService::send_event('Lead', $dummy_lead);
+            $capi_test_result = CapiService::dispatch_event('Lead', $dummy_lead);
         }
 
         // Teste OpenAI CAPI (se disparado com validate_only)
@@ -1580,11 +1587,11 @@ class Settings {
             <?php if (!empty($capi_test_result['success'])): ?>
                 <div class="notice notice-success is-dismissible" style="margin-bottom: 20px; padding: 12px 16px;">
                     <strong style="font-size: 14px;">✔ Evento de Teste Enviado para a Conversions API!</strong>
-                    <div style="margin-top: 4px; font-size: 12px;">Eventos recebidos pela Meta: <?php echo esc_html($capi_test_result['events_received'] ?? 1); ?>. Verifique no Gerenciador de Eventos da Meta.</div>
+                    <div style="margin-top: 4px; font-size: 12px;">Eventos recebidos pela Meta: <?php echo esc_html($capi_test_result['response']['events_received'] ?? $capi_test_result['events_received'] ?? 1); ?>. Verifique no Gerenciador de Eventos da Meta.</div>
                 </div>
             <?php else: ?>
                 <div class="notice notice-error is-dismissible" style="margin-bottom: 20px; padding: 12px 16px;">
-                    <strong style="font-size: 14px;">❌ Falha no Envio CAPI: <?php echo esc_html($capi_test_result['error'] ?? 'Erro desconhecido'); ?></strong>
+                    <strong style="font-size: 14px;">❌ Falha no Envio CAPI: <?php echo esc_html($capi_test_result['message'] ?? $capi_test_result['error'] ?? 'Erro desconhecido'); ?></strong>
                 </div>
             <?php endif; ?>
         <?php endif; ?>

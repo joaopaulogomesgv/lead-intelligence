@@ -55,6 +55,13 @@ class CapiService {
     }
 
     /**
+     * Alias de conveniência e compatibilidade para disparo de evento
+     */
+    public static function send_event($event_name, $lead, $action_source = 'website', $extra_custom_data = []) {
+        return self::dispatch_event($event_name, $lead, $action_source, $extra_custom_data);
+    }
+
+    /**
      * Prepara payload e despacha para a Graph API da Meta
      */
     public static function dispatch_event($event_name, $lead, $action_source = 'website', $extra_custom_data = []) {
